@@ -1,0 +1,116 @@
+
+***********************************************************
+***********************************************************
+Descriptive Cohort Study / Opioid in SCD*******************
+Collaborator: Jin Han / Calip Gregory**********************
+***********************************************************
+***********************************************************;
+
+LIBNAME SCDCoht 'C:\Users\jzhou86\Documents\SCD Project';
+
+**Test in Redbook**;
+
+PROC PRINT DATA=SCDCoht.redbook (obs=2);RUN;
+
+*=======================================
+====A. Pain Relief Medications Users====
+1. Ibuprofen (NSAIDs)
+2. Aspirine (NSAIDs)
+3. Codeine (Narcotic)
+4. Morphine (Narcotic)
+5. Transdermal fentanyl (Topical)
+6. Transdermal lidocaine (Topical)
+*=======================================;
+DATA SCDCoht.Narcotic_NDC;
+	SET SCDCoht.redbook;
+	WHERE 	(GENNME contains 'Codeine' or GENNME contains 'Morphine') AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');	
+RUN;
+PROC PRINT DATA = SCDCoht.Narcotic_NDC (obs=2);
+RUN;	
+
+DATA SCDCoht.NSAIDS_NDC;
+	SET SCDCoht.redbook;
+	WHERE 	(GENNME contains 'Ibuprofen' or GENNME contains 'Aspirine') AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');	
+RUN;
+PROC PRINT DATA = SCDCoht.NSAIDS_NDC (obs=2);
+RUN;
+
+DATA SCDCoht.Patch_NDC;
+	SET SCDCoht.redbook;
+	WHERE 	(GENNME contains 'Fentanyl' or GENNME contains 'Lidocaine') AND 
+			MSTFMDS contains 'Patch, Extended Release';
+RUN;
+PROC PRINT DATA = SCDCoht.Patch_NDC (obs=2);
+RUN;
+
+/* Three lists of drugs created to match prescriptions*/
+
+	
+
+
+
+
+
+DATA SCDCoht.SCD0912;
+	SET SCDCoht.pso_2009 SCDCoht.pso_2010 SCDCoht.pso_2011 SCDCoht.pso_2012;
+RUN;
+PROC PRINT DATA=SCDCoht.SCD0912 (firstobs=100 obs=101);
+RUN;
+
+proc sql;
+create table SCD_unique_enrolid_0912 as 
+select max (scd) as entry,
+enrolid,
+max (age) as age_p,
+max (sex) as sex,
+min(clm_dt) as initial_dt,
+max(clm_dt) as end_dt
+from SCDCoht.SCD0912
+group by enrolid;
+quit;
+/* Find unique patient*/
+
+DATA SCD_enrolid_0912;
+	SET SCD_enrolid_0912;
+IF age_p in (1:17) THEN agecate = 1 ;
+IF age_p in (18:39) THEN	agecate = 2 ;
+IF age_p in (40:65) THEN agecate = 3 ;
+IF age_p in (66:100) THEN	agecate = 4 ;
+RUN;
+/* Age into four groups*/
+
+PROC FREQ DATA=SCDCoht.SCD0912 ORDER=FREQ;
+	TABLES PROCGRP ;
+RUN;
+
+PROC PRINT DATA=SCD_enrolid_0912 (firstobs=100 obs=101);
+RUN;
+
+DATA TwoYrs_enrolid_0912;
+	SET SCD_enrolid_0912;
+	WHERE end_dt-initial_dt GE 730.5;
+RUN;
+PROC PRINT DATA=TwoYrs_enrolid_0912 (firstobs=100 obs=101);
+RUN;
+/* The patient is expected to be enrolled for at least two years, this step excludes patients with <2 years enrollment*/
+
+DATA SCD_pats_ADA2009;
+	SET SCD_pats_2009;
+	IF days ^= . ;
+RUN;
+
+DATA SCD_pats_OUT2009;
+	SET SCD_pats_2009;
+	IF dt_frst_svc ^= .;
+RUN;
+PROC FREQ DATA=SCD_pats_OUT2009;
+ TABLE sex*agecate/nocum;
+RUN;
+
+PROC MEANS DATA=SCD_pats_2009;
+VAR age_p;
+RUN;
+PROC PRINT DATA=SCD_pats_2009 (firstobs=100 obs=101);
+RUN;
