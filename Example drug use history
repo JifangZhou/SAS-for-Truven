@@ -1,0 +1,105 @@
+
+***********************************************************
+***********************************************************
+Descriptive Cohort Study / Opioid in SCD*******************
+Collaborator: Jin Han / Calip Gregory**********************
+***********************************************************
+***********************************************************;
+
+*===================================================================================
+***At least 2 prescriptions of pain relief medication with >30 days apart***
+*===================================================================================;
+
+LIBNAME Myfile 			'C:\Users\jzhou86\Documents\SCD Project';
+LIBNAME Rawdata 		'C:\Users\jzhou86\Documents\SCD Project\Raw Data';
+LIBNAME Dxpresc 		'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Drug Prescriptions';
+LIBNAME InsuRrd 		'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Insurance Records';
+LIBNAME userId			'C:\Users\jzhou86\Documents\SCD Project\Unique Id List';
+
+*Begin stacking files;
+DATA Myfile.Service0913;
+	SET Rawdata.pso_2009 Rawdata.pso_2010 Rawdata.pso_2011 Rawdata.pso_2012 Rawdata.pso_2013;
+DATA Myfile.Dx0913;
+	SET Dxpresc.scd_mdcrd_09 Dxpresc.scd_mdcrd_10 Dxpresc.scd_mdcrd_11 Dxpresc.scd_mdcrd_12 Dxpresc.scd_mdcrd_13
+		Dxpresc.scd_d_09 Dxpresc.scd_d_10 Dxpresc.scd_d_11 Dxpresc.scd_d_12 Dxpresc.scd_d_13;
+DATA Presc0913;
+	SET Myfile.Dx0913;
+DATA user_list;
+	SET userId.scd_narcotic_user_enrolid_12;
+DATA non_user_list;
+	SET userId.scd_non_narcotic_user_enrollid;
+RUN;
+
+***Extract prescription records for both opioid and nonopioid user patients ***;
+PROC sql;
+	CREATE table Presc0913_users as
+	SELECT 	*
+	FROM Presc0913 inner join user_list
+	on Presc0913.enrolid = user_list.enrolid;
+QUIT;
+* Extract all prescriptions containing all drugs of opioid users;
+PROC sql;
+	CREATE table Presc0913_non_users as
+	SELECT 	*
+	FROM Presc0913 inner join non_user_list
+	on Presc0913.enrolid = non_user_list.enrolid;
+QUIT;
+* Extract all prescriptions containing all drugs of non-opioid users;
+
+PROC PRINT DATA = Presc0913_non_users (obs=3);
+RUN;
+
+**Get the corresponding NDC from the Redbook***;
+DATA drug_ndc;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Tapentadol') AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+RUN;
+
+PROC sql;
+	CREATE table opioid_presc0913 as
+	SELECT 	*
+	FROM Presc0913_users inner join drug_ndc
+	on Presc0913_users.NDCNUM = drug_ndc.NDCNUM;
+QUIT;
+
+DATA opioid_presc0913;
+	SET opioid_presc0913;
+	IF SVCDATE ^= . THEN drugflag = 1;
+	IF SVCDATE ^= . THEN DxIndex = 'Tapentadol';
+RUN;
+
+PROC sql;
+	CREATE table opioid_presc0913_s as
+	SELECT 	SEQNUM as SEQNUM,
+			drugflag as drugflag,
+			DxIndex as DxIndex
+	FROM	opioid_presc0913
+QUIT;
+
+PROC sql;
+	CREATE table Drug_Presc0913_users as
+	SELCT 	*,
+			opioid_presc0913.DxIndex
+	FROM table Drug_Presc0913_users LEFT JOIN opioid_presc0913
+	ON Drug_Presc0913_users.SEQNUM = opioid_presc0913.SEQNUM;
+QUIT;
+
+PROC sql;
+	CREATE table user_id as
+	SELECT enrolid,
+	count (drugflag) as Presc_number,
+	min (SVCDATE) as first_svcdate
+	FROM opioid_presc0913
+	GROUP BY enrolid;
+QUIT;
+/*Create a list of unique enrolid for individual drugs*/
+DATA userId.Tapentadol;
+	SET user_id;
+RUN;
+
+PROC MEANS DATA = user_id;
+	VAR Presc_number;
+RUN;
+
+
