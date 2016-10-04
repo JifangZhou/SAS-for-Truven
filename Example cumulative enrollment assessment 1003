@@ -1,0 +1,108 @@
+
+***********************************************************
+***********************************************************
+Descriptive Cohort Study / Opioid in SCD*******************
+Collaborator: Jin Han / Calip Gregory**********************
+***********************************************************
+***********************************************************;
+
+*===================================================================================
+***At least 2 prescriptions of pain relief medication with >30 days apart***
+*===================================================================================;
+
+LIBNAME Myfile 				'C:\Users\jzhou86\Documents\SCD Project';
+LIBNAME Rawdata 			'C:\Users\jzhou86\Documents\SCD Project\Raw Data';
+LIBNAME Dxpresc 		'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Drug Prescriptions';
+LIBNAME InsuRrd 	'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Insurance Records';
+
+*Begin stacking files;
+DATA Myfile.Service0913;
+	SET Rawdata.pso_2009 Rawdata.pso_2010 Rawdata.pso_2011 Rawdata.pso_2012 Rawdata.pso_2013;
+DATA Myfile.Dx0913;
+	SET Dxpresc.scd_mdcrd_09 Dxpresc.scd_mdcrd_10 Dxpresc.scd_mdcrd_11 Dxpresc.scd_mdcrd_12 Dxpresc.scd_mdcrd_13
+		Dxpresc.scd_d_09 Dxpresc.scd_d_10 Dxpresc.scd_d_11 Dxpresc.scd_d_12 Dxpresc.scd_d_13;
+DATA Myfile.Insurance0913_a;
+	SET InsuRrd.scd_a_09 InsuRrd.scd_a_10 InsuRrd.scd_a_11 InsuRrd.scd_a_12 InsuRrd.scd_a_13
+		InsuRrd.scd_mdcra_09 InsuRrd.scd_mdcra_10 InsuRrd.scd_mdcra_11 InsuRrd.scd_mdcra_12 InsuRrd.scd_mdcra_13;
+DATA Myfile.Insurance0913_t;
+	SET InsuRrd.scd_t_09 InsuRrd.scd_t_10 InsuRrd.scd_t_11 InsuRrd.scd_t_12 InsuRrd.scd_t_13
+		InsuRrd.scd_mdcrt_09 InsuRrd.scd_mdcrt_10 InsuRrd.scd_mdcrt_11 InsuRrd.scd_mdcrt_12 InsuRrd.scd_mdcrt_13;
+DATA Drug_Presc0913;
+	SET Myfile.Dx0913;
+RUN;
+
+
+* Check the enrollment status of Narcotic users with the insurance records;
+***Merge study cohort with enrollment files***;
+PROC SORT DATA=Myfile.Insurance0913_t;
+	by enrolid DTSTART ;
+RUN;
+*Load insurance total file with detailed enrollment dates;
+DATA temp_Insurance;
+	SET Myfile.Insurance0913_t;
+RUN;
+
+PROC sql;
+	CREATE table firststart_dt as
+	SELECT 	min (DTSTART) as first_enroll_date,
+			min (enrolid) as enrolid
+	FROM temp_Insurance
+	GROUP BY enrolid;
+QUIT;
+
+DATA enroll_post;
+	MERGE Myfile.Insurance0913_t firststart_dt;
+	BY enrolid;
+RUN;
+*Extract the first enrollment date, add first_enroll-date to all observations; 
+*NOTE: There were 1070960 observations read from the data set MYFILE.INSURANCE0913_T.
+NOTE: There were 33713 observations read from the data set WORK.FIRSTSTART_DT.
+NOTE: The data set WORK.ENROLL_POST has 1070960 observations and 32 variables.;
+
+DATA enroll_post;
+	SET  enroll_post;
+	IF first_enroll_date < DTSTART <= first_enroll_date + 750 then output enroll_post;
+RUN;
+* NOTE: (2*12+1)*30=750;
+*NOTE: There were 1070960 observations read from the data set WORK.ENROLL_POST.
+NOTE: The data set WORK.ENROLL_POST has 628103 observations and 32 variables.;
+PROC PRINT DATA = enroll_post (obs=2);
+RUN;
+
+proc summary nway data= enroll_post;
+var MEMDAYS;
+by enrolid;
+output out=Insurance_day sum=enroll_day;
+run;
+*NOTE: There were 628103 observations read from the data set WORK.ENROLL_POST.
+NOTE: The data set WORK.INSURANCE_DAY has 33518 observations and 4 variables.;
+
+proc univariate data=Insurance_day;
+      var enroll_day;
+      histogram;
+   run;
+
+DATA enroll_merge;
+SET Insurance_day;
+if 730 <= enroll_day then index=1;
+if enroll_day <730 then index=0;
+if enroll_day =. then index=na;
+run;
+
+DATA enroll_merge_2yrs;
+	SET enroll_merge;
+	IF index = 1;
+RUN;
+
+PROC sql;
+	CREATE table unique_enrolled_idlist as
+	SELECT min (enrolid) as enrolid
+	FROM enroll_merge_2yrs
+	GROUP BY enrolid;
+QUIT;
+*NOTE: With <2 years continuous enrollment, with 16564 rows and 1 columns
+Eligible for further analysis with 16954 observations and 1 variables.;
+
+DATA Myfile.unique_enrolled_idlist;
+	SET unique_enrolled_idlist;
+RUN;
