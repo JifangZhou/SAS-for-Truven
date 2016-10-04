@@ -1,0 +1,25 @@
+***********************************************************
+***********************************************************
+Descriptive Cohort Study / Opioid in SCD*******************
+Collaborator: Jin Han / Calip Gregory**********************
+Example: Get unique patient identifier*********************
+***********************************************************;
+
+LIBNAME SCDCoht 'C:\Users\jzhou86\Documents\SCD Project';
+
+DATA SCDCoht.SCD0913_Unique;
+	SET SCDCoht.SCD0913_Final;
+RUN;
+
+PROC sql;
+create table SCDCoht.SCD_unique_enrolid_0913 as 
+select enrolid,
+min (age) as age,
+max(sex) as sex,
+min(clm_dt) as initial_dt,
+max(clm_dt) as end_dt
+from SCDCoht.SCD0913_Unique
+group by enrolid;
+quit;
+/* Find unique patient*/
+*NOTE: Table WORK.SCD_UNIQUE_ENROLID_0912 created, with 33740 rows and 5 columns.;
