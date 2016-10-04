@@ -1,0 +1,76 @@
+***********************************************************
+***********************************************************
+Descriptive Cohort Study / Opioid in SCD*******************
+Collaborator: Jin Han / Calip Gregory**********************
+Example: Exclusion of transplantation and cancer***********
+***********************************************************;
+
+LIBNAME SCDCoht 'C:\Users\jzhou86\Documents\SCD Project';
+LIBNAME RawData 'C:\Users\jzhou86\Documents\SCD Project\Raw Data';
+
+DATA SCDCoht.SCD0913;
+	SET RawData.pso_2009 RawData.pso_2010 RawData.pso_2011 RawData.pso_2012 RawData.pso_2013;
+RUN;
+* Read all raw data from 2009-2013
+Number of all obervations = 1703853, number of unique patients =34548;
+
+DATA SCDCoht.SCD0913;
+	SET SCDCoht.SCD0913;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('V4281','V4282') then delete;
+		end;
+RUN;
+*V42.81 (Bone marrow replaced by transplant), V42.82 (Peripheral stem cells replaced by transplant) removed
+NOTE: There were 1703853 observations read from the data set SCDCOHT.SCD0913.
+NOTE: The data set SCDCOHT.SCD0913 has 1692084 observations and 113 variables
+number of unique patients =34533;
+
+
+DATA SCDCoht.SCD0913;
+	SET SCDCoht.SCD0913;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('V420', 'V421', 'V427', 'V432', 'V438') then delete;
+		end;
+RUN;
+* Solid organ transplantation removed
+NOTE: There were 1692084 observations read from the data set SCDCOHT.SCD0913.
+NOTE: The data set SCDCOHT.SCD0913 has 1690296 observations and 113 variables
+Number of unique patients = 34515;
+
+
+DATA SCDCoht.SCD0913_Final;
+	SET SCDCoht.SCD0913;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		IF (icd{i} =: '14' OR
+			icd{i} =: '15' OR
+			icd{i} =: '16' OR
+			icd{i} =: '17' OR
+			icd{i} =: '18' OR
+			icd{i} =: '19' OR
+			icd{i} =: '20' OR
+			icd{i} =: '21' OR
+			icd{i} =: '22' OR
+			icd{i} =: '23') then delete;
+		end;
+RUN;
+* Cancer (ICD-9-CM 140.xx–239.xx) Removed
+NOTE: There were 1690296 observations read from the data set SCDCOHT.SCD0913.
+NOTE: The data set SCDCOHT.SCD0913_FINAL has 1674186 observations and 113 variables;
+
+PROC sql;
+create table SCDCoht.SCD0913_Final as 
+select enrolid,
+min (age) as age,
+max(sex) as sex,
+min(clm_dt) as initial_dt,
+max(clm_dt) as end_dt
+from SCDCoht.SCD0913_Final
+group by enrolid;
+quit;
+* Number of eligible unique patients;
+
+PROC PRINT DATA = SCDCoht.SCD0913_Final (obs=2);
+RUN;
