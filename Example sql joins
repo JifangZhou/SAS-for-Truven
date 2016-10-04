@@ -1,0 +1,19 @@
+LIBNAME myf 'C:\Users\jzhou86\Documents\SCD Project\Unique Id List';
+
+DATA uniqueid;
+	SET myf.unique_enrolled_idlist;
+DATA userid;
+	SET myf.scd_narcotic_user_enrolid_12;
+RUN;
+
+PROC SQL;
+	CREATE table final_list as
+	SELECT *
+	FROM uniqueid a LEFT JOIN userid b
+	ON uniqueid.enrolid = userid.enrolid
+	WHERE userid.enrolid IS NULL;
+QUIT;
+
+DATA myf.scd_non_narcotic_user_enrollid;
+	SET final_list;
+RUN;
