@@ -1,0 +1,84 @@
+/*Prevalence of drug users in 2009-2013 among commercially insured population*/
+/*Written by Jifang on 9/30*/
+libname ccae09 'E:\Truven Data\CCAE\2009';
+libname mdcr09 'E:\Truven Data\MDCR\2009';
+libname ccae10 'E:\Truven Data\CCAE\2010';
+libname mdcr10 'E:\Truven Data\MDCR\2010';
+libname ccae11 'E:\Truven Data\CCAE\2011';
+libname mdcr11 'E:\Truven Data\MDCR\2011';
+libname ccae12 'E:\Truven Data\CCAE\2012';
+libname mdcr12 'E:\Truven Data\MDCR\2012';
+libname ccae13 'E:\Truven Data\CCAE\2013';
+libname mdcr13 'E:\Truven Data\MDCR\2013';
+libname myf    'C:\Users\jzhou86\Documents\SCD Project';
+libname myfile 'F:\User Folders\jzhou86';
+
+DATA SCD_unique_enrolid_0912;
+	SET SCD_unique_enrolid_0912;
+RUN;
+DATA testmerge;
+	SET myf.pso_2009;
+	WHERE enrolid GE 27883400 AND enrolid LE 28993401;
+RUN;
+*subsetting data;
+
+%let Nobs =1000000;
+data randomseed;
+call streaminit(123);       /* set random number seed */
+Min = 2883401;
+Max = 28993401;
+do i = 1 to &Nobs;
+   u = rand("Uniform");     /* u ~ U(0,1) */
+   m = min + floor((1+Max-Min)*u); /* integer values in Min..Max */
+   output;
+end;
+run;
+*Create random numbers 1000 IDs;
+
+PROC sql;
+	CREATE table merged_data as
+	SELECT 	*
+	FROM testmerge inner join randomseed
+	on testmerge.enrolid=randomseed.m;
+QUIT;
+
+PROC PRINT DATA=merged_data;
+RUN;
+
+
+/*Prevalence of drug users in 2009-2013 among commercially insured population*/
+/*Written by Jifang on 10/01
+For extracting data from drug prescription and insurance datasets
+Using Enrolid*/
+
+libname ccae09 'E:\Truven Data\CCAE\2009';
+libname mdcr09 'E:\Truven Data\MDCR\2009';
+libname ccae10 'E:\Truven Data\CCAE\2010';
+libname mdcr10 'E:\Truven Data\MDCR\2010';
+libname ccae11 'E:\Truven Data\CCAE\2011';
+libname mdcr11 'E:\Truven Data\MDCR\2011';
+libname ccae12 'E:\Truven Data\CCAE\2012';
+libname mdcr12 'E:\Truven Data\MDCR\2012';
+libname ccae13 'E:\Truven Data\CCAE\2013';
+libname mdcr13 'E:\Truven Data\MDCR\2013';
+libname myfile 'F:\User Folders\jzhou86';
+
+DATA SCD_0913_Unique_ID;
+	INFILE 'F:\User Folders\jzhou86\Unique ID.csv' dlm=',';
+	INPUT enrolid age sex	initial_dt end_dt ;
+RUN;
+*Read unique patient ID
+NOTE: The data set MYFILE.SCD_0913_UNIQUE_ID has 33740 observations and 5 variables; 
+
+%macro scd (input = , output = );
+options compress = yes reuse = yes;
+ PROC sql;
+	CREATE TABLE &output. as
+	SELECT *
+ 	FROM &input. inner join SCD_0913_Unique_ID
+	ON &input..enrolid = SCD_0913_Unique_ID.enrolid;
+QUIT;
+%mend scd;
+%scd (input = ccae10.ccaea093, output = myfile.scd_a_09);
+%scd (input = ccae10.ccaet093, output = myfile.scd_t_09);
+%scd (input = ccae10.ccaed093, output = myfile.scd_d_09);
