@@ -1,0 +1,96 @@
+
+***********************************************************
+***********************************************************
+Descriptive Cohort Study / Opioid in SCD*******************
+Collaborator: Jin Han / Calip Gregory**********************
+***********************************************************
+***********************************************************;
+
+
+LIBNAME Myfile 			'C:\Users\jzhou86\Documents\SCD Project';
+LIBNAME Rawdata 		'C:\Users\jzhou86\Documents\SCD Project\Raw Data';
+LIBNAME userId			'C:\Users\jzhou86\Documents\SCD Project\Unique Id List';
+
+*Begin stacking files;
+DATA Myfile.Service0913;
+	SET Rawdata.pso_2009 Rawdata.pso_2010 Rawdata.pso_2011 Rawdata.pso_2012 Rawdata.pso_2013;
+DATA Services0913;
+	SET Myfile.Service0913;
+DATA user_list;
+	SET userId.scd_narcotic_user_enrolid_12;
+DATA non_user_list;
+	SET userId.scd_non_narcotic_user_enrollid;
+RUN;
+
+***Extract Service records for both opioid and nonopioid user patients ***;
+PROC sql;
+	CREATE table Services_users as
+	SELECT 	*
+	FROM Services0913 inner join user_list
+	on Services0913.enrolid = user_list.enrolid;
+QUIT;
+* Extract all prescriptions containing all drugs of opioid users;
+PROC sql;
+	CREATE table Services_non_users as
+	SELECT 	*
+	FROM Services0913 inner join non_user_list
+	on Services0913.enrolid = non_user_list.enrolid;
+QUIT;
+* Extract all prescriptions containing all drugs of non-opioid users;
+
+PROC PRINT DATA = Services_non_users (obs=3);
+RUN;
+
+DATA Services_users_a;
+	SET Services_users;
+	IF ADMDATE ^= . ;
+RUN;
+DATA Services_non_users_a;
+	SET Services_non_users;
+	IF ADMDATE ^= . ;
+RUN;
+PROC PRINT DATA = Services_users_unique (obs=3);
+RUN;
+
+PROC sql;
+	CREATE table Services_users_unique as
+	SELECT 	enrolid as enroldid,
+			min(clm_dt) as clm_date,
+			min(sex) as sex,
+			min(age) as age,
+			days as days,
+			'1' as flag
+	FROM Services_users_a
+QUIT;
+
+PROC sql;
+	CREATE table Services_nonusers_unique as
+	SELECT 	enrolid as enroldid,
+			min(clm_dt) as clm_date,
+			min(sex) as sex,
+			min(age) as age,
+			days as days,
+			'2' as flag
+	FROM Services_non_users_a
+QUIT;
+
+DATA Service_merge;
+	SET Services_users_unique Services_nonusers_unique;
+RUN;
+
+PROC FREQ DATA = Service_merge;
+TABLES sex*flag /chisq measures
+		 plots=(freqplot(twoway=groupvertical scale=percent));
+RUN;
+
+PROC TTEST DATA= Service_merge plots=summary;
+		CLASS flag;
+		VAR days;
+RUN;
+
+PROC MEANS DATA = Services_users_unique;
+	VAR age;
+RUN;
+
+DATA chi;
+	INPUT 
