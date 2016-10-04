@@ -1,0 +1,168 @@
+
+***********************************************************
+***********************************************************
+Descriptive Cohort Study / Opioid in SCD*******************
+Collaborator: Jin Han / Calip Gregory**********************
+***********************************************************
+***********************************************************;
+
+*===================================================================================
+***At least 2 prescriptions of pain relief medication with >30 days apart***
+*===================================================================================;
+
+LIBNAME Myfile 				'C:\Users\jzhou86\Documents\SCD Project';
+LIBNAME Rawdata 			'C:\Users\jzhou86\Documents\SCD Project\Raw Data';
+LIBNAME Dxpresc 		'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Drug Prescriptions';
+LIBNAME InsuRrd 	'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Insurance Records';
+
+*Begin stacking files;
+DATA Myfile.Service0913;
+	SET Rawdata.pso_2009 Rawdata.pso_2010 Rawdata.pso_2011 Rawdata.pso_2012 Rawdata.pso_2013;
+DATA Myfile.Dx0913;
+	SET Dxpresc.scd_mdcrd_09 Dxpresc.scd_mdcrd_10 Dxpresc.scd_mdcrd_11 Dxpresc.scd_mdcrd_12 Dxpresc.scd_mdcrd_13
+		Dxpresc.scd_d_09 Dxpresc.scd_d_10 Dxpresc.scd_d_11 Dxpresc.scd_d_12 Dxpresc.scd_d_13;
+DATA Myfile.Insurance0913_a;
+	SET InsuRrd.scd_a_09 InsuRrd.scd_a_10 InsuRrd.scd_a_11 InsuRrd.scd_a_12 InsuRrd.scd_a_13
+		InsuRrd.scd_mdcra_09 InsuRrd.scd_mdcra_10 InsuRrd.scd_mdcra_11 InsuRrd.scd_mdcra_12 InsuRrd.scd_mdcra_13;
+DATA Myfile.Insurance0913_t;
+	SET InsuRrd.scd_t_09 InsuRrd.scd_t_10 InsuRrd.scd_t_11 InsuRrd.scd_t_12 InsuRrd.scd_t_13
+		InsuRrd.scd_mdcrt_09 InsuRrd.scd_mdcrt_10 InsuRrd.scd_mdcrt_11 InsuRrd.scd_mdcrt_12 InsuRrd.scd_mdcrt_13;
+DATA Drug_Presc0913;
+	SET Myfile.Dx0913;
+RUN;
+
+**Test in Redbook**;
+
+PROC PRINT DATA=Myfile.redbook (obs=2);RUN;
+
+*=======================================
+====A. Pain Relief Medications Users====
+*=======================================;
+DATA Myfile.drug_ndc;
+	SET Myfile.redbook;
+	WHERE	(GENNME contains 'Buprenorphine' or 
+			GENNME contains 'Butorphanol' or 
+			GENNME contains 'Codeine' or
+			GENNME contains 'Hydrocodone' or 
+			GENNME contains 'Hydromorphone' or
+			GENNME contains 'Levorphanol' or
+			GENNME contains 'Meperidine' or
+			GENNME contains 'Methadone' or
+			GENNME contains 'Morphine' or
+			GENNME contains 'Nalbuphine' or
+			GENNME contains 'Oxycodone' or
+			GENNME contains 'Oxymorphone' or
+			GENNME contains 'Pentazocine' or
+			GENNME contains 'Propoxyphene' or
+			GENNME contains 'Tapentadol') AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');	
+DATA Druglist;
+	SET Myfile.drug_ndc;
+RUN;
+* Create a drug list from the Redbook with the required molecule;
+
+PROC sql;
+	CREATE table Drug_Category_presc0913 as
+	SELECT 	*
+	FROM Drug_Presc0913 inner join Druglist
+	on Drug_Presc0913.NDCNUM = Druglist.NDCNUM;
+QUIT;
+* Extract all prescriptions containing required drugs;
+
+PROC sql;
+	CREATE table eligible_pts_enrolid as
+	SELECT enrolid,
+	max (SVCDATE) as last_svcdate,
+	min (SVCDATE) as first_svcdate
+	FROM Drug_Category_presc0913
+	GROUP BY enrolid;
+QUIT;
+*Get the unique patient enrolid from the prescription records;
+
+DATA myfile.Narcoticsuser_enrolid;
+	SET eligible_pts_enrolid;
+	IF last_svcdate-first_svcdate GT 30;
+RUN;
+PROC CONTENTS DATA = myfile.Narcoticsuser_enrolid;
+RUN;
+ * Remove cases without >2 prescriptions that is >30 days apart;
+ * Create a list of unique patients and assess their enrollment status;
+
+* Check the enrollment status of Narcotic users with the insurance records;
+***Merge study cohort with enrollment files***;
+PROC SORT DATA=Myfile.Insurance0913_t;
+	by enrolid DTSTART ;
+RUN;
+
+DATA narcotic0913;
+MERGE myfile.narcoticsuser_enrolid (in=a keep=enrolid first_svcdate) Myfile.Insurance0913_t (in=b keep=enrolid DTSTART DTEND MEMDAYS );
+by enrolid;
+if a=1 and b=1;
+run;
+
+proc sort data=narcotic0913; by enrolid first_svcdate ; run;
+
+**Restrict the enroll records 12 months before and after the index date***;
+
+data enroll_prior enroll_post;
+set  narcotic0913;
+if first_svcdate-390 <= DTSTART < first_svcdate then output enroll_prior;
+if first_svcdate < DTSTART <= first_svcdate+390 then output enroll_post;
+run;
+* NOTE: There were 71365 observations read from the data set WORK.NARCOTIC0913.
+NOTE: The data set WORK.ENROLL_PRIOR has 19437 observations and 5 variables.
+NOTE: The data set WORK.ENROLL_POST has 51837 observations and 5 variables.;
+
+%MACRO enroll (time, n, index);
+**Sum the enrollment days for each id***;
+proc summary nway data= enroll_&time.;
+var MEMDAYS;
+by enrolid;
+output out=enroll_&time._sum sum=enroll_day;
+run;
+
+/*Check the number of people who do not have enrollment files in the 12 months &time. to drug initiation*/
+
+data enroll_&time._merge;
+set enroll_&time._sum;
+if 0 <= enroll_day < &n. then &index.=0;
+if enroll_day >= &n. then &index.=1;
+run;
+
+
+%MEND;
+
+%enroll (prior, 365.25, priorenroll_12m);
+%enroll (post, 365.25, postenroll_12m);
+
+**====Merge back to study cohort====**;
+
+data SCD_cohort_enroll;
+merge  narcotic0913  (in=a)  
+enroll_prior_merge (in=b keep=enrolid priorenroll_12m) 
+enroll_post_merge (in=c keep=enrolid postenroll_12m);
+by enrolid;
+if a=1 ;
+if priorenroll_12m = . then priorenroll_12m = 0;
+if postenroll_12m = . then postenroll_12m = 0;
+run;
+
+proc freq data= SCD_cohort_enroll ;
+tables priorenroll_12m*postenroll_12m;
+run;
+
+DATA SCD_cohort_enroll;
+	SET SCD_cohort_enroll;
+	IF (priorenroll_12m = 1 AND postenroll_12m = 1);
+RUN;
+
+PROC sql;
+	CREATE table unique_narcotics_idlist as
+	SELECT min (enrolid) as enrolid
+	FROM SCD_cohort_enroll
+	GROUP BY enrolid;
+QUIT;
+
+DATA Myfile.SCD_cohort_enroll;
+	SET unique_narcotics_idlist;
+RUN;
