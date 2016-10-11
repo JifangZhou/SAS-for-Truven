@@ -1,0 +1,46 @@
+/*Prevalence of drug users in 2009-2013 among commercially insured population*/
+/*Written by Jifang on 10/05
+For extracting data from outpatient services datasets
+Using Predefined Enrolid*/
+
+libname ccae09 'E:\Truven Data\CCAE\2009';
+libname mdcr09 'E:\Truven Data\MDCR\2009';
+libname ccae10 'E:\Truven Data\CCAE\2010';
+libname mdcr10 'E:\Truven Data\MDCR\2010';
+libname ccae11 'E:\Truven Data\CCAE\2011';
+libname mdcr11 'E:\Truven Data\MDCR\2011';
+libname ccae12 'E:\Truven Data\CCAE\2012';
+libname mdcr12 'E:\Truven Data\MDCR\2012';
+libname ccae13 'E:\Truven Data\CCAE\2013';
+libname mdcr13 'E:\Truven Data\MDCR\2013';
+libname myfile 'F:\User Folders\jzhou86';
+
+DATA SCD_0913_Unique_ID;
+	INFILE 'F:\User Folders\jzhou86\Unique ID.csv' dlm=',';
+	INPUT enrolid age sex	initial_dt end_dt ;
+RUN;
+*Read unique patient ID
+NOTE: The data set MYFILE.SCD_0913_UNIQUE_ID has 33740 observations and 5 variables; 
+
+%macro scd (input = , output = );
+options compress = yes reuse = yes;
+	DATA temp;
+		SET &input.;
+	RUN;
+	PROC sql;
+		CREATE TABLE &output. as
+		SELECT *
+ 		FROM temp inner join SCD_0913_Unique_ID
+		ON temp.enrolid = SCD_0913_Unique_ID.enrolid;
+	QUIT;
+%mend scd;
+%scd (input = mdcr09.mdcrs093, output = myfile.scd_mdcrs_09);
+%scd (input = mdcr10.mdcrs103, output = myfile.scd_mdcrs_10);
+%scd (input = mdcr11.mdcrs113, output = myfile.scd_mdcrs_11);
+%scd (input = mdcr12.mdcrs122, output = myfile.scd_mdcrs_12);
+%scd (input = mdcr13.mdcrs131, output = myfile.scd_mdcrs_13);
+%scd (input = ccae09.ccaes093, output = myfile.scd_ccaes_09);
+%scd (input = ccae10.ccaes103, output = myfile.scd_ccaes_10);
+%scd (input = ccae11.ccaes113, output = myfile.scd_ccaes_11);
+%scd (input = ccae12.ccaes122, output = myfile.scd_ccaes_12);
+%scd (input = ccae13.ccaes131, output = myfile.scd_ccaes_13);
