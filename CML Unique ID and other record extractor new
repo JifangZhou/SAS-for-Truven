@@ -1,0 +1,82 @@
+LIBNAME Rawdata 	'F:\User Folders\jzhou86\CMLRawdata';
+LIBNAME RawDx		'F:\User Folders\jzhou86\CMLRawdata\DrugPrescription';
+LIBNAME RawInsvc	'F:\User Folders\jzhou86\CMLRawdata\InpatientService';
+LIBNAME RawInsu		'F:\User Folders\jzhou86\CMLRawdata\Insurance';
+libname myfile 		'F:\User Folders\jzhou86';
+* Creation of an unique ID list;
+DATA CMLservice0913;
+	SET Rawdata.pso_2009 Rawdata.pso_2010 Rawdata.pso_2011 Rawdata.pso_2012 Rawdata.pso_2013;
+RUN;
+
+PROC sql;
+	CREATE table myfile.CML_list as
+	SELECT distinct enrolid as enrolid
+	FROM CMLservice0913;
+QUIT;
+/*Prevalence of drug users in 2009-2013 among commercially insured population*/
+/*Written by Jifang on 10/07
+For extracting data from outpatient services datasets
+Using Predefined Enrolid*/
+
+libname ccae09 'E:\Truven Data\CCAE\2009';
+libname mdcr09 'E:\Truven Data\MDCR\2009';
+libname ccae10 'E:\Truven Data\CCAE\2010';
+libname mdcr10 'E:\Truven Data\MDCR\2010';
+libname ccae11 'E:\Truven Data\CCAE\2011';
+libname mdcr11 'E:\Truven Data\MDCR\2011';
+libname ccae12 'E:\Truven Data\CCAE\2012';
+libname mdcr12 'E:\Truven Data\MDCR\2012';
+libname ccae13 'E:\Truven Data\CCAE\2013';
+libname mdcr13 'E:\Truven Data\MDCR\2013';
+libname myfile 'F:\User Folders\jzhou86';
+
+DATA CML_Unique_ID;
+	SET myfile.CML_list;
+RUN;
+*Read unique patient ID
+NOTE: Table MYFILE.CML_LIST created, with 24878 rows and 1 columns.; 
+
+%macro scd (input = , output = );
+options compress = yes reuse = yes;
+	DATA temp;
+		SET &input.;
+	RUN;
+	PROC sql;
+		CREATE TABLE &output. as
+		SELECT *
+ 		FROM temp inner join CML_Unique_ID
+		ON temp.enrolid = CML_Unique_ID.enrolid;
+	QUIT;
+%mend scd;
+
+*%scd (input = mdcr09.mdcrs093, output = RawInsvc.cml_mdcrs_09);
+*%scd (input = mdcr10.mdcrs103, output = RawInsvc.cml_mdcrs_10);
+*%scd (input = mdcr11.mdcrs113, output = RawInsvc.cml_mdcrs_11);
+*%scd (input = mdcr12.mdcrs122, output = RawInsvc.cml_mdcrs_12);
+*%scd (input = mdcr13.mdcrs131, output = RawInsvc.cml_mdcrs_13);
+
+%scd (input = ccae09.ccaes093, output = RawInsvc.cml_ccaes_09);
+%scd (input = ccae10.ccaes103, output = RawInsvc.cml_ccaes_10);
+%scd (input = ccae11.ccaes113, output = RawInsvc.cml_ccaes_11);
+%scd (input = ccae12.ccaes122, output = RawInsvc.cml_ccaes_12);
+%scd (input = ccae13.ccaes131, output = RawInsvc.cml_ccaes_13);
+%scd (input = mdcr09.mdcrt093, output = RawInsu.cml_mdcrt_09);
+%scd (input = mdcr10.mdcrt103, output = RawInsu.cml_mdcrt_10);
+%scd (input = mdcr11.mdcrt113, output = RawInsu.cml_mdcrt_11);
+%scd (input = mdcr12.mdcrt122, output = RawInsu.cml_mdcrt_12);
+%scd (input = mdcr13.mdcrt131, output = RawInsu.cml_mdcrt_13);
+%scd (input = ccae09.ccaet093, output = RawInsu.cml_ccaet_09);
+%scd (input = ccae10.ccaet103, output = RawInsu.cml_ccaet_10);
+%scd (input = ccae11.ccaet113, output = RawInsu.cml_ccaet_11);
+%scd (input = ccae12.ccaet122, output = RawInsu.cml_ccaet_12);
+%scd (input = ccae13.ccaet131, output = RawInsu.cml_ccaet_13);
+%scd (input = mdcr09.mdcrd093, output = RawDx.cml_mdcrd_09);
+%scd (input = mdcr10.mdcrd103, output = RawDx.cml_mdcrd_10);
+%scd (input = mdcr11.mdcrd113, output = RawDx.cml_mdcrd_11);
+%scd (input = mdcr12.mdcrd122, output = RawDx.cml_mdcrd_12);
+%scd (input = mdcr13.mdcrd131, output = RawDx.cml_mdcrd_13);
+%scd (input = ccae09.ccaed093, output = RawDx.cml_ccaed_09);
+%scd (input = ccae10.ccaed103, output = RawDx.cml_ccaed_10);
+%scd (input = ccae11.ccaed113, output = RawDx.cml_ccaed_11);
+%scd (input = ccae12.ccaed122, output = RawDx.cml_ccaed_12);
+%scd (input = ccae13.ccaed131, output = RawDx.cml_ccaed_13);
