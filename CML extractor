@@ -1,0 +1,277 @@
+LIBNAME Rawdata 'F:\User Folders\jzhou86\CMLRawdata';
+
+/*2009
+Prevalence of cml in 2010-13 among commercially insured population*/
+/*Written originally by Sruthi,Modified and Run by Jifang on 9/28*/
+libname ccae09 'E:\Truven Data\CCAE\2009';
+libname mdcr09 'E:\Truven Data\MDCR\2009';
+
+%macro pso (input = , output = );
+options compress = yes reuse = yes;
+data  &output. ;
+set &input. ;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2051') then cml = 1;
+end;
+if cml = 1;
+run; 
+%mend pso;
+%pso (input = ccae09.Ccaei093, output = pso_c_i);
+%pso (input = ccae09.Ccaeo093, output = pso_c_o);
+%pso (input = mdcr09.mdcri093, output = pso_m_i);
+%pso (input = mdcr09.mdcro093, output = pso_m_o);
+
+data PSO_C_I;
+set PSO_C_I;
+filetype = 'I';
+clm_dt = ADMDATE;
+run;
+
+data PSO_C_O;
+set PSO_C_O;
+filetype = 'O';
+clm_dt = SVCDATE;
+run;
+
+data PSO_M_I;
+set PSO_M_I;
+filetype = 'I';
+clm_dt =ADMDATE;
+run;
+
+data PSO_M_O;
+set PSO_M_O;
+filetype = 'O';
+clm_dt = SVCDATE;
+run;
+
+data pso_2009;
+set PSO_C_I PSO_C_O PSO_M_I PSO_M_O;
+run;
+
+data Rawdata.pso_2009;
+set pso_2009;
+if enrolid ne .;
+run;
+
+　
+/*Prevalence of SCD in 2010-13 among commercially insured population*/
+/*Written originally by Sruthi,Modified and Run by Jifang on 9/28*/
+libname ccae10 'E:\Truven Data\CCAE\2010';
+libname mdcr10 'E:\Truven Data\MDCR\2010';
+
+%macro pso (input = , output = );
+options compress = yes reuse = yes;
+data  &output. ;
+set &input. ;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2051') then cml = 1;
+end;
+if cml = 1;
+run; 
+%mend pso;
+%pso (input = ccae10.Ccaei103, output = pso_c_i);
+%pso (input = ccae10.Ccaeo103, output = pso_c_o);
+%pso (input = mdcr10.mdcri103, output = pso_m_i);
+%pso (input = mdcr10.mdcro103, output = pso_m_o);
+
+data PSO_C_I;
+set PSO_C_I;
+filetype = 'I';
+clm_dt = ADMDATE;
+run;
+
+data PSO_C_O;
+set PSO_C_O;
+filetype = 'O';
+clm_dt = SVCDATE;
+run;
+
+data PSO_M_I;
+set PSO_M_I;
+filetype = 'I';
+clm_dt =ADMDATE;
+run;
+
+data PSO_M_O;
+set PSO_M_O;
+filetype = 'O';
+clm_dt = SVCDATE;
+run;
+
+data pso_2010;
+set PSO_C_I PSO_C_O PSO_M_I PSO_M_O;
+run;
+
+data Rawdata.pso_2010;
+set pso_2010;
+if enrolid ne .;
+run;
+
+　
+/*2011);
+/*Prevalence of SCD in 2010-13 among commercially insured population*/
+/*Written originally by Sruthi,Modified and Run by Jifang on 9/28*/
+libname ccae11 'E:\Truven Data\CCAE\2011';
+libname mdcr11 'E:\Truven Data\MDCR\2011';
+
+%macro pso (input = , output = );
+options compress = yes reuse = yes;
+data  &output. ;
+set &input. ;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2051') then cml = 1;
+end;
+if cml = 1;
+run; 
+%mend pso;
+%pso (input = ccae11.Ccaei113, output = pso_c_i);
+%pso (input = ccae11.Ccaeo113, output = pso_c_o);
+%pso (input = mdcr11.mdcri113, output = pso_m_i);
+%pso (input = mdcr11.mdcro113, output = pso_m_o);
+
+data PSO_C_I;
+set PSO_C_I;
+filetype = 'I';
+clm_dt = ADMDATE;
+run;
+
+data PSO_C_O;
+set PSO_C_O;
+filetype = 'O';
+clm_dt = SVCDATE;
+run;
+
+data PSO_M_I;
+set PSO_M_I;
+filetype = 'I';
+clm_dt =ADMDATE;
+run;
+
+data PSO_M_O;
+set PSO_M_O;
+filetype = 'O';
+clm_dt = SVCDATE;
+run;
+
+data pso_2011;
+set PSO_C_I PSO_C_O PSO_M_I PSO_M_O;
+run;
+
+data Rawdata.pso_2011;
+set pso_2011;
+if enrolid ne .;
+run;
+
+　
+/*Prevalence of SCD in 2010-13 among commercially insured population*/
+/*Written originally by Sruthi,Modified and Run by Jifang on 9/28*/
+libname ccae12 'E:\Truven Data\CCAE\2012';
+libname mdcr12 'E:\Truven Data\MDCR\2012';
+
+%macro pso (input = , output = );
+options compress = yes reuse = yes;
+data  &output. ;
+set &input. ;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2051') then cml = 1;
+end;
+if cml = 1;
+run; 
+%mend pso;
+%pso (input = ccae12.Ccaei122, output = pso_c_i);
+%pso (input = ccae12.Ccaeo122, output = pso_c_o);
+%pso (input = mdcr12.mdcri122, output = pso_m_i);
+%pso (input = mdcr12.mdcro122, output = pso_m_o);
+
+data PSO_C_I;
+set PSO_C_I;
+filetype = 'I';
+clm_dt = ADMDATE;
+run;
+
+data PSO_C_O;
+set PSO_C_O;
+filetype = 'O';
+clm_dt = SVCDATE;
+run;
+
+data PSO_M_I;
+set PSO_M_I;
+filetype = 'I';
+clm_dt =ADMDATE;
+run;
+
+data PSO_M_O;
+set PSO_M_O;
+filetype = 'O';
+clm_dt = SVCDATE;
+run;
+
+data pso_2012;
+set PSO_C_I PSO_C_O PSO_M_I PSO_M_O;
+run;
+
+data Rawdata.pso_2012;
+set pso_2012;
+if enrolid ne .;
+run;
+
+/*2013
+Prevalence of SCD in 2010-13 among commercially insured population*/
+/*Written originally by Sruthi,Modified and Run by Jifang on 9/28*/
+libname ccae13 'E:\Truven Data\CCAE\2013';
+libname mdcr13 'E:\Truven Data\MDCR\2013';
+
+%macro pso (input = , output = );
+options compress = yes reuse = yes;
+data  &output. ;
+set &input. ;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2051') then cml = 1;
+end;
+if cml = 1;
+run; 
+%mend pso;
+%pso (input = ccae13.Ccaei131, output = pso_c_i);
+%pso (input = ccae13.Ccaeo131, output = pso_c_o);
+%pso (input = mdcr13.mdcri131, output = pso_m_i);
+%pso (input = mdcr13.mdcro131, output = pso_m_o);
+
+data PSO_C_I;
+set PSO_C_I;
+filetype = 'I';
+clm_dt = ADMDATE;
+run;
+
+data PSO_C_O;
+set PSO_C_O;
+filetype = 'O';
+clm_dt = SVCDATE;
+run;
+
+data PSO_M_I;
+set PSO_M_I;
+filetype = 'I';
+clm_dt =ADMDATE;
+run;
+
+data PSO_M_O;
+set PSO_M_O;
+filetype = 'O';
+clm_dt = SVCDATE;
+run;
+
+data pso_2013;
+set PSO_C_I PSO_C_O PSO_M_I PSO_M_O;
+run;
+
+data Rawdata.pso_2013;
+set pso_2013;
+if enrolid ne .;
+run;
