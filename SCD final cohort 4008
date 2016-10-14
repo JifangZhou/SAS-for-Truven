@@ -1,0 +1,170 @@
+***********************************************************
+***********************************************************
+Descriptive Cohort Study / Opioid in SCD*******************
+Collaborator: Jin Han / Calip Gregory**********************
+***********************************************************
+***********************************************************;
+
+*Creattion of the final cohort, from the 16201 patients identified from the previous analysis in 10 October;
+*Add new inclusion/exclusion criteria: 12 months prior and after the index date;
+* Index date defined as the first of SCD-related diagnosis at acute hospital facility or first of the two SCD-related diagnosis;
+
+LIBNAME Myfile 			'C:\Users\jzhou86\Documents\SCD Project';
+LIBNAME Rawdata 		'C:\Users\jzhou86\Documents\SCD Project\Raw Data';
+LIBNAME Dxpresc 		'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Drug Prescriptions';
+LIBNAME InsuRrd 		'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Insurance Records';
+LIBNAME userId			'C:\Users\jzhou86\Documents\SCD Project\Unique Id List';
+
+*Begin stacking files;
+DATA Myfile.Service0913;
+	SET Rawdata.pso_2009 Rawdata.pso_2010 Rawdata.pso_2011 Rawdata.pso_2012 Rawdata.pso_2013;
+DATA Services0913;
+	SET Myfile.Service0913;
+DATA Myfile.Dx0913;
+	SET Dxpresc.scd_mdcrd_09 Dxpresc.scd_mdcrd_10 Dxpresc.scd_mdcrd_11 Dxpresc.scd_mdcrd_12 Dxpresc.scd_mdcrd_13 
+		Dxpresc.scd_d_09 Dxpresc.scd_d_10 Dxpresc.scd_d_11 Dxpresc.scd_d_12 Dxpresc.scd_d_13;
+DATA Insurance0913_t;
+	SET InsuRrd.scd_t_09 InsuRrd.scd_t_10 InsuRrd.scd_t_11 InsuRrd.scd_t_12 InsuRrd.scd_t_13
+		InsuRrd.scd_mdcrt_09 InsuRrd.scd_mdcrt_10 InsuRrd.scd_mdcrt_11 InsuRrd.scd_mdcrt_12 InsuRrd.scd_mdcrt_13;
+DATA Drug_Presc0913;
+	SET Myfile.Dx0913;
+RUN;
+DATA initial_list;
+	SET userId.final_list_cohort;
+RUN;
+*Extract Insurance data of the 16201 patients from the database to test 12 months prior and post enrollment;
+
+PROC PRINT DATA=Services0913 (OBS=2);RUN;
+PROC sql;
+	CREATE table initial_insu as
+	SELECT *
+	FROM Insurance0913_t
+	INNER JOIN initial_list
+	ON Insurance0913_t.enrolid = initial_list.enrolid;
+QUIT;
+*Extract first service/ first admission date as index date;
+PROC sql;
+	CREATE table initial_svc as
+	SELECT *
+	FROM Services0913
+	INNER JOIN initial_list
+	ON Services0913.enrolid = initial_list.enrolid;
+QUIT;
+PROC sql;
+	CREATE table index_list as
+	SELECT distinct enrolid as enrolid,
+			min(clm_dt) as index_date
+	FROM initial_svc
+	GROUP BY enrolid;
+QUIT;
+* Assess 12months before and 12months after the index date;
+***Merge study cohort with enrollment files***;
+PROC SORT DATA=initial_insu;
+	by enrolid DTSTART ;
+RUN;
+
+DATA exact_insu;
+MERGE index_list (in=a keep=enrolid index_date) initial_insu (in=b keep=enrolid DTSTART DTEND MEMDAYS );
+by enrolid;
+if a=1 and b=1;
+run;
+
+proc sort data=exact_insu; by enrolid index_date ; run;
+PROC PRINT DATA=exact_insu (obs=3);RUN;
+
+**Restrict the enroll records 12 months before and after the index date***;
+data enroll_prior enroll_post;
+set  exact_insu;
+if index_date-390 <= DTSTART < index_date then output enroll_prior;
+if index_date < DTSTART <= index_date+390 then output enroll_post;
+run;
+*NOTE: There were 674394 observations read from the data set WORK.EXACT_INSU.
+NOTE: The data set WORK.ENROLL_PRIOR has 123883 observations and 5 variables.
+NOTE: The data set WORK.ENROLL_POST has 187374 observations and 5 variables.;
+
+%MACRO enroll (time, n, index);
+**Sum the enrollment days for each id***;
+proc summary nway data= enroll_&time.;
+var MEMDAYS;
+by enrolid;
+output out=enroll_&time._sum sum=enroll_day;
+run;
+
+/*Check the number of people who do not have enrollment files in the 12 months &time. to drug initiation*/
+
+proc print data=enroll_&time._sum (obs=50); run;
+proc univariate data=enroll_&time._sum; var enroll_day; histogram; run;
+
+
+data enroll_&time._merge;
+set enroll_&time._sum;
+if 0 <= enroll_day < &n. then &index.=0;
+if enroll_day >= &n. then &index.=1;
+run;
+
+proc print data=enroll_&time._merge (obs=100); run;
+
+%MEND;
+
+%enroll (prior, 365, priorenroll_12m);
+%enroll (post, 365, postenroll_12m);
+
+data cohort_24Menroll;
+merge  exact_insu  (in=a)  
+enroll_prior_merge (in=b keep=enrolid priorenroll_12m) 
+enroll_post_merge (in=c keep=enrolid postenroll_12m);
+by enrolid;
+if a=1 ;
+if priorenroll_12m = . then priorenroll_12m = 0;
+if postenroll_12m = . then postenroll_12m = 0;
+run;
+
+proc freq data= cohort_24Menroll ;
+tables priorenroll_12m*postenroll_12m;
+run;
+
+DATA cohort_enroll;
+	SET cohort_24Menroll;
+	IF (priorenroll_12m = 1 AND postenroll_12m = 1);
+RUN;
+
+PROC sql;
+	CREATE table unique_idlist as
+	SELECT min (enrolid) as enrolid
+	FROM cohort_enroll
+	GROUP BY enrolid;
+QUIT;
+* Merge the idlist back to the index_list;
+PROC sql;
+	CREATE table unique_idlist as
+	SELECT *
+	FROM index_list
+	INNER JOIN unique_idlist
+	ON unique_idlist.enrolid = index_list.enrolid;
+QUIT;
+*Extract prescription data and service data, divided by the index date;
+DATA uniqID;
+	SET userId.unique_idlist;
+RUN;
+PROC sql;
+	CREATE table total_svc as
+	SELECT *,
+		uniqID.index_date
+	FROM Services0913
+	INNER JOIN uniqID
+	ON Services0913.enrolid=uniqID.enrolid;
+QUIT;
+
+PROC PRINT DATA=total_svc (obs=2); RUN;
+DATA myfile.prior_svc;
+	SET total_svc;
+	IF index_date LE SVCDATE ;
+RUN;
+
+proc export data=userId.unique_idlist
+   outfile='C:\Users\jzhou86\Documents\SCD Project\Unique Id List\SCDlist.csv'
+   dbms=csv
+   replace;
+run;	
+
+*Wait for extracting all service records from the database.
