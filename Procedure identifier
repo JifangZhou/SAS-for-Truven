@@ -1,0 +1,65 @@
+DATA flist;
+	SET userId.final_list_cohort;
+RUN;
+
+LIBNAME Myfile 			'C:\Users\jzhou86\Documents\SCD Project';
+LIBNAME Rawdata 		'C:\Users\jzhou86\Documents\SCD Project\Raw Data';
+LIBNAME Dxpresc 		'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Drug Prescriptions';
+LIBNAME InsuRrd 		'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Insurance Records';
+LIBNAME Inptser			'C:\Users\jzhou86\Documents\SCD Project\Raw Data\InpatientServices';
+LIBNAME userId			'C:\Users\jzhou86\Documents\SCD Project\Unique Id List';
+
+DATA Service0913;
+	SET Rawdata.pso_2009 Rawdata.pso_2010 Rawdata.pso_2011 Rawdata.pso_2012 Rawdata.pso_2013 
+		Inptser.scd_mdcrs_09 Inptser.scd_mdcrs_10 Inptser.scd_mdcrs_11 Inptser.scd_mdcrs_12 Inptser.scd_mdcrs_13
+		Inptser.scd_ccaes_09 Inptser.scd_ccaes_10 Inptser.scd_ccaes_11 Inptser.scd_ccaes_12 Inptser.scd_ccaes_13; 
+DATA user_list;
+	SET flist;
+RUN;
+
+PROC PRINT DATA=Service0913 (obs=1);
+RUN;
+
+
+data  care_list;
+set Service0913;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('9901' /*'36430'	'P9011' 'P9016' 'P9021' 'P9022' 'P9038' 'P9039' 'P9040' 'P9051' 'P9054' 'P9057' 'P9058'*/) then transfusion = 1;
+end;
+if transfusion = 1;
+run; 
+* CPT	36430	Transfusion, blood or blood components
+CPT	P9011	Blood (split unit), specify amount
+CPT	P9016	Red blood cells, leukocytes reduced, each unit
+CPT	P9021	Red blood cells, each unit
+CPT	P9022	Red blood cells, washed, each unit
+CPT	P9038	Red blood cells , irradiated, each unit
+CPT	P9039	Red blood cells, deglycerolized, each unit
+CPT	P9040	Red blood cells, leukocytes reduced, irradiated, each unit
+CPT	P9051	Whole blood or red blood cells, leukocytes reduced
+CPT	P9054	Whole blood or red blood cells, leukocytes reduced, frozen, deglycerol, washed, each unit
+CPT	P9057	Red blood cells, frozen/deglycerolized/washed, leukocytes reduced, irradiated, each unit
+CPT	P9058	Red blood cells, leukocytes reduced, CMV-negative, irradiated, each unit;
+
+
+PROC SQL;
+	CREATE table listA as 
+	SELECT *
+	FROM care_list
+	INNER JOIN user_list
+	ON care_list.enrolid = user_list.enrolid;
+QUIT;
+
+PROC sql;
+CREATE table listA as
+	SELECT distinct enrolid
+	FROM listA;
+RUN;
+
+DATA Myfile.Dx0913;
+	SET Dxpresc.scd_mdcrd_09 Dxpresc.scd_mdcrd_10 Dxpresc.scd_mdcrd_11 Dxpresc.scd_mdcrd_12 Dxpresc.scd_mdcrd_13
+		Dxpresc.scd_d_09 Dxpresc.scd_d_10 Dxpresc.scd_d_11 Dxpresc.scd_d_12 Dxpresc.scd_d_13;
+DATA Presc0913;
+	SET Myfile.Dx0913;
+RUN;
