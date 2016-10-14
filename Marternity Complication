@@ -1,0 +1,95 @@
+**Link pregnancy to family members;
+LIBNAME Myfile 			'C:\Users\jzhou86\Documents\SCD Project';
+LIBNAME Rawdata 		'C:\Users\jzhou86\Documents\SCD Project\Raw Data';
+LIBNAME Dxpresc 		'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Drug Prescriptions';
+LIBNAME InsuRrd 		'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Insurance Records';
+LIBNAME Inptser			'C:\Users\jzhou86\Documents\SCD Project\Raw Data\InpatientServices';
+LIBNAME userId			'C:\Users\jzhou86\Documents\SCD Project\Unique Id List';
+
+DATA Service0913;
+	SET Rawdata.pso_2009 Rawdata.pso_2010 Rawdata.pso_2011 Rawdata.pso_2012 Rawdata.pso_2013 
+		Inptser.scd_mdcrs_09 Inptser.scd_mdcrs_10 Inptser.scd_mdcrs_11 Inptser.scd_mdcrs_12 Inptser.scd_mdcrs_13
+		Inptser.scd_ccaes_09 Inptser.scd_ccaes_10 Inptser.scd_ccaes_11 Inptser.scd_ccaes_12 Inptser.scd_ccaes_13;
+DATA user_list;
+	SET userId.final_insurancelist;
+RUN;
+DATA Myfile.Dx0913;
+	SET Dxpresc.scd_mdcrd_09 Dxpresc.scd_mdcrd_10 Dxpresc.scd_mdcrd_11 Dxpresc.scd_mdcrd_12 Dxpresc.scd_mdcrd_13
+		Dxpresc.scd_d_09 Dxpresc.scd_d_10 Dxpresc.scd_d_11 Dxpresc.scd_d_12 Dxpresc.scd_d_13;
+DATA Presc0913;
+	SET Myfile.Dx0913;
+RUN;
+data  maternal_care_list;
+set Service0913;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('63','64','65', '66', '671', '672', '673', '674', '675', '676', '677', 'V22', 'V23', 'V24', 'V27', 'V28',
+				'V616', 'V617') then pregnancy = 1;
+end;
+if pregnancy = 1 AND EFAMID ^= 0;
+run; 
+
+PROC SQL;
+CREATE table familycare_finallist as
+	SELECT distinct EFAMID as EFAMID
+	FROM maternal_care_list;
+RUN;
+PROC PRINT DATA = familycare_finallist; RUN;
+PROC CONTENTS DATA = familycare_finallist; RUN;
+PROC CONTENTS DATA = Service0913; RUN;
+
+PROC SORT DATA = Service0913;
+	BY EFAMID;
+RUN;
+PROC SORT DATA = familycare_finallist;
+	BY EFAMID;
+RUN;
+DATA familyall_finallist;
+	MERGE familycare_finallist (IN=A) Service0913 (IN=B);
+	BY EFAMID;
+	IF A AND B;
+RUN;
+PROC sql;
+CREATE table familyall_list as
+	SELECT distinct enrolid
+	FROM familyall_finallist;
+RUN;
+
+PROC SQL;
+CREATE table familycare_finallis as
+	SELECT distinct enrolid as enrolid,
+	min(age) as age,
+	count(days) as days
+	FROM maternal_care_list
+	GROUP BY enrolid;
+RUN;
+
+Proc MEANS DATA=familycare_finallis;
+	VAR days; 
+	RUN;
+DATA opioid;
+	SET myfile.unique_narcotics_dx;
+RUN;
+PROC SQL;
+CREATE table women_finallist as
+	SELECT distinct enrolid as enrolid
+	FROM familyall_finallist;
+RUN;
+
+PROC SQL;
+	CREATE table women_opioid as 
+	SELECT *
+	FROM opioid
+	INNER JOIN women_finallist
+	ON opioid.enrolid = women_finallist.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table A as
+	SELECT distinct enrolid
+	FROM women_opioid
+QUIT;
+
+PROC FREQ DATA = A ORDER=FREQ;
+TABLE flag;
+RUN;
