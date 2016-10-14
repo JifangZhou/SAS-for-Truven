@@ -1,0 +1,725 @@
+
+***********************************************************
+***********************************************************
+Descriptive Cohort Study / Opioid in SCD*******************
+Collaborator: Jin Han / Calip Gregory**********************
+***********************************************************
+***********************************************************;
+
+*===================================================================================
+***At least 2 SCD diagnosis or one SCD diagnosis at acute care hospital***
+*===================================================================================;
+
+LIBNAME Myfile 			'C:\Users\jzhou86\Documents\SCD Project';
+LIBNAME Rawdata 		'C:\Users\jzhou86\Documents\SCD Project\Raw Data';
+LIBNAME Dxpresc 		'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Drug Prescriptions';
+LIBNAME InsuRrd 		'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Insurance Records';
+LIBNAME Inptser			'C:\Users\jzhou86\Documents\SCD Project\Raw Data\InpatientServices';
+LIBNAME userId			'C:\Users\jzhou86\Documents\SCD Project\Unique Id List';
+
+*Begin stacking files;
+DATA Myfile.Service0913;
+	SET Rawdata.pso_2009 Rawdata.pso_2010 Rawdata.pso_2011 Rawdata.pso_2012 Rawdata.pso_2013 
+		Inptser.scd_mdcrs_09 Inptser.scd_mdcrs_10 Inptser.scd_mdcrs_11 Inptser.scd_mdcrs_12 Inptser.scd_mdcrs_13
+		Inptser.scd_ccaes_09 Inptser.scd_ccaes_10 Inptser.scd_ccaes_11 Inptser.scd_ccaes_12 Inptser.scd_ccaes_13;
+DATA Myfile.Dx0913;
+	SET Dxpresc.scd_mdcrd_09 Dxpresc.scd_mdcrd_10 Dxpresc.scd_mdcrd_11 Dxpresc.scd_mdcrd_12 Dxpresc.scd_mdcrd_13
+		Dxpresc.scd_d_09 Dxpresc.scd_d_10 Dxpresc.scd_d_11 Dxpresc.scd_d_12 Dxpresc.scd_d_13;
+DATA Presc0913;
+	SET Myfile.Dx0913;
+DATA user_list;
+	SET userId.final_insurancelist;
+RUN;
+
+data  acute_care_list;
+set Myfile.Service0913;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('28260','28261','28262','28263','28264','28265','28266','28267','28268','28269','28241','28242') then scd = 1;
+end;
+if scd = 1 AND STDPROV = 1 ;
+run; 
+
+
+PROC SQL;
+CREATE table acutecare_finallist as
+	SELECT distinct enrolid,
+	FROM acute_care_list;
+RUN;
+*NOTE: Table WORK.ACUTECARE_FINALLIST created, with 15628 rows and 1 columns.;
+
+DATA two_scd_dx;
+	SET Rawdata.pso_2009 Rawdata.pso_2010 Rawdata.pso_2011 Rawdata.pso_2012 Rawdata.pso_2013;
+RUN;
+
+data  two_SCD_list;
+set two_scd_dx;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('28260','28261','28262','28263','28264','28265','28266','28267','28268','28269','28241','28242') then scd = 1;
+end;
+if scd = 1;
+run; 
+
+PROC SQL;
+CREATE table all_dx as
+	SELECT 	min(enrolid) as enrolid,
+			count(scd) as number
+	FROM two_scd_dx
+	GROUP BY enrolid;
+RUN;
+
+DATA all_dx;
+	SET all_dx;
+	IF number >=2;
+RUN;
+
+PROC SQL;
+CREATE table two_SCD_list as
+	SELECT distinct enrolid
+	FROM all_dx;
+RUN;
+*NOTE: Table WORK.TWO_SCD_LIST created, with 26650 rows and 1 columns.;
+
+PROC sql;
+CREATE table Dx_merge as
+	SELECT *
+	FROM two_SCD_list FULL OUTER JOIN acutecare_finallist
+	ON two_SCD_list.enrolid = acutecare_finallist.enrolid;
+RUN;
+*NOTE: Table WORK.DX_MERGE created, with 27212 rows and 1 columns.;
+
+PROC sql;
+CREATE table Dignosis_merge_insurance as
+	SELECT *
+	FROM user_list INNER JOIN Dx_merge
+	ON Dx_merge.enrolid = user_list.enrolid;
+RUN;
+*NOTE: Table WORK.DIGNOSIS_MERGE_INSURANCE created, with 16566 rows and 3 columns.;
+
+DATA userId.final_list_cohort;
+	SET final_insurance;
+RUN;
+
+DATA final_list;
+	SET userId.final_list_cohort;
+RUN;
+
+PROC PRINT DATA= final_list (obs=3);
+RUN;
+
+PROC FREQ DATA= final_list ORDER=FREQ;
+	TABLE enroll_day;
+RUN;
+
+DATA Myfile.Insurance0913_t;
+	SET InsuRrd.scd_t_09 InsuRrd.scd_t_10 InsuRrd.scd_t_11 InsuRrd.scd_t_12 InsuRrd.scd_t_13
+		InsuRrd.scd_mdcrt_09 InsuRrd.scd_mdcrt_10 InsuRrd.scd_mdcrt_11 InsuRrd.scd_mdcrt_12 InsuRrd.scd_mdcrt_13;
+RUN;
+
+DATA Insurance0913_t;
+	SET Myfile.Insurance0913_t;
+RUN;
+
+PROC sql;
+	CREATE table final_insurance as
+	SELECT *
+	FROM Insurance0913_t
+	INNER JOIN final_list
+	ON Insurance0913_t.enrolid = final_list.enrolid;
+RUN;
+PROC CONTENTS DATA= final_insurance;
+RUN;
+PROC sql;
+	CREATE table final_insurance as
+	SELECT 	min(SEX) as sex,
+			count(DTSTART) as number_month,
+			min(age) as age,
+			min(enrolid) as enrolid,
+			sum(memdays) as enroll_day
+	FROM final_insurance
+	GROUP BY enrolid;
+RUN;
+
+PROC MEANS DATA=final_insurance;
+	VAR enroll_day;
+RUN;
+
+DATA final_insurance;
+	SET final_insurance;
+	IF age>=2;
+	enrollment5 =0;
+	enrollment2 =0;
+	enrollment3 =0;
+	enrollment4 =0;
+	IF enroll_day>=730 	THEN enrollment2 = 1;
+	IF enroll_day>=1095 THEN enrollment3 = 1;
+	IF enroll_day>=1460	THEN enrollment4 = 1;
+	IF enroll_day>=1825	THEN enrollment5 = 1;
+	IF age=<17 			THEN age_cat=1;
+	IF 18=<age=<30 		THEN age_cat=2;
+	IF 31=<age		 	THEN age_cat=3;
+RUN;
+PROC MEANS DATA=final_insurance MEDIAN;
+	VAR age;
+RUN;
+
+PROC FREQ DATA= final_insurance ORDER=FREQ;
+	TABLE enrollment2 *age_cat;
+	TABLE enrollment3 *age_cat;
+	TABLE enrollment4 *age_cat;
+	TABLE enrollment5 *age_cat;
+	TABLE sex *age_cat;
+RUN;
+
+PROC FREQ DATA= final_insurance ORDER=FREQ;
+	TABLE enrollment5;
+RUN;
+DATA Myfile.Service0913;
+	SET Rawdata.pso_2009 Rawdata.pso_2010 Rawdata.pso_2011 Rawdata.pso_2012 Rawdata.pso_2013 
+		Inptser.scd_mdcrs_09 Inptser.scd_mdcrs_10 Inptser.scd_mdcrs_11 Inptser.scd_mdcrs_12 Inptser.scd_mdcrs_13
+		Inptser.scd_ccaes_09 Inptser.scd_ccaes_10 Inptser.scd_ccaes_11 Inptser.scd_ccaes_12 Inptser.scd_ccaes_13;
+RUN;
+
+data  HTA_list;
+set Myfile.Service0913;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('5856') then HTA = 1;
+end;
+if HTA = 1;
+run; 
+
+PROC sql;
+	CREATE table HTA_list_a as
+	SELECT *
+	FROM HTA_list
+	INNER JOIN final_insurance
+	ON HTA_list.enrolid = final_insurance.enrolid;
+RUN;
+
+PROC sql;
+	CREATE table HTA_list_ab as
+	SELECT min(age) as age,
+			min(enrolid) as enrolid
+	FROM HTA_list_a
+	GROUP BY enrolid;
+RUN;
+
+PROC MEANS DATA=HTA_list_ab;
+VAR age;
+RUN;
+
+DATA hospService0913;
+	SET Rawdata.pso_2009 Rawdata.pso_2010 Rawdata.pso_2011 Rawdata.pso_2012 Rawdata.pso_2013;
+RUN;
+
+data  hosp_list;
+set hospService0913;
+if ADMDATE ^= .;
+flag=1;
+run; 
+
+PROC sql;
+	CREATE table hosp_list_a as
+	SELECT *
+	FROM hosp_list
+	INNER JOIN final_insurance
+	ON hosp_list.enrolid = final_insurance.enrolid;
+RUN;
+
+PROC sql;
+	CREATE table hosp_list_ab as
+	SELECT min(age) as age,
+			min(enrolid) as enrolid,
+			min(sex) as sex
+	FROM hosp_list_a
+	GROUP BY enrolid;
+RUN;
+
+
+PROC MEANS DATA=hosp_list_ab MEDIAN;
+VAR age;
+RUN;
+
+PROC FREQ DATA=hosp_list_ab ORDER=FREQ;
+TABLE sex;
+RUN;
+
+PROC CONTENTS DATA=hosp_list_a; RUN;
+
+   proc univariate data=hosp_list_ab;
+      var number;
+      histogram;
+   run;
+
+DATA hosp_list_ac;
+	SET hosp_list_a;
+IF Dx1 =: '2826' OR Dx1 ='28241' OR Dx1 ='28242' THEN DELETE;
+RUN;
+
+DATA Myfile.Service0913;
+	SET Rawdata.pso_2009 Rawdata.pso_2010 Rawdata.pso_2011 Rawdata.pso_2012 Rawdata.pso_2013;
+RUN;
+
+data  hosp_list;
+set hospService0913;
+if SVCDATE ^= .;
+flag=1;
+run; 
+
+PROC sql;
+	CREATE table hosp_list_a as
+	SELECT *
+	FROM hosp_list
+	INNER JOIN final_insurance
+	ON hosp_list.enrolid = final_insurance.enrolid;
+RUN;
+
+PROC sql;
+	CREATE table hosp_list_ab as
+	SELECT min(age) as age,
+			min(enrolid) as enrolid,
+			flag as flag,
+			Dx1 as Dx1
+	FROM hosp_list_a
+	GROUP BY enrolid;
+RUN;
+
+
+PROC MEANS DATA=hosp_list_ab;
+VAR flag;
+RUN;
+
+PROC FREQ DATA=hosp_list_ac ORDER=FREQ;
+TABLE Dx1;
+RUN;
+
+DATA hosp_list_ac;
+	SET hosp_list_a;
+IF Dx1 =: '2826' OR Dx1 ='28241' OR Dx1 ='28242' THEN DELETE;
+RUN;
+
+*===================================================================================
+***At least 1 prescriptions of the pain relief medication of interest***
+*===================================================================================;
+
+LIBNAME Myfile 			'C:\Users\jzhou86\Documents\SCD Project';
+LIBNAME Rawdata 		'C:\Users\jzhou86\Documents\SCD Project\Raw Data';
+LIBNAME Dxpresc 		'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Drug Prescriptions';
+LIBNAME userId			'C:\Users\jzhou86\Documents\SCD Project\Unique Id List';
+
+*Begin stacking files;
+DATA Myfile.Dx0913;
+	SET Dxpresc.scd_mdcrd_09 Dxpresc.scd_mdcrd_10 Dxpresc.scd_mdcrd_11 Dxpresc.scd_mdcrd_12 Dxpresc.scd_mdcrd_13
+		Dxpresc.scd_d_09 Dxpresc.scd_d_10 Dxpresc.scd_d_11 Dxpresc.scd_d_12 Dxpresc.scd_d_13;
+DATA Drug_Presc0913;
+	SET Myfile.Dx0913;
+RUN;
+* Set user list;
+DATA user_list;
+	SET userId.final_list_cohort;
+RUN;
+
+PROC sql;
+	CREATE table myfile.Dx_all as
+	SELECT *
+	FROM Drug_Presc0913
+	INNER JOIN user_list
+	ON Drug_Presc0913.enrolid = user_list.enrolid;
+RUN;
+
+DATA Dx_all;
+	SET myfile.Dx_all;
+RUN;
+
+***Test in Redbook**;
+PROC PRINT DATA=Narcotic17_NDC (obs=200);RUN;
+
+DATA Narcotic1_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Buprenorphine' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Buprenorphine';
+RUN;
+DATA Narcotic2_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Butorphanol' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Butorphanol';
+RUN;
+DATA Narcotic3_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Codeine' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Codeine';
+RUN;
+
+DATA Narcotic4_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Hydrocodone' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Hydrocodone';
+RUN;
+DATA Narcotic5_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Hydromorphone' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Hydromorphone';
+RUN;
+DATA Narcotic6_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Levorphanol' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Levorphanol';
+RUN;
+DATA Narcotic7_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Meperidine' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Meperidine';
+RUN;
+DATA Narcotic8_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Methadone' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Methadone';
+RUN;
+DATA Narcotic9_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Morphine' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Morphine';
+RUN;
+DATA Narcotic10_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Nalbuphine' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Nalbuphine';
+RUN;
+DATA Narcotic11_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Oxycodone' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Oxycodone';
+RUN;
+DATA Narcotic12_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Oxymorphone' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Oxymorphone';
+RUN;
+DATA Narcotic13_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Pentazocine' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Pentazocine';
+RUN;
+DATA Narcotic14_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Propoxyphene' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Propoxyphene';
+RUN;
+DATA Narcotic15_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Tapentadol' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Tapentadol';
+RUN;
+DATA Narcotic16_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Tramadol' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Tramadol';
+RUN;
+DATA Narcotic17_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Fentanyl' )AND
+			(MSTFMDS contains 'Patch, Extended Release');
+	FLAG = 	'Fentanyl';
+RUN;
+
+
+DATA Narcoticall_NDC;
+	SET Narcotic1_NDC Narcotic2_NDC Narcotic3_NDC Narcotic4_NDC Narcotic5_NDC Narcotic6_NDC
+		Narcotic7_NDC Narcotic8_NDC Narcotic9_NDC Narcotic10_NDC Narcotic11_NDC Narcotic12_NDC
+		Narcotic13_NDC Narcotic14_NDC Narcotic15_NDC Narcotic16_NDC Narcotic17_NDC;
+RUN;
+
+proc sql;
+create table unique_presc_dx as 
+select *,
+		Narcoticall_NDC.flag as flag
+FROM Dx_all inner join Narcoticall_NDC
+	on Dx_all.NDCNUM = Narcoticall_NDC.NDCNUM;
+QUIT;
+
+PROC FREQ DATA = unique_presc_dx;
+TABLE flag;
+RUN;
+PROC PRINT DATA = simple_file;
+RUN;
+DATA myfile.unique_NSAIDs_dx;
+	SET unique_presc_dx;
+RUN;
+
+PROC sql;
+	CREATE table simple_file as
+	SELECT distinct enrolid as enrolid,
+		min(flag) as flag
+	FROM unique_presc_dx
+	GROUP BY flag;
+QUIT;
+
+PROC sql;
+	CREATE table simple_id_file as
+	SELECT distinct enrolid as enrolid,
+		flag as flag
+	FROM unique_presc_dx
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table simple_id_file as
+	SELECT distinct enrolid as enrolid
+	FROM unique_presc_dx
+	WHERE flag = 'Ibuprofen'
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table non_ibuprofen as
+	SELECT *
+	FROM unique_presc_dx
+	LEFT JOIN simple_id_file
+	ON unique_presc_dx.enrolid = simple_id_file.enrolid
+	WHERE simple_id_file.enrolid IS NULL;
+QUIT;
+PROC sql;
+	CREATE table non_ibuprofen as
+	SELECT distinct enrolid as enrolid,
+		flag as flag
+	FROM non_ibuprofen
+	GROUP BY enrolid;
+QUIT;
+DATA ibupro;
+SET non_ibuprofen;
+IF FLAG = 'Diclofenac';
+RUN;
+PROC sql;
+	CREATE table ibupro as
+	SELECT distinct enrolid as enrolid
+	FROM ibupro;
+QUIT;
+PROC FREQ DATA = ibupro ORDER=FREQ;
+TABLE enrolid;
+RUN;
+   proc univariate data=simple_id_file;
+      var num_pres;
+      histogram / midpoints = 0.5 1.5 2.5 3.5 4.5 5.5;
+   run;
+
+DATA Narcotic1_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Bromfenac' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Bromfenac';
+RUN;
+DATA Narcotic2_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Diclofenac' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Diclofenac';
+RUN;
+DATA Narcotic3_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Diflunisal' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Diflunisal';
+RUN;
+
+DATA Narcotic4_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Etodolac' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Etodolac';
+RUN;
+DATA Narcotic5_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Fenoprofen' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Fenoprofen';
+RUN;
+DATA Narcotic6_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Flurbiprofen' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Flurbiprofen';
+RUN;
+DATA Narcotic7_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Ibuprofen' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Ibuprofen';
+RUN;
+DATA Narcotic8_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Indomethacin' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Indomethacin';
+RUN;
+DATA Narcotic9_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Ketoprofen' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Ketoprofen';
+RUN;
+DATA Narcotic10_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Ketorolac' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Ketorolac';
+RUN;
+DATA Narcotic11_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Meclofenamate' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Meclofenamate';
+RUN;
+DATA Narcotic12_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Mefenamic' AND GENNME contains 'Acid')AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Mefenamic Acid';
+RUN;
+DATA Narcotic13_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Meloxicam' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Meloxicam';
+RUN;
+DATA Narcotic14_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Nabumetone' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Nabumetone';
+RUN;
+DATA Narcotic15_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Naproxen' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Naproxen';
+RUN;
+DATA Narcotic16_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Oxaprozin' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Oxaprozin';
+RUN;
+DATA Narcotic17_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Phenylbutazone' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Phenylbutazone';
+RUN;
+DATA Narcotic18_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Piroxicam' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Piroxicam';
+RUN;
+DATA Narcotic19_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Sulindac' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Sulindac';
+RUN;
+DATA Narcotic20_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Tolmetin' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Tolmetin';
+RUN;
+
+DATA Narcoticall_NDC;
+	SET Narcotic1_NDC Narcotic2_NDC Narcotic3_NDC Narcotic4_NDC Narcotic5_NDC Narcotic6_NDC
+		Narcotic7_NDC Narcotic8_NDC Narcotic9_NDC Narcotic10_NDC Narcotic11_NDC Narcotic12_NDC
+		Narcotic13_NDC Narcotic14_NDC Narcotic15_NDC Narcotic16_NDC Narcotic17_NDC Narcotic18_NDC Narcotic19_NDC Narcotic20_NDC;
+RUN;
+
+proc sql;
+create table unique_presc_dx as 
+select *,
+		Narcoticall_NDC.flag as flag
+FROM Dx_all inner join Narcoticall_NDC
+	on Dx_all.NDCNUM = Narcoticall_NDC.NDCNUM;
+QUIT;
+
+PROC FREQ DATA = unique_presc_dx;
+TABLE flag;
+RUN;
+PROC PRINT DATA = simple_file;
+RUN;
+DATA myfile.unique_narcotics_dx;
+	SET unique_presc_dx;
+RUN;
+
+PROC sql;
+	CREATE table simple_file_id as
+	SELECT distinct enrolid as enrolid,
+		flag as flag
+	FROM unique_presc_dx
+	GROUP BY enrolid, flag;
+QUIT;
+
+PROC FREQ DATA = simple_file_id ORDER=FREQ;
+TABLE num_pres;
+RUN;
+
+****************************************;
+DATA Narcotic1_NDC;
+	SET Myfile.redbook;
+	WHERE 	GENNME contains 'Epoetin';
+	FLAG = 	'Acetaminophen';
+RUN;
+
+DATA Narcoticall_NDC;
+	SET Narcotic1_NDC;
+RUN;
+
+proc sql;
+create table unique_presc_dx as 
+select *,
+		Narcoticall_NDC.flag as flag
+FROM Dx_all inner join Narcoticall_NDC
+	on Dx_all.NDCNUM = Narcoticall_NDC.NDCNUM;
+QUIT;
+
+PROC FREQ DATA = unique_presc_dx;
+TABLE flag;
+RUN;
+PROC PRINT DATA = Narcotic1_NDC;
+RUN;
+DATA myfile.unique_aspirin_dx;
+	SET unique_presc_dx;
+RUN;
+
+PROC sql;
+	CREATE table simple_file as
+	SELECT distinct enrolid as enrolid
+	FROM unique_presc_dx
+	GROUP BY enrolid;
+QUIT;
+DATA allsvc;
+	SET Rawdata.pso_2009 Rawdata.pso_2010 Rawdata.pso_2011 Rawdata.pso_2012 Rawdata.pso_2013;
+RUN;
+proc sql;
+create table unique_presc_dx as 
+select distinct allsvc.enrolid as enrolid
+FROM allsvc inner join simple_file
+	ON allsvc.enrolid = simple_file.enrolid AND SVCDATE ^= .;
+QUIT;
+PROC FREQ DATA = unique_presc_dx ORDER=FREQ;
+TABLE Dx1;
+RUN;
+
+
