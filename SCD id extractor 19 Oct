@@ -1,0 +1,284 @@
+LIBNAME Indexdt 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Archived';
+LIBNAME Insudata 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Insurance Records';
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+LIBNAME Inptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\InpatientServices';
+LIBNAME Outptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\OutpatientService';
+LIBNAME Drugall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Drug Prescriptions';
+
+* Stacking files of index data;
+DATA indexcase_all;
+	SET Indexdt.pso_2009 Indexdt.pso_2010 Indexdt.pso_2011 Indexdt.pso_2012 Indexdt.pso_2013;
+RUN;
+
+DATA insurance_all;
+	SET Insudata.scd_mdcrt_09 Insudata.scd_mdcrt_10 Insudata.scd_mdcrt_11 Insudata.scd_mdcrt_12 Insudata.scd_mdcrt_13
+		Insudata.scd_t_09 Insudata.scd_t_10 Insudata.scd_t_11 Insudata.scd_t_12 Insudata.scd_t_13;
+RUN;
+
+DATA inpatient_file;
+	SET indexcase_all;
+	IF filetype='I';
+RUN;
+
+PROC PRINT DATA=indexcase_all (obs=2); RUN;
+
+DATA acutecare_file;
+	SET indexcase_all;
+	IF STDPROV = 1;
+RUN;
+
+PROC SQL;
+	CREATE TABLE two_claims_file as
+	SELECT enrolid as enrolid,
+		min(clm_dt) as clm_dt,
+		max(clm_dt) as max_date,
+		min(DOBYR) as DOBYR,
+		min(sex) as sex
+	FROM indexcase_all
+	GROUP BY enrolid;
+QUIT;
+
+DATA two_claims_file;
+SET two_claims_file;
+IF max_date-clm_dt >30;
+RUN;
+
+*Now combine the three lists together and group by enrolid. define unique patients;
+
+DATA all_id;
+KEEP enrolid sex clm_dt DOBYR;
+SET inpatient_file acutecare_file two_claims_file;
+RUN;
+
+PROC SQL;
+ CREATE TABLE allini_id as
+	SELECT 	min(enrolid) as enrolid,
+			min(clm_dt) as index_date,
+			min(sex) as sex,
+			min(DOBYR) as DOBYR
+	FROM all_id
+	GROUP BY enrolid;
+QUIT;
+
+*NOTE: Table WORK.ALLINI_ID created, with 22819 rows and 4 columns.;
+
+PROC SQL;
+ CREATE TABLE allinitial_id as
+	SELECT 	indexcase_all.*,
+			allini_id.index_date
+	FROM indexcase_all a
+	INNER JOIN allini_id b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*NOTE: Table WORK.ALLINITIAL_ID created, with 1663819 rows and 114 columns.;
+
+DATA allinitial_id;
+	SET allinitial_id;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('V4281','V4282') then delete;
+		end;
+RUN;
+* NOTE: The data set WORK.ALLINITIAL_ID has 1652067 observations and 114 variables.
+FROM 22809 unique patients;
+
+DATA allinitial_id;
+	SET allinitial_id;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('V420', 'V421', 'V427', 'V432', 'V438') then delete;
+		end;
+RUN;
+*NOTE: The data set WORK.ALLINITIAL_ID has 1650310 observations and 114 variables.;
+*NOTE: Table WORK.ALLINI_ID created, with 22794 rows and 1 columns.;
+
+DATA allinitial_id;
+	SET allinitial_id;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		IF (icd{i} =: '14' OR
+			icd{i} =: '15' OR
+			icd{i} =: '16' OR
+			icd{i} =: '17' OR
+			icd{i} =: '18' OR
+			icd{i} =: '19' OR
+			icd{i} =: '20' OR
+			icd{i} =: '21' OR
+			icd{i} =: '22' OR
+			icd{i} =: '23') then delete;
+		end;
+RUN;
+* Cancer (ICD-9-CM 140.xx–239.xx) Removed;
+*NOTE: The data set WORK.ALLINITIAL_ID has 1635219 observations and 114 variables.;
+*NOTE: Table WORK.ALLINI_ID created, with 22271 rows and 1 columns.;
+
+PROC SQL;
+ CREATE TABLE myfile.allini_id as
+	SELECT 	min(enrolid) as enrolid,
+		min(index_date) as index_date,
+		min(DOBYR) as dobyr,
+		min(sex) as sex,
+		min(region) as region
+	FROM allinitial_id
+	GROUP BY enrolid;
+QUIT;
+*NOTE: Table WORK.ALLINI_ID created, with 22271 rows and 1 columns.;
+
+* extract all insurance info from the insurance_all files;
+
+PROC SQL;
+ CREATE TABLE all_insurance_scd as
+ 	SELECT 	insurance_all.*,
+			allini_id.index_date
+	FROM insurance_all a
+	INNER JOIN allini_id b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*NOTE: Table WORK.ALL_INSURANCE_SCD created, with 682429 rows and 32 columns.;
+
+DATA eligible_insurance_scd;
+SET all_insurance_scd;
+IF index_date<DTSTART<=index_date+760;
+RUN;
+*NOTE: The data set WORK.ELIGIBLE_INSURANCE_SCD has 341174 observations and 32 variables.;
+
+proc sort data=eligible_insurance_scd; by enrolid DTSTART; run;
+
+proc summary nway data= eligible_insurance_scd;
+var MEMDAYS;
+by enrolid;
+output out=eligible_insurance_scd_sum sum=enroll_day;
+run;
+
+/*Check the number of people who do not have enrollment files in the 12 months &time. to drug initiation*/
+
+data eligible_insurance_scd_merge;
+set eligible_insurance_scd_sum;
+if 0 <= enroll_day < 365 then postenroll_24m=1;
+if 365 <= enroll_day < 730 then postenroll_24m=2;
+if enroll_day >=730 then postenroll_24m=3;
+run;
+
+PROC FREQ DATA=eligible_insurance_scd_merge;
+TABLE postenroll_24m;
+RUN;
+DATA eligible_insurance_scd_merge;
+	SET eligible_insurance_scd_merge;
+	IF postenroll_24m=3;
+RUN;
+*NOTE: The data set WORK.ELIGIBLE_INSURANCE_SCD_MERGE has 7561 observations and 5 variables.;
+
+PROC SQL;
+CREATE TABLE myfile.all_id as
+	SELECT *
+	FROM allini_id a
+	INNER JOIN eligible_insurance_scd_merge b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC PRINT DATA=myfile.all_id (obs=2); RUN;
+
+DATA id_file;
+DROP _TYPE_ _FREQ_;
+SET myfile.all_id;
+Year = YEAR(index_date);
+Age = YEAR(index_date)-DOBYR;
+RUN;
+
+DATA myfile.id_file;
+SET id_file;
+IF Age<18 THEN agecat=1;
+ELSE IF 18<=Age<30 THEN agecat=2;
+ELSE IF 31<Age THEN agecat=3;
+RUN;
+
+PROC FREQ DATA=id_file;
+TABLE agecat*sex;
+RUN;
+
+PROC MEANS DATA=id_file;
+VAR sex;
+RUN;
+
+* Stacking files of inpatient, outpatient drugs all data;
+DATA inpt_all;
+SET Inptall.scd_ccaes_09 Inptall.scd_ccaes_10 Inptall.scd_ccaes_11 Inptall.scd_ccaes_12 Inptall.scd_ccaes_13
+	Inptall.scd_mdcrs_09 Inptall.scd_mdcrs_10 Inptall.scd_mdcrs_11 Inptall.scd_mdcrs_12 Inptall.scd_mdcrs_13;
+DATA outpt_all;
+SET	Outptall.scd_ccaeo_09 Outptall.scd_ccaeo_10 Outptall.scd_ccaeo_11 Outptall.scd_ccaeo_12 Outptall.scd_ccaeo_13
+	Outptall.scd_mdcro_09 Outptall.scd_mdcro_10 Outptall.scd_mdcro_11 Outptall.scd_mdcro_12 Outptall.scd_mdcro_13;
+DATA drug_all;
+SET	Drugall.scd_ccaed_09 Drugall.scd_ccaed_10 Drugall.scd_ccaed_11 Drugall.scd_ccaed_12 Drugall.scd_ccaed_13
+	Drugall.scd_mdcrd_09 Drugall.scd_mdcrd_10 Drugall.scd_mdcrd_11 Drugall.scd_mdcrd_12 Drugall.scd_mdcrd_13;
+RUN;
+
+* extract baseline and observational file and store them in the working directory;
+PROC SQL;
+CREATE TABLE myfile.inpt_baseline as
+SELECT inpt_all.*,
+	id_file.*
+FROM inpt_all a
+INNER JOIN id_file b
+ON a.enrolid = b.enrolid AND b.index_date<=a.ADMDATE<b.index_date+365;
+QUIT;
+
+PROC SQL;
+CREATE TABLE myfile.inpt_obs as
+SELECT inpt_all.*,
+	id_file.*
+FROM inpt_all a
+INNER JOIN id_file b
+ON a.enrolid = b.enrolid AND b.index_date+365<=a.ADMDATE<=b.index_date+730;
+QUIT;
+
+PROC SQL;
+CREATE TABLE myfile.outpt_baseline as
+SELECT outpt_all.*,
+	id_file.*
+FROM outpt_all a
+INNER JOIN id_file b
+ON a.enrolid = b.enrolid AND b.index_date<=a.SVCDATE<b.index_date+365;
+QUIT;
+
+PROC SQL;
+CREATE TABLE myfile.outpt_obs as
+SELECT outpt_all.*,
+	id_file.*
+FROM outpt_all a
+INNER JOIN id_file b
+ON a.enrolid = b.enrolid AND b.index_date+365<=a.SVCDATE<=b.index_date+730;
+QUIT;
+
+PROC SQL;
+CREATE TABLE myfile.dx_baseline as
+SELECT drug_all.*,
+	id_file.*
+FROM drug_all a
+INNER JOIN id_file b
+ON a.enrolid = b.enrolid AND b.index_date<=a.SVCDATE<b.index_date+365;
+QUIT;
+
+PROC SQL;
+CREATE TABLE myfile.dx_obs as
+SELECT drug_all.*,
+	id_file.*
+FROM drug_all a
+INNER JOIN id_file b
+ON a.enrolid = b.enrolid AND b.index_date+365<=a.SVCDATE<=b.index_date+730;
+QUIT;
+
+* Baseline clinical characteristics;
+DATA service_baseline;
+	SET myfile.inpt_baseline myfile.outpt_baseline;
+RUN;
+
+PROC sql;
+CREATE TABLE xx as
+SELECT DISTINCT enrolid
+FROM service_baseline;
+QUIT;
+
+DATA myfile.simple_id;
+Keep enrolid;
+SET myfile.id_file;
+RUN;
