@@ -1,0 +1,80 @@
+LIBNAME myfile 'F:\User Folders\jzhou86';
+
+libname ccae09 'E:\Truven Data\CCAE\2009';
+libname mdcr09 'E:\Truven Data\MDCR\2009';
+libname ccae10 'E:\Truven Data\CCAE\2010';
+libname mdcr10 'E:\Truven Data\MDCR\2010';
+libname ccae11 'E:\Truven Data\CCAE\2011';
+libname mdcr11 'E:\Truven Data\MDCR\2011';
+libname ccae12 'E:\Truven Data\CCAE\2012';
+libname mdcr12 'E:\Truven Data\MDCR\2012';
+libname ccae13 'E:\Truven Data\CCAE\2013';
+libname mdcr13 'E:\Truven Data\MDCR\2013';
+
+DATA myfile.SCD_id;
+	SET Scd_id;
+RUN;
+
+PROC PRINT DATA=SCD_id (OBS=2); RUN;
+*Read unique patient ID
+NOTE: The data set MYFILE.SCD_ID has 7561 observations and 1 variables.;
+
+%macro scd (input = , output = );
+options compress = yes reuse = yes;
+	PROC sql;
+		CREATE TABLE &output. as
+		SELECT a.*
+ 		FROM &input. a inner join Scd_id b
+		ON a.enrolid = b.enrolid;
+	QUIT;
+%mend scd;
+* Inpatient summary file;
+%scd (input = ccae09.ccaei093, output = myfile.scd_ccaei_09);
+%scd (input = ccae10.ccaei103, output = myfile.scd_ccaei_10);
+%scd (input = ccae11.ccaei113, output = myfile.scd_ccaei_11);
+%scd (input = ccae12.ccaei122, output = myfile.scd_ccaei_12);
+%scd (input = ccae13.ccaei131, output = myfile.scd_ccaei_13);
+%scd (input = mdcr09.mdcri093, output = myfile.scd_mdcri_09);
+%scd (input = mdcr10.mdcri103, output = myfile.scd_mdcri_10);
+%scd (input = mdcr11.mdcri113, output = myfile.scd_mdcri_11);
+%scd (input = mdcr12.mdcri122, output = myfile.scd_mdcri_12);
+%scd (input = mdcr13.mdcri131, output = myfile.scd_mdcri_13);
+
+*outpatient files;
+
+%scd (input = ccae09.ccaeo093, output = myfile.scd_ccaeo_09);
+%scd (input = ccae10.ccaeo103, output = myfile.scd_ccaeo_10);
+%scd (input = ccae11.ccaeo113, output = myfile.scd_ccaeo_11);
+%scd (input = ccae12.ccaeo122, output = myfile.scd_ccaeo_12);
+%scd (input = ccae13.ccaeo131, output = myfile.scd_ccaeo_13);
+%scd (input = mdcr09.mdcro093, output = myfile.scd_mdcro_09);
+%scd (input = mdcr10.mdcro103, output = myfile.scd_mdcro_10);
+%scd (input = mdcr11.mdcro113, output = myfile.scd_mdcro_11);
+%scd (input = mdcr12.mdcro122, output = myfile.scd_mdcro_12);
+%scd (input = mdcr13.mdcro131, output = myfile.scd_mdcro_13);
+
+*drug files;
+
+%scd (input = ccae09.ccaed093, output = myfile.scd_ccaed_09);
+%scd (input = ccae10.ccaed103, output = myfile.scd_ccaed_10);
+%scd (input = ccae11.ccaed113, output = myfile.scd_ccaed_11);
+%scd (input = ccae12.ccaed122, output = myfile.scd_ccaed_12);
+%scd (input = ccae13.ccaed131, output = myfile.scd_ccaed_13);
+%scd (input = mdcr09.mdcrd093, output = myfile.scd_mdcrd_09);
+%scd (input = mdcr10.mdcrd103, output = myfile.scd_mdcrd_10);
+%scd (input = mdcr11.mdcrd113, output = myfile.scd_mdcrd_11);
+%scd (input = mdcr12.mdcrd122, output = myfile.scd_mdcrd_12);
+%scd (input = mdcr13.mdcrd131, output = myfile.scd_mdcrd_13);
+
+*inpatient services files;
+
+%scd (input = ccae09.ccaes093, output = myfile.scd_ccaes_09);
+%scd (input = ccae10.ccaes103, output = myfile.scd_ccaes_10);
+%scd (input = ccae11.ccaes113, output = myfile.scd_ccaes_11);
+%scd (input = ccae12.ccaes122, output = myfile.scd_ccaes_12);
+%scd (input = ccae13.ccaes131, output = myfile.scd_ccaes_13);
+%scd (input = mdcr09.mdcrs093, output = myfile.scd_mdcrs_09);
+%scd (input = mdcr10.mdcrs103, output = myfile.scd_mdcrs_10);
+%scd (input = mdcr11.mdcrs113, output = myfile.scd_mdcrs_11);
+%scd (input = mdcr12.mdcrs122, output = myfile.scd_mdcrs_12);
+%scd (input = mdcr13.mdcrs131, output = myfile.scd_mdcrs_13);
