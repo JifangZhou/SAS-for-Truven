@@ -1,0 +1,152 @@
+LIBNAME MYFILE 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+
+
+PROC PRINT DATA=drug_prior (obs=2);RUN;
+PROC CONTENTS DATA=drug_prior;RUN;
+PROC CONTENTS DATA=myfile.drug_list;RUN;
+
+DATA drug_list;
+SET myfile.drug_list;
+NDCNUM_new = put(NDCNUM, 11.);
+drop NDCNUM;
+RENAME NDCNUM_new=NDCNUM;
+RUN;
+DATA drug_prior;
+SET Myfile.drug_prior;
+DATA drug_post;
+SET Myfile.drug_post;
+DATA ID;
+SET Myfile.final_uniqlist;
+RUN;
+
+ 
+
+PROC SORT DATA=drug_list;
+	BY NDCNUM;
+RUN;
+PROC SORT DATA=drug_prior;
+	BY NDCNUM;
+RUN;
+DATA prior;
+MERGE drug_list drug_prior;
+BY NDCNUM;
+RUN;
+
+
+PROC SQL;
+ CREATE TABLE drug_all as
+ SELECT *
+ FROM drug_prior a
+ INNER JOIN myfile.narcoticall_ndc b
+ ON a.NDCNUM =b.NDCNUM;
+ QUIT;
+ 
+ PROC SQL;
+ CREATE table drug_prior_list as
+ SELECT distinct enrolid
+ FROM drug_all;
+ QUIT;
+
+ PROC PRINT DATA=drug_all (obs=2);RUN;
+ PROC FREQ DATA=drug_prior_ratio2;
+ TABLE str;
+ RUN;
+
+ DATA drug_prior_ratio;
+ SET drug_all;
+ 	IF flag='Buprenorphine' THEN ratio=37.5;
+ 	ELSE IF flag= 'Codeine' THEN ratio=0.13;
+	ELSE IF flag= 'Fentanyl' THEN ratio=3;
+	ELSE IF flag= 'Hydrocodone' THEN ratio=1;
+	ELSE IF flag= 'Hydromorphone' THEN ratio=5;
+	ELSE IF flag= 'Meperidine' THEN ratio=0.1;
+	ELSE IF flag= 'Methadone' THEN ratio=4.7;
+	ELSE IF flag= 'Morphine' THEN ratio=1;
+	ELSE IF flag= 'Oxycodone' THEN ratio=1.5;
+	ELSE IF flag= 'Oxymorphone' THEN ratio=3;
+	ELSE IF flag= 'Pentazocine' THEN ratio=0.37;
+	ELSE IF flag= 'Propoxyphene' THEN ratio=0.08;
+	ELSE IF flag= 'Tapentadol' THEN ratio=0.4;
+	ELSE IF flag= 'Tramadol' THEN ratio=0.2;
+RUN;
+DATA drug_prior_ratio1;
+SET drug_prior_ratio;
+IF flag = 'Hydrocodone';
+IF STRNGTH = '10 MG-200 MG' THEN str=10;
+ELSE IF STRNGTH = '10 MG-200 MG' THEN str=10;
+ELSE IF STRNGTH = '325 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '325 MG-5 MG' THEN str=5;
+ELSE IF STRNGTH = '325 MG-7.5 MG' THEN str=7.5;
+ELSE IF STRNGTH = '500 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '500 MG-2.5 MG' THEN str=2.5;
+ELSE IF STRNGTH = '500 MG-5 MG' THEN str=5;
+ELSE IF STRNGTH = '500 MG-7.5 MG' THEN str=7.5;
+ELSE IF STRNGTH = '650 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '650 MG-7.5 MG' THEN str=7.5;
+ELSE IF STRNGTH = '7.5 MG-200 MG' THEN str=7.5;
+ELSE IF STRNGTH = '750 MG-7.5 MG' THEN str=7.5;
+ELSE IF STRNGTH = '8 MG/5 ML-10 MG/5 ML' THEN str=2;
+RUN;
+
+DATA drug_prior_ratio2;
+SET drug_prior_ratio;
+IF flag = 'Oxycodone';
+IF STRNGTH = '10 MG' THEN str=10;
+ELSE IF STRNGTH = '15 MG' THEN str=15;
+ELSE IF STRNGTH = '20 MG' THEN str=20;
+ELSE IF STRNGTH = '30 MG' THEN str=30;
+ELSE IF STRNGTH = '325 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '325 MG-4.8355 MG' THEN str=4.8355;
+ELSE IF STRNGTH = '325 MG-5 MG' THEN str=5;
+ELSE IF STRNGTH = '325 MG-7.5 MG' THEN str=7.5;
+ELSE IF STRNGTH = '400 MG-5 MG' THEN str=5;
+ELSE IF STRNGTH = '5 MG' THEN str=5;
+ELSE IF STRNGTH = '500 MG-7.5 MG' THEN str=7.5;
+ELSE IF STRNGTH = '60 MG' THEN str=60;
+ELSE IF STRNGTH = '650 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '80 MG' THEN str=80;
+RUN;
+
+DATA Two_drug;
+SET drug_prior_ratio1 drug_prior_ratio2;
+OME=METQTY*str*ratio;
+RUN;
+
+DATA Two_drug_agecat;
+SET Two_drug;
+IF age<17 then agecat=1;
+IF age>=17 then agecat=2;
+RUN;
+
+PROC PRINT DATA=xxx (obs=2);RUN;
+
+DATA xxx;
+SET Two_drug_agecat;
+IF agecat=2;
+RUN;
+
+PROC SQL;
+CREATE TABLE xx as
+SELECT min(enrolid) as enrolid,
+sum(OME) as OME
+FROM xxx
+GROUP BY enrolid;
+QUIT;
+
+PROC MEANS DATA=xx Median;
+VAR OME;
+RUN;
+
+DATA s;
+SET xx;
+IF OME>200000;
+RUN;
+PROC PRINT DATA=s; RUN;
+
+DATA ss;
+SET Two_drug;
+KEEP enrolid metqyt daysupp netpay pay pddate;
+IF enrolid = 1902293601;
+RUN;
+
+PROC PRINT DATA=ss;RUN;
