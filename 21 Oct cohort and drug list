@@ -1,0 +1,569 @@
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project';
+
+
+***Test in Redbook**;
+PROC PRINT DATA=Myfile.redbook (obs=200);RUN;
+
+PROC FREQ DATA= Myfile.redbook;
+	TABLE MSTFMDS;
+RUN;
+
+DATA Narcotic1_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Buprenorphine' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension'or 
+			MSTFMDS contains 'Patch, Extended Release' or MSTFMDS contains 'Capsule');
+	FLAG = 	'Buprenorphine';
+RUN;
+DATA Narcotic2_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Butorphanol' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension' or MSTFMDS contains 'Capsule');
+	FLAG = 	'Butorphanol';
+RUN;
+DATA Narcotic3_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Codeine' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension' or MSTFMDS contains 'Capsule');
+	FLAG = 	'Codeine';
+RUN;
+
+DATA Narcotic4_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Hydrocodone' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension' or MSTFMDS contains 'Capsule');
+	FLAG = 	'Hydrocodone';
+RUN;
+DATA Narcotic5_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Hydromorphone' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension' or MSTFMDS contains 'Capsule');
+	FLAG = 	'Hydromorphone';
+RUN;
+DATA Narcotic6_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Levorphanol' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension' or MSTFMDS contains 'Capsule');
+	FLAG = 	'Levorphanol';
+RUN;
+DATA Narcotic7_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Meperidine' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension' or MSTFMDS contains 'Capsule');
+	FLAG = 	'Meperidine';
+RUN;
+DATA Narcotic8_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Methadone' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension' or MSTFMDS contains 'Capsule');
+	FLAG = 	'Methadone';
+RUN;
+DATA Narcotic9_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Morphine' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension' or MSTFMDS contains 'Capsule');
+	FLAG = 	'Morphine';
+RUN;
+DATA Narcotic10_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Nalbuphine' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension' or MSTFMDS contains 'Capsule');
+	FLAG = 	'Nalbuphine';
+RUN;
+DATA Narcotic11_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Oxycodone' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension' or MSTFMDS contains 'Capsule');
+	FLAG = 	'Oxycodone';
+RUN;
+DATA Narcotic12_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Oxymorphone' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension' or MSTFMDS contains 'Capsule');
+	FLAG = 	'Oxymorphone';
+RUN;
+DATA Narcotic13_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Pentazocine' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension' or MSTFMDS contains 'Capsule');
+	FLAG = 	'Pentazocine';
+RUN;
+DATA Narcotic14_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Propoxyphene' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension' or MSTFMDS contains 'Capsule');
+	FLAG = 	'Propoxyphene';
+RUN;
+DATA Narcotic15_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Tapentadol' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension' or MSTFMDS contains 'Capsule');
+	FLAG = 	'Tapentadol';
+RUN;
+DATA Narcotic16_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Tramadol' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension' or MSTFMDS contains 'Capsule');
+	FLAG = 	'Tramadol';
+RUN;
+DATA Narcotic17_NDC;
+	SET Myfile.redbook;
+	WHERE 	(GENNME contains 'Fentanyl' )AND
+			(MSTFMDS contains 'Patch, Extended Release');
+	FLAG = 	'Fentanyl';
+RUN;
+
+
+DATA Myfile.Narcoticall_NDC;
+	SET Narcotic1_NDC Narcotic2_NDC Narcotic3_NDC Narcotic4_NDC Narcotic5_NDC Narcotic6_NDC
+		Narcotic7_NDC Narcotic8_NDC Narcotic9_NDC Narcotic10_NDC Narcotic11_NDC Narcotic12_NDC
+		Narcotic13_NDC Narcotic14_NDC Narcotic15_NDC Narcotic16_NDC Narcotic17_NDC;
+RUN;
+
+* Now stack all I O S D files and the final ID list;
+
+LIBNAME workingD 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+LIBNAME Inptall 'C:\Users\jzhou86\Documents\SCD Project\Working directory\scd_i o s d_0913\I';
+LIBNAME Inpsall 'C:\Users\jzhou86\Documents\SCD Project\Working directory\scd_i o s d_0913\S';
+LIBNAME Outptall 'C:\Users\jzhou86\Documents\SCD Project\Working directory\scd_i o s d_0913\O';
+LIBNAME Drugall 'C:\Users\jzhou86\Documents\SCD Project\Working directory\scd_i o s d_0913\D';
+
+DATA inpt_all;
+SET Inptall.scd_ccaei_09 Inptall.scd_ccaei_10 Inptall.scd_ccaei_11 Inptall.scd_ccaei_12 Inptall.scd_ccaei_13
+	Inptall.scd_mdcri_09 Inptall.scd_mdcri_10 Inptall.scd_mdcri_11 Inptall.scd_mdcri_12 Inptall.scd_mdcri_13;
+DATA inpts_all;
+SET	Inpsall.scd_ccaes_09 Inpsall.scd_ccaes_10 Inpsall.scd_ccaes_11 Inpsall.scd_ccaes_12 Inpsall.scd_ccaes_13
+	Inpsall.scd_mdcrs_09 Inpsall.scd_mdcrs_10 Inpsall.scd_mdcrs_11 Inpsall.scd_mdcrs_12 Inpsall.scd_mdcrs_13;
+DATA outpt_all;
+SET	Outptall.scd_ccaeo_09 Outptall.scd_ccaeo_10 Outptall.scd_ccaeo_11 Outptall.scd_ccaeo_12 Outptall.scd_ccaeo_13
+	Outptall.scd_mdcro_09 Outptall.scd_mdcro_10 Outptall.scd_mdcro_11 Outptall.scd_mdcro_12 Outptall.scd_mdcro_13;
+DATA drug_all;
+SET	Drugall.scd_ccaed_09 Drugall.scd_ccaed_10 Drugall.scd_ccaed_11 Drugall.scd_ccaed_12 Drugall.scd_ccaed_13
+	Drugall.scd_mdcrd_09 Drugall.scd_mdcrd_10 Drugall.scd_mdcrd_11 Drugall.scd_mdcrd_12 Drugall.scd_mdcrd_13;
+RUN;
+* Set id-list, drug_list and store the baseline file s and observational files in the working directory;
+
+DATA id_file;
+	SET workingD.id_file;
+DATA drug_all_list;
+	SET workingD.narcoticall_ndc;
+RUN;
+PROC PRINT DATA= id_all_list (obs=3); RUN;
+
+* extract baseline and observational file and store them in the working directory;
+PROC SQL;
+CREATE TABLE myfile.inpt_baseline as
+SELECT inpt_all.*,
+	id_file.*
+FROM inpt_all a
+INNER JOIN id_file b
+ON a.enrolid = b.enrolid AND b.index_date<=a.ADMDATE<b.index_date+365;
+QUIT;
+
+PROC SQL;
+CREATE TABLE myfile.inpt_obs as
+SELECT inpt_all.*,
+	id_file.*
+FROM inpt_all a
+INNER JOIN id_file b
+ON a.enrolid = b.enrolid AND b.index_date+365<=a.ADMDATE<=b.index_date+730;
+QUIT;
+
+PROC SQL;
+CREATE TABLE myfile.outpt_baseline as
+SELECT outpt_all.*,
+	id_file.*
+FROM outpt_all a
+INNER JOIN id_file b
+ON a.enrolid = b.enrolid AND b.index_date<=a.SVCDATE<b.index_date+365;
+QUIT;
+
+PROC SQL;
+CREATE TABLE myfile.outpt_obs as
+SELECT outpt_all.*,
+	id_file.*
+FROM outpt_all a
+INNER JOIN id_file b
+ON a.enrolid = b.enrolid AND b.index_date+365<=a.SVCDATE<=b.index_date+730;
+QUIT;
+
+PROC SQL;
+CREATE TABLE myfile.dx_baseline as
+SELECT drug_all.*,
+	id_file.*
+FROM drug_all a
+INNER JOIN id_file b
+ON a.enrolid = b.enrolid AND b.index_date<=a.SVCDATE<b.index_date+365;
+QUIT;
+
+PROC SQL;
+CREATE TABLE myfile.dx_obs as
+SELECT drug_all.*,
+	id_file.*
+FROM drug_all a
+INNER JOIN id_file b
+ON a.enrolid = b.enrolid AND b.index_date+365<=a.SVCDATE<=b.index_date+730;
+QUIT;
+
+PROC SQL;
+CREATE TABLE myfile.inpts_baseline as
+SELECT inpts_all.*,
+	id_file.*
+FROM inpts_all a
+INNER JOIN id_file b
+ON a.enrolid = b.enrolid AND b.index_date<=a.SVCDATE<b.index_date+365;
+QUIT;
+
+PROC SQL;
+CREATE TABLE myfile.inpts_obs as
+SELECT inpts_all.*,
+	id_file.*
+FROM inpts_all a
+INNER JOIN id_file b
+ON a.enrolid = b.enrolid AND b.index_date+365<=a.SVCDATE<=b.index_date+730;
+QUIT;
+
+
+
+* Baseline clinical characteristics;
+DATA drugs_twoyear;
+	SET myfile.dx_baseline myfile.dx_obs;
+RUN;
+
+PROC sql;
+CREATE TABLE xx as
+SELECT DISTINCT enrolid
+FROM drugs_twoyear;
+QUIT;
+
+PROC sql;
+CREATE TABLE drugs_twoyr_id as
+SELECT drugs_twoyear.*,
+	id_file.*	
+FROM drugs_twoyear a
+INNER JOIN id_file b
+ON a.enrolid = b.enrolid;
+QUIT;
+*NOTE: Table WORK.DRUGS_TWOYR_ID created, with 220031 rows and 62 columns. for 5753 unique patients;
+* Then combine the drugfile ID file and drug list together, to calculate the number of opioid users;
+
+DATA drugs_twoyr_id;
+SET drugs_twoyr_id;
+AGE=YEAR(index_date)-dobyr;
+IF age<=10 THEN agegroup = 1;
+ELSE IF 10<age<=20 THEN agegroup = 2;
+ELSE IF 20<age<=30 THEN agegroup = 3;
+ELSE IF 30<age<=40 THEN agegroup = 4;
+ELSE IF 40<age<=50 THEN agegroup = 5;
+ELSE IF 50<age<=60 THEN agegroup = 6;
+ELSE IF 60<age<=70 THEN agegroup = 7;
+ELSE IF 70<age<=80 THEN agegroup = 8;
+ELSE IF 80<age<=90 THEN agegroup = 9;
+ELSE IF 90<age<=100 THEN agegroup = 10;
+RUN;
+*calculate number of patients in different age groups;
+PROC SQL;
+CREATE TABLE xx as
+SELECT min (enrolid) as enrolid,
+	min(agegroup) as agegroup
+FROM drugs_twoyr_id
+GROUP BY enrolid;
+QUIT;
+
+PROC FREQ DATA= xx;
+TABLE agegroup;
+RUN;
+
+*Combine the opiate drug list with the drug_file/id_file to create opiate only prescriptions;
+
+PROC SQL;
+CREATE TABLE opioidpresc as
+SELECT min (a.enrolid) as enrolid,
+	min(a.agegroup) as agegroup
+FROM drugs_twoyr_id a
+INNER JOIN drug_all_list b
+ON a.NDCNUM = b.NDCNUM
+GROUP BY enrolid;
+QUIT;
+
+PROC FREQ DATA= opioidpresc;
+TABLE agegroup;
+RUN;
+
+PROC SQL;
+CREATE TABLE myfile.opioidpresc_all as
+SELECT a.*,
+	b.*
+FROM drugs_twoyr_id a
+INNER JOIN drug_all_list b
+ON a.NDCNUM = b.NDCNUM
+GROUP BY enrolid;
+QUIT;
+*NOTE: Table WORK.OPIOIDPRESC_ALL created, with 35476 rows and 89 columns.;
+* Now to include the strenth information;
+
+ PROC PRINT DATA=myfile.opioidpresc_all (obs=2);RUN;
+
+ PROC FREQ DATA=myfile.opioidpresc_all;
+ TABLE strngth*flag;
+RUN;
+
+DATA drug_all_addratio;
+ SET myfile.opioidpresc_all;
+ 	IF flag='Buprenorphine' THEN ratio=37.5;
+ 	ELSE IF flag= 'Codeine' THEN ratio=0.13;
+	ELSE IF flag= 'Fentanyl' THEN ratio=3;
+	ELSE IF flag= 'Hydrocodone' THEN ratio=1;
+	ELSE IF flag= 'Hydromorphone' THEN ratio=5;
+	ELSE IF flag= 'Meperidine' THEN ratio=0.1;
+	ELSE IF flag= 'Methadone' THEN ratio=4.7;
+	ELSE IF flag= 'Morphine' THEN ratio=1;
+	ELSE IF flag= 'Oxycodone' THEN ratio=1.5;
+	ELSE IF flag= 'Oxymorphone' THEN ratio=3;
+	ELSE IF flag= 'Pentazocine' THEN ratio=0.37;
+	ELSE IF flag= 'Propoxyphene' THEN ratio=0.08;
+	ELSE IF flag= 'Tapentadol' THEN ratio=0.4;
+	ELSE IF flag= 'Tramadol' THEN ratio=0.2;
+RUN;
+DATA subgroup;
+	SET drug_all_addratio;
+	IF flag='Tramadol';
+RUN;
+
+PROC FREQ DATA=subgroup;
+TABLE STRNGTH;
+RUN;
+PROC PRINT DATA=subgroup; RUN;
+
+* add strngth to medication by molecules 'Buprenorphine';
+DATA drug_Buprenorphine;
+SET drug_all_addratio;
+IF flag = 'Buprenorphine';
+IF STRNGTH = '2 MG-0.5 MG' THEN str=2;
+ELSE IF STRNGTH = '5 MCG/HR' THEN str=0.84;/* to confirm*/
+ELSE IF STRNGTH = '8 MG-2 MG' THEN str=8;
+RUN;
+
+* add strngth to medication by molecules 'Codeine';
+DATA drug_Codeine;
+SET drug_all_addratio;
+IF flag = 'Codeine';
+IF STRNGTH = '120 MG/5 ML-12 MG/5 ML' THEN str=1135.2;/* to confirm*/
+ELSE IF STRNGTH = '30 MG' THEN str=30;
+ELSE IF STRNGTH = '300 MG-15 MG' THEN str=15;
+ELSE IF STRNGTH = '300 MG-30 MG' THEN str=30;
+ELSE IF STRNGTH = '300 MG-60 MG' THEN str=60;
+ELSE IF STRNGTH = '325 MG-50 MG-40 MG-30 MG' THEN str=50; /* to confirm*/
+ELSE IF STRNGTH = '60 MG' THEN str=60;
+ELSE IF STRNGTH = '9 MG-200 MG' THEN str=200; /* to confirm*/
+RUN;
+
+* add strngth to medication by molecules 'Fentanyl';
+DATA drug_Fentanyl;
+SET drug_all_addratio;
+IF flag = 'Fentanyl';
+IF STRNGTH = '100 MCG/HR' THEN str=2.4;/* assume 24 hrs to confirm*/
+ELSE IF STRNGTH = '12 MCG/HR' THEN str=0.288;/* assume 24 hrs to confirm*/
+ELSE IF STRNGTH = '25 MCG/HR' THEN str=0.6;/* assume 24 hrs to confirm*/
+ELSE IF STRNGTH = '50 MCG/HR' THEN str=1.2;/* assume 24 hrs to confirm*/
+ELSE IF STRNGTH = '75 MCG/HR' THEN str=1.8;/* assume 24 hrs to confirm*/
+RUN;
+
+* add strngth to medication by molecules 'Hydrocodone';
+DATA drug_Hydrocodone;
+SET drug_all_addratio;
+IF flag = 'Hydrocodone';
+IF STRNGTH = '1.5 MG-5 MG' THEN str=5;
+ELSE IF STRNGTH = '10 MG-200 MG' THEN str=10;
+ELSE IF STRNGTH = '300 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '300 MG-5 MG' THEN str=5;
+ELSE IF STRNGTH = '300 MG-7.5 MG' THEN str=7.5;
+ELSE IF STRNGTH = '325 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '325 MG-5 MG' THEN str=5;
+ELSE IF STRNGTH = '325 MG-7.5 MG' THEN str=7.5;
+ELSE IF STRNGTH = '500 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '500 MG-2.5 MG' THEN str=2.5;
+ELSE IF STRNGTH = '500 MG-5 MG' THEN str=5;
+ELSE IF STRNGTH = '500 MG-7.5 MG' THEN str=7.5;
+ELSE IF STRNGTH = '650 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '650 MG-7.5 MG' THEN str=7.5;
+ELSE IF STRNGTH = '660 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '7.5 MG-200 MG' THEN str=7.5;
+ELSE IF STRNGTH = '750 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '750 MG-7.5 MG' THEN str=7.5;
+ELSE IF STRNGTH = '8 MG-10 MG' THEN str=10; /* to confirm*/
+ELSE IF STRNGTH = '8 MG/5 ML-10 MG/5 ML' THEN str=400; /* to confirm*/
+RUN;
+
+* add strngth to medication by molecules 'Hydromorphone';
+DATA drug_Hydromorphone;
+SET drug_all_addratio;
+IF flag = 'Hydromorphone';
+IF STRNGTH = '12 MG' THEN str=12;
+ELSE IF STRNGTH = '16 MG' THEN str=16;
+ELSE IF STRNGTH = '2 MG' THEN str=2;
+ELSE IF STRNGTH = '4 MG' THEN str=4;
+ELSE IF STRNGTH = '8 MG' THEN str=8;
+RUN;
+
+* add strngth to medication by molecules 'Meperidine';
+DATA drug_Meperidine;
+SET drug_all_addratio;
+IF flag = 'Meperidine';
+IF STRNGTH = '100 MG' THEN str=100;
+ELSE IF STRNGTH = '50 MG' THEN str=50;
+ELSE IF STRNGTH = '50 MG-25 MG' THEN str=50;/* to confirm*/
+RUN;
+
+* add strngth to medication by molecules 'Methadone';
+DATA drug_Methadone;
+SET drug_all_addratio;
+IF flag = 'Methadone';
+IF STRNGTH = '10 MG' THEN str=10;
+ELSE IF STRNGTH = '5 MG' THEN str=5;
+RUN;
+
+* add strngth to medication by molecules 'Morphine';
+DATA drug_Morphine;
+SET drug_all_addratio;
+IF flag = 'Morphine';
+IF STRNGTH = '10 MG' THEN str=10;
+ELSE IF STRNGTH = '100 MG' THEN str=100;
+ELSE IF STRNGTH = '15 MG' THEN str=15;
+ELSE IF STRNGTH = '20 MG' THEN str=20;
+ELSE IF STRNGTH = '200 MG' THEN str=200;
+ELSE IF STRNGTH = '30 MG' THEN str=30;
+ELSE IF STRNGTH = '30 MG-1.2 MG' THEN str=30;
+ELSE IF STRNGTH = '50 MG' THEN str=50;
+ELSE IF STRNGTH = '60 MG' THEN str=60;
+ELSE IF STRNGTH = '80 MG' THEN str=80;
+ELSE IF STRNGTH = '90 MG' THEN str=90;
+RUN;
+
+* add strngth to medication by molecules 'Oxycodone';
+DATA drug_Oxycodone;
+SET drug_all_addratio;
+IF flag = 'Oxycodone';
+IF STRNGTH = '10 MG' THEN str=10;
+ELSE IF STRNGTH = '15 MG' THEN str=15;
+ELSE IF STRNGTH = '20 MG' THEN str=20;
+ELSE IF STRNGTH = '30 MG' THEN str=30;
+ELSE IF STRNGTH = '325 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '325 MG-2.5 MG' THEN str=2.5;
+ELSE IF STRNGTH = '325 MG-4.5 MG-0.38 MG' THEN str=4.88;
+ELSE IF STRNGTH = '325 MG-4.8355 MG' THEN str=4.8355;
+ELSE IF STRNGTH = '325 MG-7.5 MG' THEN str=7.5;
+ELSE IF STRNGTH = '40 MG' THEN str=40;
+ELSE IF STRNGTH = '400 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '5 MG' THEN str=5;
+ELSE IF STRNGTH = '500 MG-5 MG' THEN str=5;
+ELSE IF STRNGTH = '500 MG-7.5 MG' THEN str=7.5;
+ELSE IF STRNGTH = '60 MG' THEN str=60;
+ELSE IF STRNGTH = '650 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '80 MG' THEN str=80;
+RUN;
+
+* add strngth to medication by molecules 'Oxymorphone';
+DATA drug_Oxymorphone;
+SET drug_all_addratio;
+IF flag = 'Oxymorphone';
+IF STRNGTH = '10 MG' THEN str=10;
+ELSE IF STRNGTH = '15 MG' THEN str=15;
+ELSE IF STRNGTH = '20 MG' THEN str=20;
+ELSE IF STRNGTH = '30 MG' THEN str=30;
+ELSE IF STRNGTH = '40 MG' THEN str=40;
+ELSE IF STRNGTH = '5 MG' THEN str=5;
+RUN;
+
+* add strngth to medication by molecules 'Pentazocine';
+DATA drug_Pentazocine;
+SET drug_all_addratio;
+IF flag = 'Pentazocine';
+IF STRNGTH = '0.5 MG-50 MG' THEN str=50;
+ELSE IF STRNGTH = '650 MG-25 MG' THEN str=25;
+RUN;
+
+* add strngth to medication by molecules 'Propoxyphene';
+DATA drug_Propoxyphene;
+SET drug_all_addratio;
+IF flag = 'Propoxyphene';
+IF STRNGTH = '100 MG' THEN str=100;
+ELSE IF STRNGTH = '325 MG-50 MG' THEN str=50;
+ELSE IF STRNGTH = '500 MG-100 MG' THEN str=100;
+ELSE IF STRNGTH = '65 MG' THEN str=65;
+ELSE IF STRNGTH = '650 MG-100 MG' THEN str=100;
+RUN;
+*NOTE: The data set WORK.DRUG_PROPOXYPHENE has 315 observations and 91 variables.
+;
+* add strngth to medication by molecules 'Tapentadol';
+DATA drug_Tapentadol;
+SET drug_all_addratio;
+IF flag = 'Tapentadol';
+IF STRNGTH = '100 MG' THEN str=100;
+ELSE IF STRNGTH = '50 MG' THEN str=50;
+ELSE IF STRNGTH = '75 MG' THEN str=75;
+RUN;
+*NOTE: The data set WORK.DRUG_TAPENTADOL has 63 observations and 91 variables.
+;
+* add strngth to medication by molecules 'Tramadol';
+DATA drug_Tramadol;
+SET drug_all_addratio;
+IF flag = 'Tramadol';
+IF STRNGTH = '100 MG' THEN str=100;
+ELSE IF STRNGTH = '200 MG' THEN str=200;
+ELSE IF STRNGTH = '300 MG' THEN str=300;
+ELSE IF STRNGTH = '325 MG-37.5 MG' THEN str=37.5;
+ELSE IF STRNGTH = '50 MG' THEN str=50;
+RUN;
+*NOTE: The data set WORK.DRUG_TRAMADOL has 1443 observations and 91 variables.
+;
+DATA all_opiatedrug;
+SET drug_Buprenorphine drug_Codeine drug_Fentanyl drug_Hydrocodone drug_Meperidine drug_Methadone drug_Morphine drug_Oxycodone
+	drug_Oxymorphone drug_Pentazocine drug_Propoxyphene drug_Tapentadol drug_Tramadol;
+RUN;
+
+DATA all_drug_OME;
+SET all_opiatedrug;
+OME=METQTY*str*ratio;
+RUN;
+
+PROC SQL;
+CREATE TABLE xx as
+SELECT min(enrolid) as enrolid,
+sum(OME) as OME,
+min(age) as age
+FROM all_drug_OME
+GROUP BY enrolid;
+QUIT;
+
+DATA XXs;
+SET xx;
+OME1=log10(OME);
+IF age<=10 THEN agegroup = '0-10';
+ELSE IF 10<age<=20 THEN agegroup = '11-20';
+ELSE IF 20<age<=30 THEN agegroup = '21-30';
+ELSE IF 30<age<=40 THEN agegroup = '31-40';
+ELSE IF 40<age<=50 THEN agegroup = '41-50';
+ELSE IF 50<age<=60 THEN agegroup = '51-60';
+ELSE IF 60<age<=70 THEN agegroup = '61-70';
+ELSE IF 70<age<=80 THEN agegroup = '71-80';
+ELSE IF 80<age<=90 THEN agegroup = '81-90';
+ELSE IF 90<age<=100 THEN agegroup = '91-100';
+RUN;
+
+PROC MEANS DATA=XXs MEAN MEDIAN P25 P75 CLM MAX MIN N;
+CLASS agegroup;
+VAR OME;
+RUN;
+PROC sort DATA=XXs;
+BY agegroup;
+RUN;
+
+ods graphics on;
+title 'Distribution of lg(2-year cumulative OME)';
+proc boxplot data=XXs;
+   plot OME1*agegroup /
+      boxstyle = schematic
+      nohlabel;
+   label Delay = 'Log10(2-year OME)';
+run;
