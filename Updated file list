@@ -1,0 +1,311 @@
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+
+DATA redbook;
+	SET Myfile.redbook;
+DATA id_file;
+	SET Myfile.id_file;
+DATA inpt_baseline;
+	SET Myfile.inpt_baseline;
+DATA inpt_obs;
+	SET Myfile.inpt_obs;
+DATA inpts_baseline;
+	SET Myfile.inpts_baseline;
+DATA inpts_obs;
+	SET Myfile.inpts_obs;
+DATA outpt_baseline;
+	SET Myfile.outpt_baseline;
+DATA outpt_obs;
+	SET Myfile.outpt_obs;
+DATA dx_baseline;
+	SET Myfile.dx_baseline;
+DATA dx_obs;
+	SET Myfile.dx_obs;
+DATA narcoticall_ndc;
+	SET Myfile.narcoticall_ndc;
+DATA nsaids_ndc;
+	SET Myfile.nsaids_ndc;
+RUN;
+
+PROC PRINT DATA=narcoticall_ndc (OBS=3);RUN;
+DATA id_file;
+	SET id_file;
+	Index_age=YEAR(Index_date)-dobyr;
+RUN;
+* add falg of baseline opioid and observational opioid users flag;
+PROC sql;
+	CREATE table temp_opioids as
+	SELECT dx_baseline.*,
+		b.flag
+	FROM dx_baseline a
+	INNER JOIN narcoticall_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as prior_opioid
+	FROM temp_opioids;
+QUIT;
+
+PROC sql;
+	CREATE table id_file as
+	SELECT id_file.*,
+		b.prior_opioid
+	FROM id_file a
+	LEFT JOIN temp_list b
+	ON a.enrolid =b.enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table temp_opioids as
+	SELECT dx_obs.*,
+		b.flag
+	FROM dx_obs a
+	INNER JOIN narcoticall_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as post_opioid
+	FROM temp_opioids;
+QUIT;
+
+PROC sql;
+	CREATE table id_file as
+	SELECT id_file.*,
+		b.post_opioid
+	FROM id_file a
+	LEFT JOIN temp_list b
+	ON a.enrolid =b.enrolid;
+QUIT;
+
+PROC PRINT DATA=narcoticall_ndc (OBS=3);RUN;
+
+DATA narcoticall_ndc;
+	SET narcoticall_ndc;
+	IF (find(MSTFMDS, 'Extended Release') OR FLAG='Methadone') THEN ER=1;
+	IF (find(MSTFMDS, 'Extended Release')=0 AND FLAG^='Methadone') THEN IR=1;
+RUN; 
+DATA narcoticall_ndc;
+	SET narcoticall_ndc;
+	IF ER=. THEN ER=0;
+	IF IR=. THEN IR=0;
+RUN;
+
+PROC FREQ DATA=narcoticall_ndc;
+TABLE IR*ER;
+RUN;
+
+PROC sql;
+	CREATE table temp_opioids as
+	SELECT dx_baseline.*,
+		b.flag,
+		b.ER,
+		b.IR
+	FROM dx_baseline a
+	INNER JOIN narcoticall_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+DATA temp_opioids1;
+	SET temp_opioids;
+	IF ER=1;
+RUN;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as prior_ER_opioid
+	FROM temp_opioids1;
+QUIT;
+
+PROC sql;
+	CREATE table id_file as
+	SELECT id_file.*,
+		b.prior_ER_opioid
+	FROM id_file a
+	LEFT JOIN temp_list b
+	ON a.enrolid =b.enrolid;
+QUIT;
+
+DATA temp_opioids;
+	SET temp_opioids;
+	IF IR=1;
+RUN;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as prior_IR_opioid
+	FROM temp_opioids;
+QUIT;
+
+PROC sql;
+	CREATE table id_file as
+	SELECT id_file.*,
+		b.prior_IR_opioid
+	FROM id_file a
+	LEFT JOIN temp_list b
+	ON a.enrolid =b.enrolid;
+QUIT;
+PROC PRINT DATA=id_file (obs=50);RUN;
+
+PROC CONTENTS DATA=id_list;
+RUN;
+
+PROC sql;
+	CREATE table temp_opioids as
+	SELECT dx_obs.*,
+		b.flag,
+		b.ER,
+		b.IR
+	FROM dx_obs a
+	INNER JOIN narcoticall_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+DATA temp_opioids1;
+	SET temp_opioids;
+	IF ER=1;
+RUN;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as post_ER_opioid
+	FROM temp_opioids1;
+QUIT;
+
+PROC sql;
+	CREATE table id_file as
+	SELECT id_file.*,
+		b.post_ER_opioid
+	FROM id_file a
+	LEFT JOIN temp_list b
+	ON a.enrolid =b.enrolid;
+QUIT;
+
+DATA temp_opioids;
+	SET temp_opioids;
+	IF IR=1;
+RUN;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as post_IR_opioid
+	FROM temp_opioids;
+QUIT;
+
+PROC sql;
+	CREATE table id_file as
+	SELECT id_file.*,
+		b.post_IR_opioid
+	FROM id_file a
+	LEFT JOIN temp_list b
+	ON a.enrolid =b.enrolid;
+QUIT;
+
+
+
+
+* Add NSAIDS use history in the baseline period;
+
+PROC sql;
+	CREATE table temp_nsaids as
+	SELECT dx_baseline.*
+	FROM dx_baseline a
+	INNER JOIN nsaids_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as prior_NSAIDS
+	FROM temp_nsaids;
+QUIT;
+
+PROC sql;
+	CREATE table id_file as
+	SELECT id_file.*,
+		b.prior_NSAIDS
+	FROM id_file a
+	LEFT JOIN temp_list b
+	ON a.enrolid =b.enrolid;
+QUIT;
+
+*Look for Hydroxyurea in the redbook;
+
+DATA Hydroxyurea_NDC;
+	SET Myfile.redbook;
+	WHERE GENNME contains 'Hydroxyurea';
+	FLAG = 	'Hydroxyurea';
+RUN;
+
+PROC sql;
+	CREATE table temp_hydrea as
+	SELECT dx_baseline.*
+	FROM dx_baseline a
+	INNER JOIN Hydroxyurea_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as prior_hydrea
+	FROM temp_hydrea;
+QUIT;
+
+PROC sql;
+	CREATE table id_file as
+	SELECT id_file.*,
+		b.prior_hydrea
+	FROM id_file a
+	LEFT JOIN temp_list b
+	ON a.enrolid =b.enrolid;
+QUIT;
+
+DATA id_file;
+	SET id_file;
+	IF prior_hydrea=. THEN prior_hydrea=0;
+	IF prior_hydrea=1 THEN prior_hydrea=1;
+	IF prior_NSAIDS=. THEN prior_NSAIDS=0;
+	IF prior_NSAIDS=1 THEN prior_NSAIDS=1;
+RUN;
+
+DATA id_file;
+	SET id_file;
+	IF post_ER_opioid=. THEN post_ER=0;
+	IF post_ER_opioid=1 THEN post_ER=1;
+	IF prior_ER_opioid=. THEN prior_ER=0;
+	IF prior_ER_opioid=1 THEN prior_ER=1;
+	DROP post_ER_opioid prior_ER_opioid;
+	IF post_IR_opioid=. THEN post_IR_opioid=0;
+	IF post_IR_opioid=1 THEN post_IR_opioid=1;
+	IF prior_IR_opioid=. THEN prior_IR_opioid=0;
+	IF prior_IR_opioid=1 THEN prior_IR_opioid=1;
+RUN;
+
+DATA id_file;
+	SET id_file;
+	IF post_opioid=. THEN post_opioid=0;
+	IF post_opioid=1 THEN post_opioid=1;
+	IF prior_opioid=. THEN prior_opioid=0;
+	IF prior_opioid=1 THEN prior_opioid=1;
+RUN;
+
+DATA myfile.id_file_dxhistory;
+	SET id_file;
+RUN;
+
+PROC CONTENTS DATA =id_file;
+RUN;
+
+PROC FREQ DATA =id_file;
+	TABLE prior_opioid;
+RUN;
