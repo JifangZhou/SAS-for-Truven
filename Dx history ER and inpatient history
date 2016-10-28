@@ -1,0 +1,433 @@
+********************Shell Table completion**********;
+
+LIBNAME workingD 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+LIBNAME SCDinpt 'C:\Users\jzhou86\Documents\Opioid in SCD pregnancy\Raw Data\InpatientSummary';
+LIBNAME SCDoutpt 'C:\Users\jzhou86\Documents\Opioid in SCD pregnancy\Raw Data\OutpatientService';
+LIBNAME SCDDx 'C:\Users\jzhou86\Documents\Opioid in SCD pregnancy\Raw Data\Drug Prescriptions';
+LIBNAME SCDinpts 'C:\Users\jzhou86\Documents\Opioid in SCD pregnancy\Raw Data\InpatientServices';
+
+DATA id_list;
+	SET workingD.id_file_dxhistory;
+	IF post_opioid =. THEN post_opioid =0;
+	IF prior_opioid =. THEN prior_opioid =0;
+	IF prior_IR_opioid =. THEN prior_IR_opioid =0;
+	IF prior_ER_opioid =. THEN prior_ER_opioid =0;
+	IF prior_NSAIDS =. THEN prior_NSAIDS =0;
+	IF prior_hydrea =. THEN prior_hydrea =0;
+RUN;
+*Assess all dx prescriptions prior and post index date;
+DATA SCDDx0913;
+	SET SCDDx.scd_mdcrd_09 SCDDx.scd_mdcrd_10 SCDDx.scd_mdcrd_11 SCDDx.scd_mdcrd_12 SCDDx.scd_mdcrd_13
+		SCDDx.scd_ccaed_09 SCDDx.scd_ccaed_10 SCDDx.scd_ccaed_11 SCDDx.scd_ccaed_12 SCDDx.scd_ccaed_13;
+RUN;
+
+PROC SQL;
+CREATE TABLE SCDDx0913 as
+	SELECT a.*,
+			b.index_date
+	FROM SCDDx0913 a
+	INNER JOIN id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA workingD.dx_baseline;
+	SET SCDDx0913;
+	IF index_date=<svcdate<index_date+365;
+RUN;
+DATA workingD.dx_obs;
+	SET SCDDx0913;
+	IF index_date+365=<svcdate<=index_date+730;
+RUN;
+* Assess all inpt summary before and after index date;
+DATA SCDinpt0913;
+	SET SCDinpt.scd_mdcri_09 SCDinpt.scd_mdcri_10 SCDinpt.scd_mdcri_11 SCDinpt.scd_mdcri_12 SCDinpt.scd_mdcri_13
+		SCDinpt.scd_ccaei_09 SCDinpt.scd_ccaei_10 SCDinpt.scd_ccaei_11 SCDinpt.scd_ccaei_12 SCDinpt.scd_ccaei_13;
+RUN;
+
+PROC SQL;
+CREATE TABLE SCDinpt0913 as
+	SELECT a.*,
+			b.index_date
+	FROM SCDinpt0913 a
+	INNER JOIN id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA workingD.inpt_baseline;
+	SET SCDinpt0913;
+	IF index_date=<admdate<index_date+365;
+RUN;
+DATA workingD.inpt_obs;
+	SET SCDinpt0913;
+	IF index_date+365=<admdate<=index_date+730;
+RUN;
+* Assess all outpt service before and after index date;
+DATA SCDoutpt0913;
+	SET SCDoutpt.scd_mdcro_09 SCDoutpt.scd_mdcro_10 SCDoutpt.scd_mdcro_11 SCDoutpt.scd_mdcro_12 SCDoutpt.scd_mdcro_13
+		SCDoutpt.scd_ccaeo_09 SCDoutpt.scd_ccaeo_10 SCDoutpt.scd_ccaeo_11 SCDoutpt.scd_ccaeo_12 SCDoutpt.scd_ccaeo_13;
+RUN;
+
+PROC SQL;
+CREATE TABLE SCDoutpt0913 as
+	SELECT a.*,
+			b.index_date
+	FROM SCDoutpt0913 a
+	INNER JOIN id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA workingD.outpt_baseline;
+	SET SCDoutpt0913;
+	IF index_date=<svcdate<index_date+365;
+RUN;
+DATA workingD.outpt_obs;
+	SET SCDoutpt0913;
+	IF index_date+365=<svcdate<=index_date+730;
+RUN;
+* Assess all inpt service before and after index date;
+DATA SCDinpts0913;
+	SET SCDinpts.scd_mdcrs_09 SCDinpts.scd_mdcrs_10 SCDinpts.scd_mdcrs_11 SCDinpts.scd_mdcrs_12 SCDinpts.scd_mdcrs_13
+		SCDinpts.scd_ccaes_09 SCDinpts.scd_ccaes_10 SCDinpts.scd_ccaes_11 SCDinpts.scd_ccaes_12 SCDinpts.scd_ccaes_13;
+RUN;
+
+PROC SQL;
+CREATE TABLE SCDinpts0913 as
+	SELECT a.*,
+			b.index_date
+	FROM SCDinpts0913 a
+	INNER JOIN id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA workingD.inpts_baseline;
+	SET SCDinpts0913;
+	IF index_date=<svcdate<index_date+365;
+RUN;
+DATA workingD.inpts_obs;
+	SET SCDinpts0913;
+	IF index_date+365=<svcdate<=index_date+730;
+RUN;
+
+
+* Assess prior admission record;
+DATA all_svc_list;
+	SET workingD.inpt_baseline;
+RUN;
+
+PROC SQL;
+CREATE table inpt_number as
+SELECT a.*,
+	b.*
+FROM all_svc_list a
+INNER JOIN id_list b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+
+PROC SQL;
+CREATE table inpt_number1 as
+SELECT min(enrolid) as enrolid,
+	count(admdate) as prior_admission_number,
+	1 as prior_admission
+FROM inpt_number
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE table id_list as
+SELECT a.*,
+	b.*
+FROM id_list a
+LEFT JOIN inpt_number1 b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list;
+	SET id_list;
+	IF prior_admission_number=. THEN prior_admission_number=0;
+	IF prior_admission=. THEN prior_admission=0;
+RUN;
+
+PROC FREQ DATA=id_list;
+	TABLE prior_admission*post_opioid /chisq measures;
+RUN;
+* Add post_admission record to id_list;
+DATA all_svc_list;
+	SET workingD.inpt_obs;
+RUN;
+
+PROC SQL;
+CREATE table inpt_number as
+SELECT a.*,
+	b.*
+FROM all_svc_list a
+INNER JOIN id_list b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+
+PROC SQL;
+CREATE table inpt_number1 as
+SELECT min(enrolid) as enrolid,
+	count(admdate) as post_admission_number,
+	1 as post_admission
+FROM inpt_number
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE table id_list as
+SELECT a.*,
+	b.*
+FROM id_list a
+LEFT JOIN inpt_number1 b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list;
+	SET id_list;
+	IF post_admission_number=. THEN post_admission_number=0;
+	IF post_admission=. THEN post_admission=0;
+RUN;
+
+PROC FREQ DATA=id_list;
+	TABLE post_admission*post_opioid /chisq measures;
+RUN;
+DATA workingD.id_list_addinpt;
+	SET id_list;
+RUN;
+*Add prior ER record; 
+
+DATA all_svc_list;
+	SET workingD.outpt_baseline workingD.inpts_baseline;
+RUN;
+
+DATA all_svc_ER;
+	SET all_svc_list;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0981') THEN ER=1;
+	ELSE IF STDPLAC in ('23','220','428') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120', '10420','10320','10220','12220','20220','10520','20120','21120','21220','22320',
+						'22120','30220','30120','30420','30320','30520','30620','31120','31420','31320','31520',
+						'31220','31620') THEN ER=1;
+	IF ER=1;
+RUN;
+
+PROC SQL;
+CREATE table pt_ER as
+SELECT distinct enrolid, svcdate
+FROM all_svc_ER;
+QUIT;
+
+PROC SQL;
+CREATE table pt_ER as
+SELECT min(enrolid) as enrolid,
+	count(svcdate) as prior_ER_number,
+	1 as prior_ER
+FROM pt_ER
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE table id_list as
+SELECT a.*,
+	b.*
+FROM workingD.id_list_addinpt a
+LEFT JOIN pt_ER b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list;
+	SET id_list;
+	IF prior_ER_number=. THEN prior_ER_number=0;
+	IF prior_ER=. THEN prior_ER=0;
+RUN;
+PROC FREQ DATA=id_list;
+	TABLE prior_ER*post_opioid /chisq measures;
+RUN;
+*Assess post_ER utlization;
+DATA all_svc_list;
+	SET workingD.outpt_obs workingD.inpts_obs;
+RUN;
+
+DATA all_svc_ER;
+	SET all_svc_list;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0981') THEN ER=1;
+	ELSE IF STDPLAC in ('23','220','428') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120', '10420','10320','10220','12220','20220','10520','20120','21120','21220','22320',
+						'22120','30220','30120','30420','30320','30520','30620','31120','31420','31320','31520',
+						'31220','31620') THEN ER=1;
+	IF ER=1;
+RUN;
+
+PROC SQL;
+CREATE table pt_ER as
+SELECT distinct enrolid, svcdate
+FROM all_svc_ER
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE table pt_ER as
+SELECT min(enrolid) as enrolid,
+	count(svcdate) as post_ER_number,
+	1 as post_ER
+FROM pt_ER
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE table id_list as
+SELECT a.*,
+	b.*
+FROM id_list a
+LEFT JOIN pt_ER b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list;
+	SET id_list;
+	IF post_ER_number=. THEN post_ER_number=0;
+	IF post_ER=. THEN post_ER=0;
+RUN;
+PROC FREQ DATA=id_list;
+	TABLE post_ER*post_opioid /chisq measures;
+RUN;
+DATA workingD.id_list_addinpt_addER;
+	SET id_list;
+RUN;
+*Assess outpatient prescription drugs utlization;
+DATA all_dx_list;
+	SET workingD.dx_baseline;
+RUN;
+PROC SQL;
+CREATE table outpt_dx as
+SELECT a.*,
+	b.*
+FROM all_dx_list a
+INNER JOIN workingD.id_list_addinpt_adder b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+
+PROC SQL;
+CREATE table outpt_dx as
+SELECT min(enrolid) as enrolid,
+	count(svcdate) as prior_presc_number,
+	1 as prior_presc_dx
+FROM outpt_dx
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE table id_list as
+SELECT a.*,
+	b.*
+FROM workingD.id_list_addinpt_adder a
+LEFT JOIN outpt_dx b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list;
+	SET id_list;
+	IF prior_presc_number=. THEN prior_presc_number=0;
+	IF prior_presc_dx=. THEN prior_presc_dx=0;
+RUN;
+
+PROC FREQ DATA=id_list;
+	TABLE prior_presc_dx*post_opioid /chisq measures;
+RUN;
+
+DATA all_dx_list;
+	SET workingD.dx_obs;
+RUN;
+PROC SQL;
+CREATE table outpt_dx as
+SELECT a.*,
+	b.*
+FROM all_dx_list a
+INNER JOIN workingD.id_list_addinpt_adder b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+
+PROC SQL;
+CREATE table outpt_dx as
+SELECT min(enrolid) as enrolid,
+	count(svcdate) as post_presc_number,
+	1 as post_presc_dx
+FROM outpt_dx
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE table id_list as
+SELECT a.*,
+	b.*
+FROM id_list a
+LEFT JOIN outpt_dx b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list;
+	SET id_list;
+	IF post_presc_number=. THEN post_presc_number=0;
+	IF post_presc_dx=. THEN post_presc_dx=0;
+RUN;
+
+PROC FREQ DATA=id_list;
+	TABLE post_presc_dx*post_opioid /chisq measures;
+RUN;
+DATA workingD.id_list_addinpt_addER_addDx;
+	SET id_list;
+RUN;
+
+
+DATA testaso;
+	SET workingD.id_list_addinpt_addER_addDx;
+	IF (post_presc_dx=1 OR prior_presc_dx=1) THEN drug_hx=1;
+	ELSE drug_hx=0;
+	all_drug=post_presc_number+prior_presc_number;
+RUN;
+
+PROC MEANS DATA=testaso;
+CLASS post_opioid;
+VAR all_drug; RUN;
+
+
+
+DATA testaso;
+	SET workingD.id_list_addinpt_addER_addDx;
+	IF (post_ER=1 OR prior_ER=1) THEN ER_hx=1;
+	ELSE ER_hx=0;
+	all_ER=post_ER_number+prior_ER_number;
+RUN;
+
+PROC MEANS DATA=testaso;
+VAR all_ER; RUN;
+
+
+PROC FREQ DATA=testaso;
+	TABLE ER_hx*post_opioid /chisq measures;
+RUN;
+
+
+PROC CONTENTS DATA=inpt_number1;RUN;
+DATA xs;
+	SET inpt_number1;
+	IF admission_number_baseline^=0 THEN prior_admission=1;
+	ELSE prior_admission=0;
+RUN;
+
+PROC FREQ DATA=inpt_number1
+
+PROC MEANS DATA=inpt_number1;
+CLASS post_opioid;
+VAR number;
+RUN;
+
+PROC TTEST DATA=inpt_number;
+CLASS post_opioid;
+VAR days;
+RUN;
