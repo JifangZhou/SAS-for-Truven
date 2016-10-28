@@ -1,0 +1,140 @@
+********************Shell Table completion**********;
+
+LIBNAME workingD 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+
+DATA id_list;
+	SET workingD.id_list_addinpt_er_dx_cci;
+DATA svc_all;
+	SET workingD.outpt_baseline workingD.inpts_baseline;
+RUN;
+
+DATA svc_list;
+set svc_all;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('36430'	'P9011' 'P9016' 'P9021' 'P9022' 'P9038' 'P9039' 'P9040' 'P9051' 'P9054' 'P9057' 'P9058') then transfusion = 1;
+end;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('990') then transfusion = 1;
+end;
+IF REVCODE in: ('038','039') then transfusion = 1;
+if transfusion = 1;
+run; 
+
+PROC SQL;
+CREATE table all_trans as
+SELECT a.*,
+	b.*
+FROM svc_list a
+INNER JOIN id_list b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+
+PROC SQL;
+CREATE table all_trans_list as
+SELECT min(enrolid) as enrolid,
+	count(svcdate) as prior_trans_number,
+	1 as prior_trans
+FROM all_trans
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE table all_trans_prior as
+SELECT a.*,
+	b.*
+FROM id_list a
+LEFT JOIN all_trans_list b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA all_trans_prior;
+	SET all_trans_prior;
+	IF prior_trans_number=. THEN prior_trans_number=0;
+	IF prior_trans=. THEN prior_trans=0;
+RUN;
+
+PROC FREQ DATA=all_trans_prior;
+	TABLE prior_trans*post_opioid /chisq measures;
+RUN;
+
+
+DATA svc_all;
+	SET workingD.outpt_obs workingD.inpts_obs;
+RUN;
+
+DATA svc_list;
+set svc_all;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('36430'	'P9011' 'P9016' 'P9021' 'P9022' 'P9038' 'P9039' 'P9040' 'P9051' 'P9054' 'P9057' 'P9058') then transfusion = 1;
+end;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('990') then transfusion = 1;
+end;
+IF REVCODE in: ('038','039') then transfusion = 1;
+if transfusion = 1;
+run; 
+
+PROC SQL;
+CREATE table all_trans as
+SELECT a.*,
+	b.*
+FROM svc_list a
+INNER JOIN id_list b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+
+PROC SQL;
+CREATE table all_trans_list as
+SELECT min(enrolid) as enrolid,
+	count(svcdate) as post_trans_number,
+	1 as post_trans
+FROM all_trans
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE table all_trans_post as
+SELECT a.*,
+	b.*
+FROM all_trans_prior a
+LEFT JOIN all_trans_list b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA all_trans_post;
+	SET all_trans_post;
+	IF post_trans_number=. THEN post_trans_number=0;
+	IF post_trans=. THEN post_trans=0;
+RUN;
+
+PROC FREQ DATA=all_trans_post;
+	TABLE post_trans*post_opioid /chisq measures;
+RUN;
+
+PROC CONTENTS DATA=all_trans_post;
+	RUN;
+
+DATA testaso;
+	SET all_trans_post;
+	IF (post_trans=1 OR prior_trans=1) THEN trans_hx=1;
+	ELSE trans_hx=0;
+	sum_trans=post_trans_number+prior_trans_number;
+RUN;
+
+PROC MEANS DATA=testaso;
+VAR sum_trans;
+RUN;
+
+PROC FREQ DATA=testaso;
+Table trans_hx*post_opioid /chisq measures;
+RUN;
+
+DATA workingD.id_list_addinpt_er_dx_cci_trans;
+		SET all_trans_post;
+	RUN;
