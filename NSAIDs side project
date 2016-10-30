@@ -1,0 +1,256 @@
+********************Sub project on NSAIDs and renal failure**********;
+
+LIBNAME workingD 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+LIBNAME DataD 'C:\Users\jzhou86\Documents\SCD Project\Subproject NSAIDS and renal injury';
+
+
+DATA id_list;
+	SET workingD.id_file_addconditions;
+RUN;
+
+DATA dx_all;
+	SET workingD.dx_baseline workingD.dx_obs;
+DATA redbook;
+	SET workingD.redbook;
+RUN;
+
+DATA NSAID1_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Acetaminophen') AND
+		(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Capsule');
+	FLAG = 	'Acetaminophen';
+DATA NSAID2_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Aspirin') AND
+		(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Capsule');
+	FLAG = 	'Aspirin';
+DATA NSAID3_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Ibuprofen') AND
+		(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Capsule');
+	FLAG = 	'Ibuprofen';
+DATA NSAID4_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Naproxen') AND
+		(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Capsule');
+	FLAG = 	'Naproxen';
+DATA NSAIDs_all_NDC;
+	SET NSAID1_NDC NSAID2_NDC NSAID3_NDC NSAID4_NDC;
+RUN;
+
+PROC FREQ DATA=NSAIDs_all_NDC;
+	TABLE flag*STRNGTH;
+RUN;
+
+proc sql;
+create table dx_all as 
+select a.*,
+		b.*
+FROM Dx_all a
+inner join NSAIDs_all_NDC b
+	on a.NDCNUM = b.NDCNUM;
+QUIT;
+
+DATA dx1_all;
+	SET dx_all;
+	IF FLAG = 	'Naproxen';
+RUN;
+
+PROC FREQ DATA=dx1_all ORDER=FREQ;
+	TABLE STRNGTH;
+RUN;
+
+DATA drug_Acetaminophen;
+	SET dx_all;
+	IF flag = 'Acetaminophen';
+	IF STRNGTH = '325 MG-5 MG' THEN str=5;
+ELSE IF STRNGTH = '325 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '500 MG-5 MG' THEN str=500;
+ELSE IF STRNGTH = '300 MG-30 MG' THEN str=300;
+ELSE IF STRNGTH = '750 MG-7.5 MG' THEN str=750;
+ELSE IF STRNGTH = '500 MG-7.5 MG' THEN str=500;
+ELSE IF STRNGTH = '500 MG-10 MG' THEN str=500;
+ELSE IF STRNGTH = '325 MG-7.5 MG' THEN str=325;
+ELSE IF STRNGTH = '650 MG-10 MG' THEN str=650;
+ELSE IF STRNGTH = '650 MG-100 MG' THEN str=650;
+ELSE IF STRNGTH = '300 MG-60 MG' THEN str=300;
+ELSE IF STRNGTH = '325 MG-50 MG-40 MG' THEN str=325;
+ELSE IF STRNGTH = '650 MG-7.5 MG' THEN str=650;
+ELSE IF STRNGTH = '660 MG-10 MG' THEN str=660;
+ELSE IF STRNGTH = '325 MG-37.5 MG' THEN str=325;
+ELSE IF STRNGTH = '500 MG-50 MG-40 MG' THEN str=500;
+ELSE IF STRNGTH = '300 MG-15 MG' THEN str=300;
+ELSE IF STRNGTH = '500 MG-2.5 MG' THEN str=500;
+ELSE IF STRNGTH = '650 MG-50 MG' THEN str=650;
+ELSE IF STRNGTH = '300 MG-5 MG' THEN str=300;
+ELSE IF STRNGTH = '300 MG-7.5 MG' THEN str=300;
+ELSE IF STRNGTH = '325 MG-50 MG' THEN str=325;
+ELSE IF STRNGTH = '300 MG-50 MG-40 MG' THEN str=300;
+ELSE IF STRNGTH = '325 MG-2.5 MG' THEN str=325;
+ELSE IF STRNGTH = '300 MG-10 MG' THEN str=300;
+ELSE IF STRNGTH = '325 MG' THEN str=325;
+ELSE IF STRNGTH = '500 MG-20 MG-130 MG' THEN str=500;
+ELSE IF STRNGTH = '712.8 MG-60 MG-32 MG' THEN str=712.8;
+ELSE IF STRNGTH = '356.4 MG-30 MG-16 MG' THEN str=356.4;
+ELSE IF STRNGTH = '400 MG-10 MG' THEN str=400;
+ELSE IF STRNGTH = '425 MG-35 MG-45 MG' THEN str=425;
+ELSE IF STRNGTH = '500 MG' THEN str=500;
+ELSE IF STRNGTH = '500 MG-100 MG' THEN str=500;
+ELSE IF STRNGTH = '635 MG-55 MG' THEN str=635;
+ELSE IF STRNGTH = '650 MG' THEN str=650;
+ELSE IF STRNGTH = '650 MG-25 MG' THEN str=650;
+ELSE IF STRNGTH = '650 MG-60 MG' THEN str=650;
+ELSE IF STRNGTH = '750 MG-10 MG' THEN str=750;
+RUN;
+
+
+DATA drug_Aspirin;
+	SET dx_all;
+	IF flag = 'Aspirin';
+	IF STRNGTH = '25 MG-200 MG' THEN str=200;
+ELSE IF STRNGTH = '325 MG-50 MG-40 MG' THEN str=325;
+ELSE IF STRNGTH = '325 MG-4.8355 MG' THEN str=325;
+ELSE IF STRNGTH = '81 MG' THEN str=81;
+ELSE IF STRNGTH = '325 MG-50 MG-40 MG-30 MG' THEN str=325;
+ELSE IF STRNGTH = '325 MG' THEN str=325;
+ELSE IF STRNGTH = '325 MG-200 MG' THEN str=325;
+RUN;
+
+ELSE IF STRNGTH = '' THEN str=;
+
+DATA drug_Ibuprofen;
+	SET dx_all;
+	IF flag = 'Ibuprofen';
+	IF STRNGTH = '800 MG' THEN str=800;
+ELSE IF STRNGTH = '600 MG' THEN str=600;
+ELSE IF STRNGTH = '400 MG' THEN str=400;
+ELSE IF STRNGTH = '7.5 MG-200 MG' THEN str=200;
+ELSE IF STRNGTH = '200 MG' THEN str=200;
+ELSE IF STRNGTH = '10 MG-200 MG' THEN str=200;
+ELSE IF STRNGTH = '26.6 MG-800 MG' THEN str=800;
+RUN;
+
+DATA drug_Naproxen;
+	SET dx_all;
+	IF flag = 'Naproxen';
+	IF STRNGTH = '500 MG' THEN str=500;
+ELSE IF STRNGTH = '550 MG' THEN str=550;
+ELSE IF STRNGTH = '375 MG' THEN str=375;
+ELSE IF STRNGTH = '200 MG' THEN str=200;
+ELSE IF STRNGTH = '750 MG' THEN str=750;
+ELSE IF STRNGTH = '20 MG-500 MG' THEN str=500;
+ELSE IF STRNGTH = '275 MG' THEN str=275;
+ELSE IF STRNGTH = '500 MG-85 MG' THEN str=500;
+RUN;
+
+DATA dx_all;
+	SET drug_Acetaminophen drug_Aspirin drug_Ibuprofen drug_Naproxen;
+	Total_dose=METQTY*str;
+	IF Total_dose<=0 THEN Total_dose=0;
+RUN;
+
+
+PROC SQL;
+	create table temp as 
+	SELECT min(enrolid) as enrolid,
+		min(flag) as flag
+	FROM dx_all
+	GROUP BY enrolid, flag;
+QUIT;
+
+DATA ace;
+	KEEP enrolid flag Total_dose;
+	SET dx_all;
+	IF flag = 'Acetaminophen';
+	IF Total_dose=. THEN Total_dose=0;
+RUN;
+
+PROC SQL;
+CREATE TABLE ace_dose as
+SELECT min(enrolid) as enrolid,
+sum(Total_dose) as cum_Acetaminophen
+FROM ace
+GROUP BY enrolid;
+QUIT;
+
+PROC FREQ DATA=ace_dose;
+TABLE cum_Acetaminophen;RUN;
+
+DATA ace;
+	KEEP enrolid flag Total_dose;
+	SET dx_all;
+	IF flag = 'Aspirin';
+	IF Total_dose=. THEN Total_dose=0;
+RUN;
+
+PROC SQL;
+CREATE TABLE asa_dose as
+SELECT min(enrolid) as enrolid,
+sum(Total_dose) as cum_Aspirin
+FROM ace
+GROUP BY enrolid;
+QUIT;
+
+DATA ace;
+	KEEP enrolid flag Total_dose;
+	SET dx_all;
+	IF flag = 'Ibuprofen';
+	IF Total_dose=. THEN Total_dose=0;
+RUN;
+
+PROC SQL;
+CREATE TABLE ibu_dose as
+SELECT min(enrolid) as enrolid,
+sum(Total_dose) as cum_Ibuprofen
+FROM ace
+GROUP BY enrolid;
+QUIT;
+
+DATA ace;
+	KEEP enrolid flag Total_dose;
+	SET dx_all;
+	IF flag = 'Naproxen';
+	IF Total_dose=. THEN Total_dose=0;
+RUN;
+
+PROC SQL;
+CREATE TABLE nap_dose as
+SELECT min(enrolid) as enrolid,
+sum(Total_dose) as cum_Naproxen
+FROM ace
+GROUP BY enrolid;
+QUIT;
+
+proc sql;
+create table id_list as 
+select a.*,
+		b.*
+FROM id_list a
+LEFT join nap_dose b
+	on a.enrolid = b.enrolid;
+QUIT;
+
+PROC MEANS DATA=id_list MEDIAN P25 P75;
+VAR cum_Acetaminophen cum_ASPIRIN cum_Ibuprofen cum_Naproxen  ;
+RUN;
+
+DATA id_list;
+	SET id_list;
+	IF 	(prior_Acute_renal_injury =1 OR post_Acute_renal_injury =1 OR
+		prior_Chronic_renal_disease =1 OR post_Chronic_renal_disease =1 OR
+		prior_Urinary_tract_infection =1 OR post_Urinary_tract_infection =1) THEN case =1;
+		ELSE case=0;
+	IF cum_Acetaminophen=. THEN cum_Acetaminophen=0;
+	IF cum_ASPIRIN=. THEN cum_ASPIRIN=0;
+	IF cum_Ibuprofen=. THEN cum_Ibuprofen=0;
+	IF cum_Naproxen=. THEN cum_Naproxen=0;
+	IF cum_Acetaminophen >0 THEN cum_Acetaminophen=log10(cum_Acetaminophen);
+	IF cum_ASPIRIN >0 THEN cum_ASPIRIN=log10(cum_ASPIRIN);
+	IF cum_Ibuprofen >0 THEN cum_Ibuprofen=log10(cum_Ibuprofen);
+	IF cum_Naproxen >0 THEN cum_Naproxen=log10(cum_Naproxen);
+RUN;
+
+proc logistic data = id_list;
+class case (ref = "0") sex / param = ref;
+model case = cum_Ibuprofen age sex/ link = glogit;
+run;
