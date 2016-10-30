@@ -1,0 +1,124 @@
+LIBNAME WorkingD 	'C:\Users\jzhou86\Documents\CML adherence study\Working Directory';
+LIBNAME Rawdata 	'C:\Users\jzhou86\Documents\CML adherence study\CMLRawdata';
+LIBNAME Inpt'C:\Users\jzhou86\Documents\CML adherence study\CMLRawdata\InpatientSummary';
+LIBNAME Outpt'C:\Users\jzhou86\Documents\CML adherence study\CMLRawdata\OutpatientService';
+LIBNAME Dx'C:\Users\jzhou86\Documents\CML adherence study\CMLRawdata\DrugPrescription';
+DATA id_file;
+	SET Rawdata.cml_list;
+DATA redbook;
+	SET Rawdata.redbook;
+DATA inpt_all;
+	SET Inpt.cml_ccaei_09 Inpt.cml_ccaei_10 Inpt.cml_ccaei_11 Inpt.cml_ccaei_12 Inpt.cml_ccaei_13
+		Inpt.cml_mdcri_09 Inpt.cml_mdcri_10 Inpt.cml_mdcri_11 Inpt.cml_mdcri_12 Inpt.cml_mdcri_13;
+DATA outpt_all;
+	SET Outpt.cml_ccaeo_09 Outpt.cml_ccaeo_10 Outpt.cml_ccaeo_11 Outpt.cml_ccaeo_12 Outpt.cml_ccaeo_13
+		Outpt.cml_mdcro_09 Outpt.cml_mdcro_10 Outpt.cml_mdcro_11 Outpt.cml_mdcro_12 Outpt.cml_mdcro_13;
+DATA dx_all;
+	SET Dx.cml_ccaed_09 Dx.cml_ccaed_10 Dx.cml_ccaed_11 Dx.cml_ccaed_12 Dx.cml_ccaed_13
+		Dx.cml_mdcrd_09 Dx.cml_mdcrd_10 Dx.cml_mdcrd_11 Dx.cml_mdcrd_12 Dx.cml_mdcrd_13;
+RUN;
+
+DATA TKI1_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Imatinib' );
+	FLAG = 	'Imatinib';
+DATA TKI2_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Dasatinib' );
+	FLAG = 	'Dasatinib';
+DATA TKI3_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Nilotinib' );
+	FLAG = 	'Nilotinib';
+DATA TKI4_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Bosutinib' );
+	FLAG = 	'Bosutinib';
+DATA TKI5_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Ponatinib' );
+	FLAG = 	'Ponatinib';
+RUN;
+
+DATA TKI_all_NDC;
+	SET TKI1_NDC TKI2_NDC TKI3_NDC TKI4_NDC TKI5_NDC;
+RUN;
+
+proc sql;
+create table unique_presc_dx as 
+select *,
+		TKI_all_NDC.flag as flag
+FROM Dx_all inner join TKI_all_NDC
+	on Dx_all.NDCNUM = TKI_all_NDC.NDCNUM;
+QUIT;
+
+DATA unique_dx;
+	SET unique_presc_dx;
+	IF flag ^=1;
+RUN;
+
+PROC SQL;
+	create table unique_dx as 
+	SELECT min(enrolid) as enrolid,
+		1 as flag
+	FROM unique_dx
+	GROUP BY enrolid;
+QUIT;
+
+
+
+
+DATA all_svc;
+	SET inpt_all outpt_all;
+RUN;
+
+PROC SQL;
+	CREATE table id_file_detail as
+	SELECT a.*,
+		b.age,
+		b.sex,
+		b.admdate,
+		b.svcdate,
+		b.region
+	FROM id_file a
+	INNER JOIN all_svc b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_file_detail as
+	SELECT min(enrolid) as enrolid,
+			min(age) as age,
+		min(sex) as sex,
+		count(admdate) as adm_number,
+		count(svcdate) as opt_number,
+		min(region) as region
+	FROM id_file_detail
+	GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table id_file_detail as
+	SELECT a.*,
+		b.flag as flag
+	FROM id_file_detail a
+	LEFT JOIN unique_dx b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA id_file_detail;
+	SET id_file_detail;
+	IF flag = . THEN flag=0;
+	IF 18<=age<=29 THEN age_group=1;
+	ELSE IF 30<=age<=39 THEN age_group=2;
+	ELSE IF 40<=age<=49 THEN age_group=3;
+	ELSE IF 50<=age THEN age_group=4;
+RUN;
+
+PROC MEANS DATA=id_file_detail;
+VAR adm_number;
+RUN;
+		
+PROC FREQ DATA=id_file_detail;
+TABLE flag*region;
+RUN;
