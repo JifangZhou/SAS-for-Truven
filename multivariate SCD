@@ -1,0 +1,148 @@
+LIBNAME WorkingD 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+
+DATA redbook;
+	SET WorkingD.redbook;
+DATA id_file;
+	SET WorkingD.id_file_addconditions;
+DATA dx_obs;
+	SET WorkingD.dx_obs;
+DATA nsaids_ndc;
+	SET WorkingD.nsaids_ndc;
+RUN;
+
+*Look for Hydroxyurea in the redbook;
+
+DATA Hydroxyurea_NDC;
+	SET redbook;
+	WHERE GENNME contains 'Hydroxyurea';
+	FLAG = 	'Hydroxyurea';
+RUN;
+
+PROC sql;
+	CREATE table temp_hydrea as
+	SELECT dx_obs.*
+	FROM dx_obs a
+	INNER JOIN Hydroxyurea_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as post_hydrea
+	FROM temp_hydrea;
+QUIT;
+
+PROC sql;
+	CREATE table id_file as
+	SELECT id_file.*,
+		b.post_hydrea
+	FROM id_file a
+	LEFT JOIN temp_list b
+	ON a.enrolid =b.enrolid;
+QUIT;
+
+* Add NSAIDS use history in the observation period;
+
+PROC sql;
+	CREATE table temp_nsaids as
+	SELECT dx_obs.*
+	FROM dx_obs a
+	INNER JOIN nsaids_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as post_NSAIDS
+	FROM temp_nsaids;
+QUIT;
+
+PROC sql;
+	CREATE table id_file as
+	SELECT id_file.*,
+		b.post_NSAIDS
+	FROM id_file a
+	LEFT JOIN temp_list b
+	ON a.enrolid =b.enrolid;
+QUIT;
+
+DATA workingD.id_file_multivariate;
+	SET id_file;
+	IF post_hydrea=. THEN post_hydrea=0;
+	IF post_hydrea=1 THEN post_hydrea=1;
+	IF post_NSAIDS=. THEN post_NSAIDS=0;
+	IF post_NSAIDS=1 THEN post_NSAIDS=1;
+RUN;
+DATA id_file_adult;
+	SET workingD.id_file_multivariate;
+	IF OME_group in (4,5,6);
+RUN;
+DATA id_file_adult;
+	SET id_file_adult;
+	IF index_age<=29 THEN age_cat=1;
+	ELSE IF index_age<=39 THEN age_cat=2;
+	ELSE IF index_age<=49 THEN age_cat=3;
+	ELSE age_cat=4;
+	Total_admin=post_admission_number+prior_admission_number;
+	IF Total_admin=0 THEN admission_cat=0;
+	ELSE IF 1<=Total_admin<=2 THEN admission_cat=1;
+	ELSE IF 3<=Total_admin THEN admission_cat=2;
+	Total_ER=post_ER_number+prior_ER_number;
+	IF Total_ER=0 THEN ER_cat=0;
+	ELSE IF 1<=Total_ER<=3 THEN ER_cat=1;
+	ELSE IF 4<=Total_ER THEN ER_cat=2;
+	Total_trans=post_trans+prior_trans;
+	IF Total_trans=0 THEN trans_cat=0;
+	ELSE trans_cat=1;
+RUN;
+
+PROC FREQ DATA=id_file_adult;
+TABLE post_acute_chest_syndrome*OME_group/nopercent nocol norow chisq list missing;
+RUN;
+PROC CONTENTS DATA=id_file_adult;RUN;
+
+
+DATA workingD.id_file_final;
+	SET id_file_adult;
+	IF post_sickle_cell_crisis=. THEN post_sickle_cell_crisis=0;
+	IF post_acute_chest_syndrome=. THEN post_acute_chest_syndrome=0;
+	IF post_Acute_liver_failure=. THEN post_Acute_liver_failure=0;
+	IF post_Acute_renal_injury=. THEN post_Acute_renal_injury=0;
+	IF post_Aplastic_crisis=. THEN  post_Aplastic_crisis=0;
+	IF (post_Chronic_liver_disease=1 OR prior_Chronic_liver_disease=1) THEN Chronic_liver_disease=1;
+	ELSE Chronic_liver_disease=0;
+	IF (post_Chronic_heart_failure=1 OR prior_Chronic_heart_failure=1) THEN Chronic_heart_failure=1;
+	ELSE Chronic_heart_failure=0;
+	IF (post_Chronic_renal_disease=1 OR prior_Chronic_renal_disease=1) THEN Chronic_renal_disease=1;
+	ELSE Chronic_renal_disease=0;
+	IF (post_Stroke=1 OR prior_Stroke=1) THEN Stroke=1;
+	ELSE Stroke=0;
+	IF (post_Pulmonary_hypertension=1 OR prior_Pulmonary_hypertension=1) THEN Pulmonary_hypertension=1;
+	ELSE Pulmonary_hypertension=0;
+	IF (post_Avascular_necrosis=1 OR prior_Avascular_necrosis=1) THEN Avascular_necrosis=1;
+	ELSE Avascular_necrosis=0;
+	IF (post_Priapism=1 OR prior_Priapism=1) THEN Priapism=1;
+	ELSE Priapism=0;
+	IF (post_Iron_overload=1 OR prior_Iron_overload=1) THEN Iron_overload=1;
+	ELSE Iron_overload=0;
+	IF (post_Hemolytic_anemia=1 OR prior_Hemolytic_anemia=1) THEN Hemolytic_anemia=1;
+	ELSE Hemolytic_anemia=0;
+RUN;
+
+proc logistic data= workingD.id_file_final;
+	CLASS age_cat(ref='1') sex (ref='1') admission_cat (ref='0') ER_cat (ref='0'); 
+	model OME_group(ref='4')= age_cat sex post_hydrea post_NSAIDS prior_opioid admission_cat ER_cat trans_cat
+								Chronic_liver_disease Chronic_heart_failure Chronic_renal_disease Stroke
+							post_sickle_cell_crisis post_acute_chest_syndrome post_Acute_liver_failure post_Acute_renal_injury
+							post_Aplastic_crisis Pulmonary_hypertension Avascular_necrosis Priapism Iron_overload Hemolytic_anemia/link=glogit;
+RUN;
+
+
+
+
+
+
+
+
