@@ -1,0 +1,91 @@
+LIBNAME WorkingD 	'C:\Users\jzhou86\Documents\Opioid in SCD pregnancy';
+LIBNAME Rawdata 	'C:\Users\jzhou86\Documents\Opioid in SCD pregnancy\Raw Data';
+LIBNAME Inpts		'C:\Users\jzhou86\Documents\Opioid in SCD pregnancy\Raw Data\InpatientServices';
+LIBNAME Inpt		'C:\Users\jzhou86\Documents\Opioid in SCD pregnancy\Raw Data\InpatientSummary';
+
+
+DATA inpt_all;
+	SET Inpt.scd_ccaei_09 Inpt.scd_ccaei_10 Inpt.scd_ccaei_11 Inpt.scd_ccaei_12 Inpt.scd_ccaei_13
+		Inpt.scd_mdcri_09 Inpt.scd_mdcri_10 Inpt.scd_mdcri_11 Inpt.scd_mdcri_12 Inpt.scd_mdcri_13;
+DATA inpts_all;
+	SET Inpts.scd_ccaes_09 Inpts.scd_ccaes_10 Inpts.scd_ccaes_11 Inpts.scd_ccaes_12 Inpts.scd_ccaes_13
+		Inpts.scd_mdcrs_09 Inpts.scd_mdcrs_10 Inpts.scd_mdcrs_11 Inpts.scd_mdcrs_12 Inpts.scd_mdcrs_13;
+RUN;
+
+DATA SCD_pregnant1;
+	SET inpt_all;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('V27') then pregnant_admin=1;
+		end;
+	IF pregnant_admin=1;
+RUN;
+*NOTE: The data set WORK.SCD_PREGNANT1 has 1501 observations and 85 variables.;
+
+DATA SCD_pregnant2;
+	SET inpts_all;
+	array icd {*} dx1-dx4;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('V27') then pregnant_svc=1;
+		end;
+	IF pregnant_svc=1;
+RUN;
+*NOTE: The data set WORK.SCD_PREGNANT2 has 9124 observations and 73 variables.;
+
+PROC sql;
+	CREATE table temp_id as
+	SELECT min(enrolid) as enrolid,
+		min(EFAMID) as EFAMID,
+		min(ADMDATE) as index_date
+	FROM SCD_pregnant1
+	GROUP BY enrolid;
+QUIT;
+*NOTE: Table WORK.TEMP_ID created, with 1378 rows and 2 columns.;
+PROC sql;
+	CREATE table temp_id2 as
+	SELECT min(enrolid) as enrolid,
+		min(EFAMID) as EFAMID,
+		min(SVCDATE) as index_date
+	FROM SCD_pregnant2
+	GROUP BY enrolid;
+QUIT;
+*NOTE: Table WORK.TEMP_ID2 created, with 1070 rows and 2 columns.;
+
+DATA final_list;
+	SET temp_id temp_id2;
+RUN;
+
+PROC sql;
+	CREATE table final_list1 as
+	SELECT min(enrolid)as enrolid,
+		min(EFAMID)as EFAMID,
+		min(index_date)as index_date
+	FROM final_list
+	GROUP BY enrolid;
+QUIT;
+
+*NOTE: Table WORK.FINAL_LIST1 created, with 1409 rows and 2 columns.;
+
+DATA workingD.living_birth_list;
+	SET final_list1;
+RUN;
+
+* Stake all family relative file;
+LIBNAME familyF 'C:\Users\jzhou86\Documents\Opioid in SCD pregnancy\Raw Data\FamID SCD Pregnancy\FamID SCD Pregnancy';
+
+DATA inpt_all;
+	SET familyF.scd_ccaei_09 familyF.scd_ccaei_10 familyF.scd_ccaei_11 familyF.scd_ccaei_12 familyF.scd_ccaei_13
+		familyF.scd_mdcri_09 familyF.scd_mdcri_10 familyF.scd_mdcri_11 familyF.scd_mdcri_12 familyF.scd_mdcri_13;
+DATA outpt_all;
+	SET familyF.scd_ccaeo_09 familyF.scd_ccaeo_10 familyF.scd_ccaeo_11 familyF.scd_ccaeo_12 familyF.scd_ccaeo_13
+		familyF.scd_mdcro_09 familyF.scd_mdcro_10 familyF.scd_mdcro_11 familyF.scd_mdcro_12 familyF.scd_mdcro_13;
+RUN;
+
+PROC sql;
+		CREATE table children_list1 as
+		SELECT min(enrolid)as enrolid,
+		min(EFAMID)as EFAMID,
+		min(DOBYR)as DOBYR
+	FROM inpt_all
+	GROUP BY enrolid;
+QUIT;
