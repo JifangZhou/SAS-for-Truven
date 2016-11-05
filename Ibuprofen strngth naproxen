@@ -1,0 +1,177 @@
+LIBNAME WorkingD 'C:\Users\jzhou86\Documents\SCD Project\Subproject NSAIDS and renal injury';
+LIBNAME Rawdata 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+
+DATA id_file;
+	SET WorkingD.renal_id_list;
+DATA redbook;
+	SET Rawdata.redbook;
+DATA dx_baseline;
+	SET Rawdata.dx_baseline;
+DATA dx_obs;
+	SET Rawdata.dx_obs;
+RUN;
+
+DATA Ibuprofen_NDC;
+	SET redbook;
+	WHERE 	GENNME contains 'Ibuprofen';
+	FLAG = 	'Ibuprofen';
+RUN;
+
+DATA Naproxen_NDC;
+	SET redbook;
+	WHERE 	GENNME contains 'Naproxen';
+	FLAG = 	'Naproxen';
+RUN;
+
+PROC SQL;
+ CREATE TABLE prior_Ibuprofen as
+ SELECT *
+ FROM dx_baseline a
+ INNER JOIN Ibuprofen_NDC b
+ ON a.NDCNUM =b.NDCNUM;
+QUIT;
+
+DATA prior_Ibuprofen;
+	SET prior_Ibuprofen;
+	IF STRNGTH='800 MG' THEN str=800;
+	ELSE IF STRNGTH='600 MG' THEN str=600;
+	ELSE IF STRNGTH='400 MG' THEN str=400;
+	ELSE IF STRNGTH='100 MG/5 ML' THEN str=100;
+	ELSE IF STRNGTH='7.5 MG-200 MG' THEN str=200;
+	ELSE IF STRNGTH='7.5 MG-200 MG' THEN str=200;
+RUN;
+
+DATA prior_Ibuprofen;
+SET prior_Ibuprofen;
+Total_dose=METQTY*str;
+RUN;
+
+PROC SQL;
+CREATE TABLE prior_ibuprofen_id as
+SELECT min(enrolid) as enrolid,
+sum(Total_dose) as Total_dose
+FROM prior_Ibuprofen
+GROUP BY enrolid;
+QUIT;
+*NOTE: Table WORK.PRIOR_IBUPROFEN_ID created, with 997 rows and 2 columns.;
+
+PROC SQL;
+CREATE TABLE id_file_add_prior_ibu as
+SELECT a.*,
+	Total_dose as Prior_Ibuprofen_dose
+FROM id_file a
+LEFT JOIN prior_ibuprofen_id b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+
+
+
+
+PROC SQL;
+ CREATE TABLE post_Ibuprofen as
+ SELECT *
+ FROM dx_obs a
+ INNER JOIN Ibuprofen_NDC b
+ ON a.NDCNUM =b.NDCNUM;
+QUIT;
+
+DATA post_Ibuprofen;
+	SET post_Ibuprofen;
+	IF STRNGTH='800 MG' THEN str=800;
+	ELSE IF STRNGTH='600 MG' THEN str=600;
+	ELSE IF STRNGTH='400 MG' THEN str=400;
+	ELSE IF STRNGTH='100 MG/5 ML' THEN str=100;
+	ELSE IF STRNGTH='7.5 MG-200 MG' THEN str=200;
+	ELSE IF STRNGTH='10 MG-200 MG' THEN str=200;
+	ELSE IF STRNGTH='26.6 MG-800 MG' THEN str=800;
+RUN;
+
+DATA post_Ibuprofen;
+SET post_Ibuprofen;
+Total_dose=METQTY*str;
+RUN;
+
+PROC SQL;
+CREATE TABLE post_ibuprofen_id as
+SELECT min(enrolid) as enrolid,
+sum(Total_dose) as Total_dose
+FROM post_Ibuprofen
+GROUP BY enrolid;
+QUIT;
+*NOTE: Table WORK.POST_IBUPROFEN_ID created, with 950 rows and 2 columns.;
+
+PROC SQL;
+CREATE TABLE id_file_add_post_ibu as
+SELECT a.*,
+	Total_dose as Post_Ibuprofen_dose
+FROM id_file_add_prior_ibu a
+LEFT JOIN post_ibuprofen_id b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA id_file_add_post_ibu;
+	SET id_file_add_post_ibu;
+	Daily_post_Ibuprofen=Post_Ibuprofen_dose/365;
+RUN;
+
+
+
+
+
+
+PROC SQL;
+ CREATE TABLE post_Naproxen as
+ SELECT *
+ FROM dx_obs a
+ INNER JOIN Naproxen_NDC b
+ ON a.NDCNUM =b.NDCNUM;
+QUIT;
+
+PROC FREQ DATA=post_Naproxen ORDER=FREQ;
+	TABLE STRNGTH;
+RUN;
+
+DATA post_Naproxen;
+	SET post_Naproxen;
+	IF STRNGTH='500 MG' THEN str=500;
+	ELSE IF STRNGTH='550 MG' THEN str=550;
+	ELSE IF STRNGTH='375 MG' THEN str=375;
+	ELSE IF STRNGTH='250 MG' THEN str=250;
+	ELSE IF STRNGTH='25 MG/ML' THEN str=25;
+	ELSE IF STRNGTH='750 MG' THEN str=750;
+	ELSE IF STRNGTH='20 MG-500 MG' THEN str=500;
+	ELSE IF STRNGTH='275 MG' THEN str=275;
+	ELSE IF STRNGTH='500 MG-85 MG' THEN str=500;
+RUN;
+
+DATA post_Naproxen;
+SET post_Naproxen;
+Total_dose=METQTY*str;
+RUN;
+
+PROC SQL;
+CREATE TABLE post_Naproxen_id as
+SELECT min(enrolid) as enrolid,
+sum(Total_dose) as Total_dose
+FROM post_Naproxen
+GROUP BY enrolid;
+QUIT;
+*NOTE: Table WORK.POST_NAPROXEN_ID created, with 273 rows and 2 columns.;
+
+PROC SQL;
+CREATE TABLE id_file_add_post_nap as
+SELECT a.*,
+	Total_dose as Post_Naproxen_dose
+FROM id_file_add_post_ibu a
+LEFT JOIN post_Naproxen_id b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA WorkingD.id_file_add_post_ibu_Ibu;
+	SET id_file_add_post_nap;
+	Daily_post_Naproxen=Post_Naproxen_dose/365;
+RUN;
+PROC MEANS DATA=id_file_add_post_nap;
+	VAR Post_Naproxen_dose;
+RUN;
