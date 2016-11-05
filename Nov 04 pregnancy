@@ -1,0 +1,110 @@
+LIBNAME WorkingD 	'C:\Users\jzhou86\Documents\Opioid in SCD pregnancy';
+LIBNAME Rawdata 	'C:\Users\jzhou86\Documents\Opioid in SCD pregnancy\Raw Data';
+LIBNAME Inpts		'C:\Users\jzhou86\Documents\Opioid in SCD pregnancy\Raw Data\InpatientServices';
+LIBNAME Inpt		'C:\Users\jzhou86\Documents\Opioid in SCD pregnancy\Raw Data\InpatientSummary';
+
+
+DATA inpt_all;
+	SET Inpt.scd_ccaei_09 Inpt.scd_ccaei_10 Inpt.scd_ccaei_11 Inpt.scd_ccaei_12 Inpt.scd_ccaei_13
+		Inpt.scd_mdcri_09 Inpt.scd_mdcri_10 Inpt.scd_mdcri_11 Inpt.scd_mdcri_12 Inpt.scd_mdcri_13;
+DATA inpts_all;
+	SET Inpts.scd_ccaes_09 Inpts.scd_ccaes_10 Inpts.scd_ccaes_11 Inpts.scd_ccaes_12 Inpts.scd_ccaes_13
+		Inpts.scd_mdcrs_09 Inpts.scd_mdcrs_10 Inpts.scd_mdcrs_11 Inpts.scd_mdcrs_12 Inpts.scd_mdcrs_13;
+RUN;
+
+DATA all_SVC;
+	SET inpt_all inpts_all;
+RUN;
+
+DATA final_list_linked;
+	SET workingD.final_list_linked;
+RUN;
+
+PROC SQL;
+CREATE TABLE uniq_ID as
+	SELECT min(enrolid) as enrolid,
+	min(age) as age,
+	min(region) as region
+	FROM all_SVC
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE final_list_linked as
+	SELECT a.*,
+		b.age as mother_age,
+		b.region as mother_region
+	FROM final_list_linked a
+	LEFT JOIN uniq_ID b
+	ON a.enrolid=b.enrolid;
+QUIT;
+PROC CONTENTS DATA=final_list_linked;RUN;
+
+
+DATA workingD.final_list_linked1;
+	SET final_list_linked;
+	IF child_id=. THEN linked=0;
+	ELSE linked=1;
+	IF mother_age<=19 THEN age_cat=1;
+	ELSE IF mother_age<=29 THEN age_cat=2;
+	ELSE IF mother_age<=39 THEN age_cat=3;
+	ELSE IF mother_age<=49 THEN age_cat=4;
+	ELSE age_cat=5;
+RUN;
+
+
+
+PROC FREQ DATA=final_list_linked;
+TABLE child_birth_year;
+RUN;
+
+PROC MEANS DATA=final_list_linked MEDIAN P25 P75;
+VAR mother_age;
+RUN;
+
+DATA XX;
+SET final_list_linked;
+IF child_birth_year in (2011,2012,2013);
+RUN;
+
+* Stake all family relative file;
+LIBNAME familyF 'C:\Users\jzhou86\Documents\Opioid in SCD pregnancy\Raw Data\FamID SCD Pregnancy\FamID SCD Pregnancy';
+
+DATA inpt_all;
+	SET familyF.scd_ccaei_11 familyF.scd_ccaei_12 familyF.scd_ccaei_13
+		familyF.scd_mdcri_11 familyF.scd_mdcri_12 familyF.scd_mdcri_13;
+DATA outpt_all;
+	SET familyF.scd_ccaeo_11 familyF.scd_ccaeo_12 familyF.scd_ccaeo_13
+		familyF.scd_mdcro_11 familyF.scd_mdcro_12 familyF.scd_mdcro_13;
+RUN;
+
+DATA all_SVC;
+	SET inpt_all outpt_all;
+RUN;
+
+PROC SQL;
+CREATE TABLE uniq_ID as
+	SELECT min(enrolid) as enrolid,
+	min(age) as age,
+	min(region) as region,
+	min(sex) as sex,
+	min(dx1) as dx
+	FROM all_SVC
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE workingD.child_info as
+	SELECT a.*,
+		b.age as child_age,
+		b.region as child_region,
+		b.sex as child_sex,
+		b.dx as dx
+	FROM XX a
+	LEFT JOIN uniq_ID b
+	ON a.child_id=b.enrolid;
+QUIT;
+
+PROC FREQ DATA=workingD.child_info ORDER=FREQ;
+TABLE dx;
+RUN;
