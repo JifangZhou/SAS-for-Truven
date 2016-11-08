@@ -1,0 +1,236 @@
+LIBNAME WorkingD 	'C:\Users\jzhou86\Documents\CML adherence study\Working Directory';
+LIBNAME Rawdata 	'C:\Users\jzhou86\Documents\CML adherence study\CMLRawdata';
+LIBNAME Inpt		'C:\Users\jzhou86\Documents\CML adherence study\CMLRawdata\InpatientSummary';
+LIBNAME Outpt		'C:\Users\jzhou86\Documents\CML adherence study\CMLRawdata\OutpatientService';
+LIBNAME Dx			'C:\Users\jzhou86\Documents\CML adherence study\CMLRawdata\DrugPrescription';
+DATA id_file;
+	SET Rawdata.cml_list;
+DATA redbook;
+	SET Rawdata.redbook;
+DATA inpt_all;
+	SET Inpt.cml_ccaei_09 Inpt.cml_ccaei_10 Inpt.cml_ccaei_11 Inpt.cml_ccaei_12 Inpt.cml_ccaei_13
+		Inpt.cml_mdcri_09 Inpt.cml_mdcri_10 Inpt.cml_mdcri_11 Inpt.cml_mdcri_12 Inpt.cml_mdcri_13;
+DATA outpt_all;
+	SET Outpt.cml_ccaeo_09 Outpt.cml_ccaeo_10 Outpt.cml_ccaeo_11 Outpt.cml_ccaeo_12 Outpt.cml_ccaeo_13
+		Outpt.cml_mdcro_09 Outpt.cml_mdcro_10 Outpt.cml_mdcro_11 Outpt.cml_mdcro_12 Outpt.cml_mdcro_13;
+DATA dx_all;
+	SET Dx.cml_ccaed_09 Dx.cml_ccaed_10 Dx.cml_ccaed_11 Dx.cml_ccaed_12 Dx.cml_ccaed_13
+		Dx.cml_mdcrd_09 Dx.cml_mdcrd_10 Dx.cml_mdcrd_11 Dx.cml_mdcrd_12 Dx.cml_mdcrd_13;
+RUN;
+
+DATA TKI1_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Imatinib' );
+	FLAG = 	'Imatinib';
+DATA TKI2_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Dasatinib' );
+	FLAG = 	'Dasatinib';
+DATA TKI3_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Nilotinib' );
+FLAG = 'Nilotinib';
+RUN;
+
+DATA TKI_all_NDC;
+	SET TKI1_NDC TKI2_NDC TKI3_NDC;
+RUN;
+
+proc sql;
+create table unique_presc_dx as 
+select *,
+		TKI_all_NDC.flag as flag
+FROM Dx_all inner join TKI_all_NDC
+	on Dx_all.NDCNUM = TKI_all_NDC.NDCNUM;
+QUIT;
+
+PROC SQL;
+	create table unique_dx as 
+	SELECT min(enrolid) as enrolid,
+		count(distinct flag) as number_drugs
+	FROM unique_presc_dx
+	GROUP BY enrolid;
+QUIT;
+*NOTE: Table WORK.UNIQUE_DX created, with 8362 rows and 2 columns.;
+
+DATA unique_presc_dx_das;
+	SET unique_presc_dx;
+	IF FLAG = 	'Dasatini';
+RUN;
+
+PROC FREQ DATA=unique_presc_dx_new ORDER=FREQ;
+TABLE Day_covered;
+RUN;
+*Initial data transformation
+
+IF METQTY or DAYSUPP is negative, switch to positive
+
+IF METQTY =0 AND DAYSUPP = 0, then set both to 30
+
+IF METQTY >999 then set METQTY to 0.01*METQTY;
+
+DATA unique_presc_dx_new;
+	SET unique_presc_dx;
+	IF METQTY<0 THEN METQTY=-1*METQTY;
+	ELSE IF METQTY=0 THEN METQTY=30;
+	ELSE IF METQTY>999 THEN METQTY=0.01*METQTY;
+	ELSE METQTY=METQTY;
+	IF FLAG = 	'Imatinib' AND strngth='100 MG' THEN day_supply=0.25;
+	ELSE IF FLAG = 	'Imatinib' AND strngth='400 MG' THEN day_supply=1;
+	ELSE IF FLAG = 	'Nilotini' AND strngth='150 MG' THEN day_supply=0.25;
+	ELSE IF FLAG = 	'Nilotini' AND strngth='200 MG' THEN day_supply=0.333;
+	ELSE IF FLAG = 	'Dasatini' AND strngth='100 MG' THEN day_supply=1;
+	ELSE IF FLAG = 	'Dasatini' AND strngth='140 MG' THEN day_supply=1;
+	ELSE IF FLAG = 	'Dasatini' AND strngth='20 MG' THEN day_supply=0.2;
+	ELSE IF FLAG = 	'Dasatini' AND strngth='50 MG' THEN day_supply=0.5;
+	ELSE IF FLAG = 	'Dasatini' AND strngth='70 MG' THEN day_supply=0.7;
+	ELSE IF FLAG = 	'Dasatini' AND strngth='80 MG' THEN day_supply=0.8;
+RUN;
+
+DATA unique_presc_dx_new;
+	SET unique_presc_dx_new;
+	Day_covered=metqty*day_supply;
+	RUN;
+
+	PROC PRINT DATA=unique_presc_dx_new;
+	WHERE Day_covered=0;
+	RUN;
+
+PROC SQL;
+CREATE TABLE ID_list as
+	SELECT min(enrolid) as enrolid,
+		min(sex) as sex,
+		min(region) as region,
+		min(svcdate) as index_date
+	FROM unique_presc_dx_new
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE unique_presc_dx_add_index as
+	SELECT a.*,
+		b.index_date
+	FROM unique_presc_dx_new a
+	INNER JOIN ID_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA unique_presc_dx_baseline;
+	SET unique_presc_dx_add_index;
+	IF 0=<SVCDATE-index_date<=180;
+RUN;
+
+DATA unique_presc_dx_obs;
+	SET unique_presc_dx_add_index;
+	IF 180<SVCDATE-index_date<=360;
+RUN;
+
+PROC SQL;
+CREATE TABLE post_id as
+	SELECT distinct enrolid as enrolid
+	FROM unique_presc_dx_obs;
+QUIT;
+
+PROC SQL;
+CREATE TABLE unique_presc_dx_baseline as
+	SELECT a.*
+	FROM unique_presc_dx_baseline a
+	INNER JOIN post_id b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*Adherence in the 180-360 time period;
+PROC SQL;
+CREATE TABLE id_dx_obs as
+	SELECT 	min(enrolid) as enrolid,
+			min(sex) as sex,
+			min(region) as region,
+			sum(Day_covered) as total_day
+	FROM unique_presc_dx_obs
+	GROUP BY enrolid;
+QUIT;
+
+DATA id_dx_obs;
+	SET id_dx_obs;
+	adherence_post=total_day/180;
+RUN;
+DATA id_dx_obs;
+	SET id_dx_obs;
+	X1=0;X2=0;X3=0;X4=0;X5=0;
+	IF adherence_post>=0.95 THEN X1=1;
+	IF adherence_post>=0.90 THEN X2=1;
+	IF adherence_post>=0.85 THEN X3=1;
+	IF adherence_post>=0.80 THEN X4=1;
+	IF adherence_post>=0.75 THEN X5=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE id_dx_baseline as
+	SELECT 	min(enrolid) as enrolid,
+			min(age) as age,
+			min(region) as region,
+			sum(Day_covered) as total_day
+	FROM unique_presc_dx_baseline
+	GROUP BY enrolid;
+QUIT;
+
+DATA id_dx_baseline;
+	SET id_dx_baseline;
+	adherence_prior=total_day/180;
+	Eighty_adherence=0;
+	IF adherence_prior>=0.80 THEN Eighty_adherence=1;
+RUN;
+
+PROC FREQ DATA=id_dx_baseline;
+	TABLE Eighty_adherence;
+RUN;
+
+PROC SQL;
+CREATE TABLE WorkingD.id_dx_obs as
+	SELECT 	a.*,
+		b.Eighty_adherence as Eighty_adherence,
+		b.age as age
+	FROM id_dx_obs a
+	INNER JOIN id_dx_baseline b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA dev_list;
+	SET WorkingD.id_dx_obs;
+	if mod(enrolid,2)^=0 then output;
+RUN;
+
+DATA test_list;
+	SET WorkingD.id_dx_obs;
+	if mod(enrolid,2)=0 then output;
+RUN;
+
+PROC CONTENTS DATA=dev_list;RUN;
+
+PROC LOGISTIC DATA=dev_list;
+CLASS region(ref='1') sex(ref='1') Eighty_adherence(ref='0');
+MODEL X4(ref='0') = age region sex Eighty_adherence/link=glogit;
+RUN;
+
+DATA Total_beta;
+	SET test_list;
+	IF region=1 THEN region_beta=0;
+	ELSE IF region=2 THEN region_beta=-0.0101;
+	ELSE IF region=3 THEN region_beta=-0.0430;
+	ELSE IF region=4 THEN region_beta=0.0470;
+	ELSE IF region=5 THEN region_beta=-0.3517;
+	IF sex='1' THEN sex_beta=0;
+	ELSE IF sex='2' THEN sex_beta=-0.1080;
+	Total_beta= -0.3661-0.000955*age+region_beta+sex_beta+1.3112*Eighty_adherence;
+	expected_v=1/(1+exp(-1*Total_beta));
+RUN;
+DATA Total_beta;
+	SET Total_beta;
+	IF expected_v>=0.4 THEN tested=1;
+	ELSE tested=0;
+RUN;
+
+
+PROC FREQ DATA=Total_beta;
+TABLE X4*tested/nopercent nocol norow;
+RUN;
