@@ -1,0 +1,67 @@
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+
+DATA redbook;
+	SET Myfile.redbook;
+DATA id_file;
+	SET Myfile.id_file;
+DATA inpt_baseline;
+	SET Myfile.inpt_baseline;
+DATA inpt_obs;
+	SET Myfile.inpt_obs;
+DATA inpts_baseline;
+	SET Myfile.inpts_baseline;
+DATA inpts_obs;
+	SET Myfile.inpts_obs;
+DATA outpt_baseline;
+	SET Myfile.outpt_baseline;
+DATA outpt_obs;
+	SET Myfile.outpt_obs;
+DATA dx_baseline;
+	SET Myfile.dx_baseline;
+DATA dx_obs;
+	SET Myfile.dx_obs;
+DATA narcoticall_ndc;
+	SET Myfile.narcoticall_ndc;
+DATA nsaids_ndc;
+	SET Myfile.nsaids_ndc;
+RUN;
+
+PROC sql;
+	CREATE table temp_opioids as
+	SELECT dx_obs.*,
+		b.flag
+	FROM dx_obs a
+	INNER JOIN narcoticall_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+DATA temp_opioids_child;
+	SET temp_opioids;
+	IF age>17;
+RUN;
+
+PROC FREQ DATA=temp_opioids ORDER=FREQ;
+TABLE flag;
+RUN;
+
+DATA id_file_final;
+	SET Myfile.id_file_final;
+	IF post_ER_number=0 THEN ER_cat=0;
+	ELSE IF post_ER_number<=2 THEN ER_cat=1;
+	ELSE IF post_ER_number>2 THEN ER_cat=2;
+	IF post_admission_number=0 THEN admission_cat=0;
+	ELSE IF post_admission_number=1 THEN admission_cat=1;
+	ELSE IF post_admission_number>=2 THEN admission_cat=2;
+RUN;
+
+PROC FREQ DATA=id_file_final ORDER=FREQ;
+TABLE admission_cat*OME_group /nopercent norow nocol chisq ;
+RUN;
+
+proc logistic data= id_file_final;
+	CLASS age_cat(ref='1') sex (ref='1') admission_cat (ref='0') ER_cat (ref='0'); 
+	model OME_group(ref='4')= age_cat sex post_hydrea post_NSAIDS prior_opioid admission_cat ER_cat trans_cat
+								Chronic_liver_disease Chronic_heart_failure Chronic_renal_disease Stroke
+							post_sickle_cell_crisis post_acute_chest_syndrome post_Acute_renal_injury
+						 Pulmonary_hypertension Avascular_necrosis Priapism Iron_overload Hemolytic_anemia/link=glogit;
+RUN;
