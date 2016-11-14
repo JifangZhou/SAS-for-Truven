@@ -1,0 +1,168 @@
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+
+
+DATA redbook;
+	SET Myfile.redbook;
+DATA id_file;
+	SET Myfile.id_file_addconditions;
+DATA inpt_all;
+	SET Myfile.inpt_baseline Myfile.inpt_obs;
+DATA outpt_all;
+	SET Myfile.outpt_baseline Myfile.outpt_obs;
+DATA dx_all;
+	SET Myfile.dx_baseline Myfile.dx_obs;
+DATA narcoticall_ndc;
+	SET Myfile.narcoticall_ndc;
+DATA nsaids_ndc;
+	SET Myfile.nsaids_ndc;
+RUN;
+
+DATA id_file;
+SET id_file;
+IF index_age<65;
+IF index_age<=9 THEN agegroup = 1;
+ELSE IF 10=<age<20 THEN agegroup = 2;
+ELSE IF 20=<age<30 THEN agegroup = 3;
+ELSE IF 30=<age<40 THEN agegroup = 4;
+ELSE IF 40=<age<50 THEN agegroup = 5;
+ELSE IF 50=<age<60 THEN agegroup = 6;
+ELSE IF 60=<age<65 THEN agegroup = 7;
+RUN;
+PROC CONTENTS DATA=outpt_all;RUN;
+
+
+DATA inpt_all;
+	SET inpt_all;
+	Total_inpt=TOTNET;
+	TOT_OOP=TOTCOINS+TOTDED+TOTCOPAY;
+RUN;
+
+PROC SQL;
+CREATE TABLE temp as
+	SELECT min(enrolid) as enrolid,
+		sum(Total_inpt) as inpt_tot,
+		sum(TOT_OOP) as inpt_oop
+	FROM inpt_all
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE id_inpt as
+	SELECT a.*,
+		b.inpt_tot,
+		b.inpt_oop
+	FROM id_file a
+	LEFT JOIN temp b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA outpt_all;
+	SET outpt_all;
+	Total_outpt=NETPAY;
+	TOT_OOP=DEDUCT+COPAY+COINS;
+RUN;
+
+PROC SQL;
+CREATE TABLE temp as
+	SELECT min(enrolid) as enrolid,
+		sum(Total_outpt) as outpt_tot,
+		sum(TOT_OOP) as outpt_oop
+	FROM outpt_all
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE id_inpt_out as
+	SELECT a.*,
+		b.outpt_tot,
+		b.outpt_oop
+	FROM id_inpt a
+	LEFT JOIN temp b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA dx_all;
+	SET dx_all;
+	Total_outpt=NETPAY;
+	TOT_OOP=DEDUCT+COPAY+COINS;
+RUN;
+
+PROC SQL;
+CREATE TABLE temp as
+	SELECT min(enrolid) as enrolid,
+		sum(Total_outpt) as dx_tot,
+		sum(TOT_OOP) as dx_oop
+	FROM dx_all
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE id_inpt_out_dx as
+	SELECT a.*,
+		b.dx_tot,
+		b.dx_oop
+	FROM id_inpt_out a
+	LEFT JOIN temp b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA Myfile.id_costs;
+	SET id_inpt_out_dx;
+	IF inpt_tot=. THEN inpt_tot=0;
+	IF outpt_tot =. THEN outpt_tot=0;
+	IF  dx_tot=. THEN dx_tot=0;
+	IF  inpt_oop=. THEN inpt_oop=0;
+	IF  outpt_oop=. THEN outpt_oop=0;
+	IF  dx_oop=. THEN dx_oop=0;
+	IF inpt_tot<0 THEN inpt_tot=-1*inpt_tot;
+	IF outpt_tot <0 THEN outpt_tot=-1*outpt_tot;
+	IF  dx_tot<0 THEN dx_tot=-1*dx_tot;
+	IF  inpt_oop<0 THEN inpt_oop=-1*inpt_oop;
+	IF  outpt_oop<0 THEN outpt_oop=-1*outpt_oop;
+	IF  dx_oop<0 THEN dx_oop=-1*dx_oop;
+	Tot_payer_net=inpt_tot+outpt_tot+dx_tot;
+	Tot_OOP=inpt_oop+outpt_oop+dx_oop;
+RUN;
+
+PROC FREQ DATA=Myfile.id_costs;
+TABLE agegroup*;
+RUN;
+ ;
+PROC MEANS DATA=Myfile.id_costs median p25 p75;
+CLASS agegroup;
+VAR Tot_payer_net;
+RUN;
+
+DATA id_list;
+	SET Myfile.id_costs;
+	High_cost=0;
+	ever_opioid=0;
+	ever_admission=0;
+	ever_ER=0;
+	ever_trans=0;
+	IF (Tot_payer_net>=32467.55 AND index_age<=9) THEN High_cost=1;
+	IF (Tot_payer_net>=45694.00  AND 10=<age<20) THEN High_cost=1;
+	IF (Tot_payer_net>=53899.97  AND 20=<age<30) THEN High_cost=1;
+	IF (Tot_payer_net>=47594.51   AND 30=<age<40) THEN High_cost=1;
+	IF (Tot_payer_net>=38821.29  AND 40=<age<50) THEN High_cost=1;
+	IF (Tot_payer_net>=42844.67  AND 50=<age<60) THEN High_cost=1;
+	IF (Tot_payer_net>=39888.62   AND 60=<age<65) THEN High_cost=1;
+	IF (prior_opioid =1 OR post_opioid=1) THEN ever_opioid=1;
+	IF (prior_admission =1 OR post_admission=1) THEN ever_admission=1;
+	IF (prior_ER =1 OR post_ER=1) THEN ever_ER=1;
+	IF (prior_trans =1 OR post_trans=1) THEN ever_trans=1;
+RUN;
+
+PROC FREQ DATA=id_list;
+TABLE ever_trans*High_cost /nopercent nocol norow chisq;
+RUN;
+
+PROC SORT DATA=id_file;
+BY agegroup;
+RUN;
+
+
+PROC BOXPLOT DATA=id_file;
+PLOT  OME_log* agegroup;
+RUN;
+
