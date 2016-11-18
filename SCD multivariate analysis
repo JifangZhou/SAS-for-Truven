@@ -1,0 +1,123 @@
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+
+DATA redbook;
+	SET Myfile.redbook;
+DATA id_file;
+	SET Myfile.id_file;
+DATA inpt_baseline;
+	SET Myfile.inpt_baseline;
+DATA inpt_obs;
+	SET Myfile.inpt_obs;
+DATA inpts_baseline;
+	SET Myfile.inpts_baseline;
+DATA inpts_obs;
+	SET Myfile.inpts_obs;
+DATA outpt_baseline;
+	SET Myfile.outpt_baseline;
+DATA outpt_obs;
+	SET Myfile.outpt_obs;
+DATA dx_baseline;
+	SET Myfile.dx_baseline;
+DATA dx_obs;
+	SET Myfile.dx_obs;
+DATA narcoticall_ndc;
+	SET Myfile.narcoticall_ndc;
+DATA nsaids_ndc;
+	SET Myfile.nsaids_ndc;
+RUN;
+
+PROC sql;
+	CREATE table temp_opioids as
+	SELECT dx_obs.*,
+		b.flag
+	FROM dx_obs a
+	INNER JOIN narcoticall_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+DATA temp_opioids_child;
+	SET temp_opioids;
+	IF age>17;
+RUN;
+
+PROC FREQ DATA=temp_opioids ORDER=FREQ;
+TABLE flag;
+RUN;
+
+DATA id_file_final;
+	SET Myfile.id_file_final;
+	IF post_ER_number=0 THEN ER_cat=0;
+	ELSE IF post_ER_number<=2 THEN ER_cat=1;
+	ELSE IF post_ER_number>2 THEN ER_cat=2;
+	IF post_admission_number=0 THEN admission_cat=0;
+	ELSE IF post_admission_number=1 THEN admission_cat=1;
+	ELSE IF post_admission_number>=2 THEN admission_cat=2;
+RUN;
+
+PROC FREQ DATA=id_file_final ORDER=FREQ;
+TABLE admission_cat*OME_group /nopercent norow nocol chisq ;
+RUN;
+
+proc logistic data= id_file_final;
+	CLASS age_cat(ref='1') sex (ref='1') admission_cat (ref='0') ER_cat (ref='0'); 
+	model OME_group(ref='4')= age_cat sex post_hydrea post_NSAIDS prior_opioid admission_cat ER_cat trans_cat
+								Chronic_liver_disease Chronic_heart_failure Chronic_renal_disease Stroke
+							post_sickle_cell_crisis post_acute_chest_syndrome post_Acute_renal_injury
+						 Pulmonary_hypertension Avascular_necrosis Priapism Iron_overload Hemolytic_anemia/link=glogit;
+RUN;
+
+DATA myfile.id_file_for_R;
+	SET id_file_final;
+	IF OME_group=4 THEN OME_group1='non_user';
+	ELSE IF OME_group=5 THEN OME_group1='low_dose_user';
+	ELSE IF OME_group=6 THEN OME_group1='high_dose_user';
+	IF sex=1 THEN sex1='male';
+	ELSE IF sex=2 THEN sex1='female';
+	IF admission_cat=0 THEN admission_cat1='never_admit';
+	ELSE IF admission_cat=1 THEN admission_cat1='one_admit';
+	ELSE IF admission_cat=2 THEN admission_cat1='more_one_admit';
+	IF ER_cat=0 THEN ER_cat1='never_ER';
+	ELSE IF ER_cat=1 THEN ER_cat1='one_two_ER';
+	ELSE IF ER_cat=2 THEN ER_cat1='more_two_ER';
+	IF index_age<=29 THEN age_cat1='18-29';
+	ELSE IF index_age<=39 THEN age_cat1='30-39';
+	ELSE IF index_age<=49 THEN age_cat1='40-49';
+	ELSE IF index_age>=50 THEN age_cat1='m50_and_more';
+RUN;
+
+DATA all_ID_OME;
+	SET myfile.id_file_addconditions;
+	IF daily_OME^=.;
+	both_ER_IR=0;
+	IF post_IR_opioid=. THEN post_IR_opioid=0;
+	IF post_ER_opioid=. THEN post_ER_opioid=0;
+	IF post_ER_opioid=1 AND post_IR_opioid=1 THEN both_ER_IR=1;
+	IF index_age<=9 THEN age_cat1=1;
+	ELSE IF index_age<=19 THEN age_cat1=2;
+	ELSE IF index_age<=29 THEN age_cat1=3;
+	ELSE IF index_age<=39 THEN age_cat1=4;
+	ELSE IF index_age<=49 THEN age_cat1=5;
+	ELSE IF index_age>=50 THEN age_cat1=6;
+RUN;
+
+PROC FREQ DATA=all_ID_OME;
+TABLE sex*age_cat1/nopercent nocol norow chisq;
+RUN;
+
+PROC MEANS DATA=OME_low MEDIAN P25 P75 MEAN Std;
+CLASS age_cat1;
+VAR daily_OME;
+RUN;
+DATA OME_low;
+	SET all_ID_OME;
+	Low=0;
+	IF age_cat1=1 AND daily_OME<1.1424658 THEN Low=1;
+	IF age_cat1=2 AND daily_OME<2.4349315  THEN Low=1;
+	IF age_cat1=3 AND daily_OME<18.0246575 THEN Low=1;
+	IF age_cat1=4 AND daily_OME<18.4931507  THEN Low=1;
+	IF age_cat1=5 AND daily_OME<23.6712329 THEN Low=1;
+	IF age_cat1=6 AND daily_OME<21.7123288 THEN Low=1;
+	IF Low=0;
+RUN;
+
+
