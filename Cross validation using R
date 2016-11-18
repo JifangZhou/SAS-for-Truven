@@ -1,0 +1,16 @@
+id_final <- read.csv(file="C:/Users/jzhou86/Documents/SCD Project/Working directory/multivariate analysis in R.csv",
+                     head=TRUE,sep=",")
+id_final$OME_group1 <- relevel(id_final$OME_group1, ref = "non_user")
+id_final$sex1 <- relevel(id_final$sex1, ref = "male")
+id_final$admission_cat1<- relevel(id_final$admission_cat1, ref = "never_admit")
+id_final$ER_cat1<- relevel(id_final$ER_cat1, ref = "never_ER")
+id_final$age_cat1<- relevel(id_final$age_cat1, ref = "18-29")
+test <- multinom(OME_group1 ~ age_cat1+sex1+post_hydrea+post_NSAIDS+prior_opioid+admission_cat1+ER_cat1+trans_cat+Chronic_liver_disease+
+                   Chronic_heart_failure+Chronic_renal_disease+Stroke+post_Sickle_cell_crisis+post_Acute_chest_syndrome+
+                   post_Acute_renal_injury+Pulmonary_hypertension+Avascular_necrosis+Priapism+Iron_overload+Hemolytic_anemia, data = id_final)
+summary(test)
+z <- summary(test)$coefficients/summary(test)$standard.errors
+z
+p <- (1 - pnorm(abs(z), 0, 1))*2
+p
+c<-exp(coef(test))
