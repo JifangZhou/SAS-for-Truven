@@ -1,0 +1,93 @@
+LIBNAME WorkingD 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+
+DATA id_file;
+SET WorkingD.id_file_multivariate;
+   array change _numeric_;
+        do over change;
+            if change=. then change=0;
+        end;
+RUN;
+
+LIBNAME Inptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\InpatientSummary';
+LIBNAME Outptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\OutpatientService';
+LIBNAME Drugall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Drug Prescriptions';
+
+DATA inpt_all;
+SET Inptall.scd_ccaei_09 Inptall.scd_ccaei_10 Inptall.scd_ccaei_11 Inptall.scd_ccaei_12 Inptall.scd_ccaei_13
+	Inptall.scd_mdcri_09 Inptall.scd_mdcri_10 Inptall.scd_mdcri_11 Inptall.scd_mdcri_12 Inptall.scd_mdcri_13;
+DATA outpt_all;
+SET	Outptall.scd_ccaeo_09 Outptall.scd_ccaeo_10 Outptall.scd_ccaeo_11 Outptall.scd_ccaeo_12 Outptall.scd_ccaeo_13
+	Outptall.scd_mdcro_09 Outptall.scd_mdcro_10 Outptall.scd_mdcro_11 Outptall.scd_mdcro_12 Outptall.scd_mdcro_13;
+DATA drug_all;
+SET	Drugall.scd_ccaed_09 Drugall.scd_ccaed_10 Drugall.scd_ccaed_11 Drugall.scd_ccaed_12 Drugall.scd_ccaed_13
+	Drugall.scd_mdcrd_09 Drugall.scd_mdcrd_10 Drugall.scd_mdcrd_11 Drugall.scd_mdcrd_12 Drugall.scd_mdcrd_13;
+RUN;
+
+PROC CONTENTS DATA=inpt_all; RUN;
+
+DATA outpt_all;
+	SET outpt_all;
+	related=0;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('36430'	'P9011' 'P9016' 'P9021' 'P9022' 'P9038' 'P9039' 'P9040' 'P9051' 'P9054' 'P9057' 'P9058' '8151' '8153' '8154') then related = 1;
+end;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('990', '28241', '28242','2826', '4151', '48', '51881', '51882', '51884','V4365' 'V4364','4280','586',
+				'4160','4168','4150','574','5750','5751','361','707','2750','73340','73341','73342','73343','73344','73349') then related = 1;
+end;
+IF REVCODE in: ('038','039') then related = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE inpt_record as
+	SELECT a.enrolid,
+			a.admdate,
+			a.dx1,
+			a.dx2,
+			a.dx3,
+			a.dx4,
+			a.proc1,
+			a.days,
+			a.related,
+			1 as hospitalization
+	FROM inpt_all a
+	INNER JOIN id_file b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA all_svc_outpt;
+	SET outpt_all;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0981') THEN ER=1;
+	ELSE IF STDPLAC in ('23','220','428') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120', '10420','10320','10220','12220','20220','10520','20120','21120','21220','22320',
+						'22120','30220','30120','30420','30320','30520','30620','31120','31420','31320','31520',
+						'31220','31620') THEN ER=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE outpt_record as
+	SELECT a.enrolid,
+			a.svcdate,
+			a.dx1,
+			a.dx2,
+			a.dx3,
+			a.dx4,
+			a.proc1,
+			a.ER,
+			a.related
+	FROM all_svc_outpt a
+	INNER JOIN id_file b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA workingD.all_record;
+	SET outpt_record inpt_record;
+	   array change _numeric_;
+        do over change;
+            if change=. then change=0;
+        end;
+RUN
