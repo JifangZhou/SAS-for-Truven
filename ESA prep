@@ -1,0 +1,118 @@
+LIBNAME WorkingD 'C:\Users\jzhou86\Documents\SCD Project\Subproject ESA transfusion and CKD';
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+LIBNAME Inptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\InpatientSummary';
+LIBNAME Outptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\OutpatientService';
+LIBNAME Drugall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Drug Prescriptions';
+
+DATA inpt_all;
+SET Inptall.scd_ccaei_09 Inptall.scd_ccaei_10 Inptall.scd_ccaei_11 Inptall.scd_ccaei_12 Inptall.scd_ccaei_13
+	Inptall.scd_mdcri_09 Inptall.scd_mdcri_10 Inptall.scd_mdcri_11 Inptall.scd_mdcri_12 Inptall.scd_mdcri_13;
+DATA outpt_all;
+SET	Outptall.scd_ccaeo_09 Outptall.scd_ccaeo_10 Outptall.scd_ccaeo_11 Outptall.scd_ccaeo_12 Outptall.scd_ccaeo_13
+	Outptall.scd_mdcro_09 Outptall.scd_mdcro_10 Outptall.scd_mdcro_11 Outptall.scd_mdcro_12 Outptall.scd_mdcro_13;
+DATA drug_all;
+SET	Drugall.scd_ccaed_09 Drugall.scd_ccaed_10 Drugall.scd_ccaed_11 Drugall.scd_ccaed_12 Drugall.scd_ccaed_13
+	Drugall.scd_mdcrd_09 Drugall.scd_mdcrd_10 Drugall.scd_mdcrd_11 Drugall.scd_mdcrd_12 Drugall.scd_mdcrd_13;
+DATA redbook;
+SET Myfile.redbook;
+RUN;
+
+DATA ESA_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Epoetin') OR (GENNME contains 'Darbepoetin');
+	FLAG = 	'ESA';
+RUN;
+
+PROC PRINT DATA=ESA_NDC;RUN;
+
+PROC SQL;
+CREATE TABLE ESApresc as
+SELECT b.*
+FROM ESA_NDC a
+INNER JOIN drug_all b
+ON a.NDCNUM = b.NDCNUM
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE uniqID as
+SELECT min (enrolid) as enrolid,
+	min(age) as age,
+	min(sex) as sex,
+	count(SVCDATE) as number
+FROM ESApresc
+GROUP BY enrolid;
+QUIT;
+
+DATA all_record;
+	SET inpt_all outpt_all;
+RUN;
+PROC SQL;
+CREATE TABLE ESArecord as
+SELECT a.*
+FROM all_record a
+INNER JOIN uniqID b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA ESArecord;
+	SET ESArecord;
+	CHRONIC_RENAL_FAILURE=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('582', '5830','5831','5832','5833','5834','5835','5836','5837', '585', '586', '588') then CHRONIC_RENAL_FAILURE=1;
+		end;
+RUN;
+
+DATA ESA_CKD;
+	SET ESArecord;
+	IF CHRONIC_RENAL_FAILURE=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE CKDID as
+SELECT min (enrolid) as enrolid,
+	min(CHRONIC_RENAL_FAILURE) as CKD
+FROM ESA_CKD
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE total_id as
+SELECT a.*,
+	b.CKD
+FROM uniqID a
+LEFT JOIN CKDID b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA workingD.ESA_ID;
+	SET total_id;
+	IF CKD=. THEN CKD=0;
+RUN;
+
+DATA total_id;
+SET total_id;
+	IF age<=18 THEN age_cat1='-18';
+	ELSE IF age<=49 THEN age_cat1='19-49';
+	ELSE IF age<=69 THEN age_cat1='50-69';
+ELSE IF age>=70 THEN age_cat1='70_and_more';
+RUN;
+DATA total_id;
+	SET total_id;
+	IF CKD=. THEN CKD=0;
+RUN;
+
+PROC FREQ DATA=total_id ;
+TABLE CKD*sex/list missing chisq;
+RUN;
+
+PROC MEANS DATA=total_id;
+Class CKD;
+VAR number;
+RUN;
+
+PROC Ttest DATA=total_id;
+Class CKD;
+VAR number;
+RUN;
