@@ -1,0 +1,170 @@
+LIBNAME WorkingD "C:\Users\jzhou86\Documents\SCD Project\Subproject ESA transfusion and CKD";
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+LIBNAME Inptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\InpatientSummary';
+LIBNAME Outptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\OutpatientService';
+LIBNAME Drugall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Drug Prescriptions';
+LIBNAME inptsvc 'C:\Users\jzhou86\Documents\Opioid in SCD pregnancy\Raw Data\InpatientServices';
+LIBNAME insur 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Insurance Records';
+
+DATA test;
+SET WorkingD.esa_id;
+IF age >=18;
+RUN;
+
+DATA inpt_sum;
+SET Inptall.scd_ccaei_09 Inptall.scd_ccaei_10 Inptall.scd_ccaei_11 Inptall.scd_ccaei_12 Inptall.scd_ccaei_13
+	Inptall.scd_mdcri_09 Inptall.scd_mdcri_10 Inptall.scd_mdcri_11 Inptall.scd_mdcri_12 Inptall.scd_mdcri_13;
+DATA outpt_svc;
+SET	Outptall.scd_ccaeo_09 Outptall.scd_ccaeo_10 Outptall.scd_ccaeo_11 Outptall.scd_ccaeo_12 Outptall.scd_ccaeo_13
+	Outptall.scd_mdcro_09 Outptall.scd_mdcro_10 Outptall.scd_mdcro_11 Outptall.scd_mdcro_12 Outptall.scd_mdcro_13;
+DATA drug_pres;
+SET	Drugall.scd_ccaed_09 Drugall.scd_ccaed_10 Drugall.scd_ccaed_11 Drugall.scd_ccaed_12 Drugall.scd_ccaed_13
+	Drugall.scd_mdcrd_09 Drugall.scd_mdcrd_10 Drugall.scd_mdcrd_11 Drugall.scd_mdcrd_12 Drugall.scd_mdcrd_13;
+DATA inpt_svc;
+SET	inptsvc.scd_ccaes_09 inptsvc.scd_ccaes_10 inptsvc.scd_ccaes_11 inptsvc.scd_ccaes_12 inptsvc.scd_ccaes_13
+	inptsvc.scd_mdcrs_09 inptsvc.scd_mdcrs_10 inptsvc.scd_mdcrs_11 inptsvc.scd_mdcrs_12 inptsvc.scd_mdcrs_13;
+DATA insurance_all;
+SET	insur.scd_t_09 insur.scd_t_10 insur.scd_t_11 insur.scd_t_12 insur.scd_t_13
+	insur.scd_mdcrt_09 insur.scd_mdcrt_10 insur.scd_mdcrt_11 insur.scd_mdcrt_12 insur.scd_mdcrt_13;
+DATA redbook;
+SET Myfile.redbook;
+RUN;
+
+DATA ESA_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Epoetin') OR (GENNME contains 'Darbepoetin'); 
+	FLAG = 	'ESA';
+RUN;
+
+PROC PRINT DATA=ESA_NDC;RUN;
+
+PROC FREQ DATA=ESA_NDC;
+TABLE THRDTDS;
+RUN;
+
+
+PROC SQL;
+CREATE TABLE ESApresc as
+SELECT b.*
+FROM ESA_NDC a
+INNER JOIN drug_pres b
+ON a.NDCNUM = b.NDCNUM
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE uniqID as
+SELECT min (enrolid) as enrolid,
+	min(age) as age,
+	min(sex) as sex,
+	min(SVCDATE) as index_date,
+	count(SVCDATE) as number
+FROM ESApresc
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE insurance_ESA as
+SELECT b.*,
+		a.*
+FROM uniqID a
+INNER JOIN insurance_all b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA enroll_pre enroll_post;
+	SET  insurance_ESA;
+	IF index_date - 390 <= DTSTART <index_date  then output enroll_pre;
+	IF index_date < DTSTART <= index_date + 390 then output enroll_post;
+RUN;
+
+PROC SORT DATA=enroll_pre;
+	by enrolid DTSTART ;
+RUN;
+
+proc summary nway data= enroll_pre;
+var MEMDAYS;
+by enrolid;
+output out=Insurance_day sum=enroll_day;
+run;
+
+proc univariate data=Insurance_day;
+      var enroll_day;
+      histogram;
+   run;
+
+DATA enroll_merge;
+SET Insurance_day;
+if 365 <= enroll_day then index=1;
+if enroll_day <365 then index=0;
+if enroll_day =. then index=na;
+run;
+
+DATA enroll_merge_pre;
+	SET enroll_merge;
+	IF index = 1;
+	pre_index=1;
+RUN;
+
+PROC SORT DATA=enroll_post;
+	by enrolid DTSTART ;
+RUN;
+
+proc summary nway data= enroll_post;
+var MEMDAYS;
+by enrolid;
+output out=Insurance_day sum=enroll_day;
+run;
+
+DATA enroll_merge;
+SET Insurance_day;
+if 365 <= enroll_day then index=1;
+if enroll_day <365 then index=0;
+if enroll_day =. then index=na;
+run;
+
+DATA enroll_merge_post;
+	SET enroll_merge;
+	IF index = 1;
+	post_index=1;
+RUN;
+
+DATA id_list;
+	MERGE enroll_merge_post enroll_merge_pre;
+	BY enrolid;
+	IF post_index=1 AND pre_index=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE WorkingD.final_list as
+SELECT b.*
+FROM id_list a
+INNER JOIN uniqID b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA list;
+	SET workingD.final_list;
+	IF age>=18;
+RUN;
+
+PROC MEANS DATA=list MEDIAN P25 P75 CLM;
+	VAR number;
+RUN;
+
+PROC SORT DATA=list;
+	by number ;
+RUN;
+
+PROC MEANS DATA=list;
+	VAR age;
+RUN;
+
+PROC FREQ DATA=list;
+	TABLE index_year;
+RUN;
+
+DATA list;
+SET list;
+index_year= YEAR(index_date);
+RUN;
