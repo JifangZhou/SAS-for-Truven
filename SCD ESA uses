@@ -1,0 +1,205 @@
+LIBNAME WorkingD 'C:\Users\jzhou86\Documents\SCD Project\Subproject ESA transfusion and CKD';
+
+DATA id_list;
+	SET WorkingD.list_adj;
+DATA outpts_baseline;
+	SET WorkingD.outpts_baseline;
+DATA outpts_obs;
+	SET WorkingD.outpts_obs;
+DATA inpts_baseline;
+	SET WorkingD.inpts_baseline;
+DATA inpts_obs;
+	SET WorkingD.inpts_obs;
+DATA outpts_obs;
+	SET WorkingD.outpts_obs;
+DATA dx_baseline;
+	SET WorkingD.dx_baseline;
+DATA dx_obs;
+	SET WorkingD.dx_obs;
+DATA inpt_baseline;
+	SET WorkingD.inpt_baseline;
+DATA inpt_obs;
+	SET WorkingD.inpt_obs;
+RUN;
+
+PROC SQL;
+CREATE TABLE inpat_count as
+	SELECT min(enrolid) as enrolid,
+			count(ADMDATE) as pre_admission
+	FROM inpt_baseline
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_list as
+	SELECT a.*,
+			b.pre_admission
+	FROM id_list a LEFT JOIN inpat_count b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC PRINT DATA=id_list; RUN;
+
+PROC SQL;
+CREATE TABLE inpat_count as
+	SELECT min(enrolid) as enrolid,
+			count(ADMDATE) as post_admission
+	FROM inpt_obs
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_list as
+	SELECT a.*,
+			b.post_admission
+	FROM id_list a LEFT JOIN inpat_count b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*ER visits;
+
+DATA ER_baseline;
+	SET outpts_baseline;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0981') THEN ER=1;
+	ELSE IF STDPLAC in ('23','220','428') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120', '10420','10320','10220','12220','20220','10520','20120','21120','21220','22320',
+						'22120','30220','30120','30420','30320','30520','30620','31120','31420','31320','31520',
+						'31220','31620') THEN ER=1;
+	IF ER=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE ER_count as
+	SELECT min(enrolid) as enrolid,
+			count(SVCDATE) as pre_ER
+	FROM ER_baseline
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_list as
+	SELECT a.*,
+			b.pre_ER
+	FROM id_list a LEFT JOIN ER_count b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA ER_obs;
+	SET outpts_obs;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0981') THEN ER=1;
+	ELSE IF STDPLAC in ('23','220','428') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120', '10420','10320','10220','12220','20220','10520','20120','21120','21220','22320',
+						'22120','30220','30120','30420','30320','30520','30620','31120','31420','31320','31520',
+						'31220','31620') THEN ER=1;
+	IF ER=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE ER_count as
+	SELECT min(enrolid) as enrolid,
+			count(SVCDATE) as post_ER
+	FROM ER_obs
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_list as
+	SELECT a.*,
+			b.post_ER
+	FROM id_list a LEFT JOIN ER_count b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*Transfusion;
+
+DATA svc_baseline;
+set outpts_baseline inpts_baseline;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('36430'	'P9011' 'P9016' 'P9021' 'P9022' 'P9038' 'P9039' 'P9040' 'P9051' 'P9054' 'P9057' 'P9058') then transfusion = 1;
+end;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('990') then transfusion = 1;
+end;
+IF REVCODE in: ('038','039') then transfusion = 1;
+if transfusion = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE transfusion_count as
+	SELECT min(enrolid) as enrolid,
+			count(SVCDATE) as pre_transfusion
+	FROM svc_baseline
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_list as
+	SELECT a.*,
+			b.pre_transfusion
+	FROM id_list a LEFT JOIN transfusion_count b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA svc_obs;
+set outpts_obs inpts_obs;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('36430'	'P9011' 'P9016' 'P9021' 'P9022' 'P9038' 'P9039' 'P9040' 'P9051' 'P9054' 'P9057' 'P9058') then transfusion = 1;
+end;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('990') then transfusion = 1;
+end;
+IF REVCODE in: ('038','039') then transfusion = 1;
+if transfusion = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE transfusion_count as
+	SELECT min(enrolid) as enrolid,
+			count(SVCDATE) as post_transfusion
+	FROM svc_obs
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_list as
+	SELECT a.*,
+			b.post_transfusion
+	FROM id_list a LEFT JOIN transfusion_count b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC PRINT DATA=id_list; RUN;
+
+data id_list;
+   set id_list;
+   array change _numeric_;
+        do over change;
+            if change=. then change=0;
+        end;
+ run ;
+
+ DATA high_id_list;
+ 	SET id_list;
+	IF ESA_cat=1;
+RUN;
+
+
+    ods graphics on;
+   
+   proc ttest DATA=high_id_list;
+      paired pre_transfusion*post_transfusion;
+   run;
+   
+   ods graphics off;
+
+DATA WorkingD.id_list;
+   	SET id_list;
+RUN;
