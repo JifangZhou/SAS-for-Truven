@@ -1,0 +1,134 @@
+LIBNAME WorkingD "C:\Users\jzhou86\Documents\SCD Project\Subproject ESA transfusion and CKD";
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+LIBNAME Inptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\InpatientSummary';
+LIBNAME Outptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\OutpatientService';
+LIBNAME Drugall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Drug Prescriptions';
+LIBNAME inptsvc 'C:\Users\jzhou86\Documents\Opioid in SCD pregnancy\Raw Data\InpatientServices';
+LIBNAME insur 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Insurance Records';
+
+DATA inpt_sum;
+SET Inptall.scd_ccaei_09 Inptall.scd_ccaei_10 Inptall.scd_ccaei_11 Inptall.scd_ccaei_12 Inptall.scd_ccaei_13
+	Inptall.scd_mdcri_09 Inptall.scd_mdcri_10 Inptall.scd_mdcri_11 Inptall.scd_mdcri_12 Inptall.scd_mdcri_13;
+DATA outpt_svc;
+SET	Outptall.scd_ccaeo_09 Outptall.scd_ccaeo_10 Outptall.scd_ccaeo_11 Outptall.scd_ccaeo_12 Outptall.scd_ccaeo_13
+	Outptall.scd_mdcro_09 Outptall.scd_mdcro_10 Outptall.scd_mdcro_11 Outptall.scd_mdcro_12 Outptall.scd_mdcro_13;
+DATA drug_pres;
+SET	Drugall.scd_ccaed_09 Drugall.scd_ccaed_10 Drugall.scd_ccaed_11 Drugall.scd_ccaed_12 Drugall.scd_ccaed_13
+	Drugall.scd_mdcrd_09 Drugall.scd_mdcrd_10 Drugall.scd_mdcrd_11 Drugall.scd_mdcrd_12 Drugall.scd_mdcrd_13;
+DATA inpt_svc;
+SET	inptsvc.scd_ccaes_09 inptsvc.scd_ccaes_10 inptsvc.scd_ccaes_11 inptsvc.scd_ccaes_12 inptsvc.scd_ccaes_13
+	inptsvc.scd_mdcrs_09 inptsvc.scd_mdcrs_10 inptsvc.scd_mdcrs_11 inptsvc.scd_mdcrs_12 inptsvc.scd_mdcrs_13;
+DATA insurance_all;
+SET	insur.scd_t_09 insur.scd_t_10 insur.scd_t_11 insur.scd_t_12 insur.scd_t_13
+	insur.scd_mdcrt_09 insur.scd_mdcrt_10 insur.scd_mdcrt_11 insur.scd_mdcrt_12 insur.scd_mdcrt_13;
+DATA redbook;
+SET Myfile.redbook;
+RUN;
+
+DATA data_all;
+SET inpt_sum outpt_svc;
+RUN;
+
+DATA all_dx_list;
+	SET data_all;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('14', '15', '16', '17', '18', '19', '20', '21' ,'22', '23') then case=1;
+		end;
+RUN;
+DATA all_list;
+	SET all_dx_list;
+	IF case=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE WorkingD.uniqID as
+SELECT min (enrolid) as enrolid,
+	min(age) as age,
+	min(sex) as sex,
+	min(region) as region,
+	min(PLANTYP) as Plan_type,
+	min(SVCDATE) as index_date
+FROM all_list
+GROUP BY enrolid;
+QUIT;
+*NOTE: The data set WORK.ALL_LIST has 834 observations and 112 variables.
+HEAD_AND_NECK created, with 38 rows and 6 columns
+NOTE: The data set WORK.ALL_LIST has 572 observations and 112 variables.
+ESOPHAGUS created, with 9 rows and 6 columns
+NOTE: The data set WORK.ALL_LIST has 23971 observations and 112 variables.
+NOTE: Table WORKINGD.UNIQID_BENIGN_NEOPLASMS created, with 1865 rows and 6 columns.
+NOTE: The data set WORK.ALL_LIST has 854 observations and 112 variables.
+NOTE: Table WORKINGD.UNIQID_CA_IN_SITU created, with 98 rows and 6 columns.
+;
+
+PROC MEANS DATA=WorkingD.uniqID;
+VAR YEAR;
+RUN;
+
+DATA WorkingD.uniqID;
+	SET WorkingD.uniqID;
+	index_year=YEAR(index_date);
+RUN;
+
+DATA WorkingD.uniqID;
+	SET WorkingD.uniqID;
+IF age in (1:9) THEN agecate = 1 ;
+IF age in (10:19) THEN	agecate = 2 ;
+IF age in (20:29) THEN agecate = 3 ;
+IF age in (30:39) THEN	agecate = 4 ;
+IF age in (40:49) THEN agecate = 5 ;
+IF age in (50:59) THEN	agecate = 6 ;
+IF age in (60:69) THEN agecate = 7 ;
+IF age in (70:109) THEN	agecate = 8 ;
+RUN;
+
+PROC FREQ DATA=WorkingD.uniqID;
+TABLE index_year;
+RUN;
+
+1: Basic/major medical
+2: Comprehensive
+3: EPO
+4: HMO
+5: POS
+6: PPO
+7: POS with capitation
+8: CDHP
+9: HDHP
+
+'14', '15', '16', '17', '18', '19', '20', '21' ,'22', '23'
+	Esophagus=0;
+	array icd2{*} dx1-dx15;
+		do i = 1 to dim(icd2);
+		if icd{i} in: ('15') then Esophagus=1;
+		end;
+
+Head and neck 140-14999
+Esophagus 150-15099
+Stomach and small intestine 151-15299
+Colon and rectum 153-15489
+Liver 155-15529
+Gallbladder 156-15699
+Pancreas 157-15799
+Retroperitoneum and peritoneum 158-15899
+Spleen 159-15999
+Lung 162-16399
+Other respiratory 160-16199, 164-16599
+Bone 170-17099
+Connective and soft tissue 171-17199
+Melanoma 172-17299
+Female breast 174-17499
+Male breast 1750 or 1759
+Sarcoma 176-17699
+Gynecologic 179-18499
+Prostate 185
+Other genitourinary 186-18999
+Central nervous system 190-19299
+Endocrine 193-19499
+Non-Hodgkin’s lymphoma 200-20099, 202-20299
+Hodgkin’s lymphoma 201-20199
+Multiple myeloma 203-20380
+Leukemia 204-20891
+Ill-defined 195-19599, 199-19999
