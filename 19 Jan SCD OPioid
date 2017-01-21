@@ -1,0 +1,637 @@
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+LIBNAME Inptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\InpatientSummary';
+LIBNAME Outptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\OutpatientService';
+LIBNAME Drugall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Drug Prescriptions';
+LIBNAME inptsvc 'C:\Users\jzhou86\Documents\Opioid in SCD pregnancy\Raw Data\InpatientServices';
+LIBNAME insur 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Insurance Records';
+LIBNAME Data1415 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\14-15 SCD data';
+
+DATA inpt_sum;
+SET Inptall.scd_ccaei_09 Inptall.scd_ccaei_10 Inptall.scd_ccaei_11 Inptall.scd_ccaei_12 Inptall.scd_ccaei_13
+	Inptall.scd_mdcri_09 Inptall.scd_mdcri_10 Inptall.scd_mdcri_11 Inptall.scd_mdcri_12 Inptall.scd_mdcri_13
+	Data1415.scd_ccaei_142  
+	Data1415.scd_mdcri_142;
+DATA outpt_svc;
+SET	Outptall.scd_ccaeo_09 Outptall.scd_ccaeo_10 Outptall.scd_ccaeo_11 Outptall.scd_ccaeo_12 Outptall.scd_ccaeo_13
+	Outptall.scd_mdcro_09 Outptall.scd_mdcro_10 Outptall.scd_mdcro_11 Outptall.scd_mdcro_12 Outptall.scd_mdcro_13
+	Data1415.scd_ccaeo_142 
+	Data1415.scd_mdcro_142;
+DATA drug_pres;
+SET	Drugall.scd_ccaed_09 Drugall.scd_ccaed_10 Drugall.scd_ccaed_11 Drugall.scd_ccaed_12 Drugall.scd_ccaed_13
+	Drugall.scd_mdcrd_09 Drugall.scd_mdcrd_10 Drugall.scd_mdcrd_11 Drugall.scd_mdcrd_12 Drugall.scd_mdcrd_13
+	Data1415.scd_ccaed_142  
+	Data1415.scd_mdcrd_142;
+DATA inpt_svc;
+SET	inptsvc.scd_ccaes_09 inptsvc.scd_ccaes_10 inptsvc.scd_ccaes_11 inptsvc.scd_ccaes_12 inptsvc.scd_ccaes_13
+	inptsvc.scd_mdcrs_09 inptsvc.scd_mdcrs_10 inptsvc.scd_mdcrs_11 inptsvc.scd_mdcrs_12 inptsvc.scd_mdcrs_13
+	Data1415.scd_ccaes_142 
+	Data1415.scd_mdcrs_142;
+DATA insurance_all;
+SET	insur.scd_ccaet_09 insur.scd_ccaet_10 insur.scd_ccaet_11 insur.scd_ccaet_12 insur.scd_ccaet_13
+	insur.scd_mdcrt_09 insur.scd_mdcrt_10 insur.scd_mdcrt_11 insur.scd_mdcrt_12 insur.scd_mdcrt_13
+	Data1415.scd_ccaet_142 
+	Data1415.scd_mdcrt_142;
+RUN;
+
+DATA all_record;
+	SET outpt_svc
+		inpt_sum;
+RUN;
+
+data  acute_care_list;
+set inpt_sum;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('28261','28262','28263','28264','28265','28266','28267','28268','28269','28241','28242') then scd = 1;
+end;
+if scd = 1;
+run; 
+
+
+PROC SQL;
+	CREATE TABLE scd_inpatient_list as
+	SELECT min(enrolid) as enrolid,
+		MIN(ADMDATE) as index_date
+	FROM acute_care_list
+	GROUP BY enrolid;
+QUIT;
+
+data  opt_care_list;
+set outpt_svc;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('28261','28262','28263','28264','28265','28266','28267','28268','28269','28241','28242') then scd = 1;
+end;
+if scd = 1;
+run; 
+
+PROC SQL;
+	CREATE TABLE scd_outpatient_list as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) as index_date,
+		max(SVCDATE) as last_date
+	FROM opt_care_list
+	GROUP BY enrolid;
+QUIT;
+
+DATA scd_outpatient_list;
+	SET scd_outpatient_list;
+	date_diff=last_date-index_date;
+	IF date_diff>=30;
+RUN;
+
+
+PROC SQL;
+	CREATE TABLE scd_outpatient_list as
+	SELECT min(enrolid) as enrolid,
+		MIN(index_date) as index_date
+	FROM scd_outpatient_list
+	GROUP BY enrolid;
+QUIT;
+
+DATA Dx_all;
+	SET scd_outpatient_list
+		scd_inpatient_list;
+RUN;
+
+PROC SQL;
+	CREATE TABLE SCD_Dx_all as
+	SELECT min(enrolid) as enrolid,
+		MIN(index_date) as index_date
+	FROM Dx_all
+	GROUP BY enrolid;
+QUIT;
+
+DATA all_records_SCT;
+	SET all_record;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('V4281','V4282') then case=1;
+		end;
+	if case=1;
+RUN;
+
+PROC SQL;
+	CREATE TABLE sct_list as
+	SELECT min(enrolid) as enrolid
+	FROM all_records_SCT
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE SCD_Dx1 as
+	SELECT a.*
+	FROM SCD_Dx_all a
+	LEFT JOIN sct_list b
+	ON a.enrolid=b.enrolid
+	WHERE b.enrolid is null;
+QUIT;
+
+DATA all_records_organ_transplant;
+	SET all_record;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('V420','V421','V427','V432','V438') then case=1;
+		end;
+	if case=1;
+RUN;
+
+PROC SQL;
+	CREATE TABLE organ_tranpt_list as
+	SELECT min(enrolid) as enrolid
+	FROM all_records_organ_transplant
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE SCD_Dx2 as
+	SELECT a.*
+	FROM SCD_Dx1 a
+	LEFT JOIN organ_tranpt_list b
+	ON a.enrolid=b.enrolid
+	WHERE b.enrolid is null;
+QUIT;
+
+DATA all_cancer;
+	SET all_record;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('14', '15', '16', '17', '18', '19', '20') then case=1;
+		end;
+	if case=1;
+RUN;
+
+PROC SQL;
+	CREATE TABLE cancer_list as
+	SELECT min(enrolid) as enrolid
+	FROM all_cancer
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE SCD_Dx3 as
+	SELECT a.*
+	FROM SCD_Dx2 a
+	LEFT JOIN cancer_list b
+	ON a.enrolid=b.enrolid
+	WHERE b.enrolid is null;
+QUIT;
+
+DATA all_SC_trait;
+	SET all_record;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		IF (icd{i} =: '2825') then  case=1;
+		end;
+	if case=1;
+RUN;
+
+PROC SQL;
+	CREATE TABLE SC_trait_list as
+	SELECT min(enrolid) as enrolid
+	FROM all_SC_trait
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE Myfile.SCD_Dx4 as
+	SELECT a.*
+	FROM SCD_Dx3 a
+	LEFT JOIN SC_trait_list b
+	ON a.enrolid=b.enrolid
+	WHERE b.enrolid is null;
+QUIT;
+
+*Create list with 24 months' continuous enrollent;
+Data SCD_ID_list;
+	SET Myfile.SCD_Dx4;
+RUN;
+
+
+PROC SORT DATA=insurance_all;
+	by enrolid DTSTART ;
+RUN;
+
+PROC SORT DATA=SCD_ID_list;
+	by enrolid;
+RUN;
+
+DATA SCD_insurance_record;
+MERGE SCD_ID_list (in=a keep=enrolid index_date) insurance_all(in=b keep=enrolid DTSTART DTEND MEMDAYS );
+by enrolid;
+if a=1 and b=1;
+run;
+
+proc sort data=SCD_insurance_record; by enrolid index_date ; run;
+proc print data= SCD_insurance_record (firstobs=53000 obs=53100); run;
+
+data enroll_post;
+set  SCD_insurance_record;
+if index_date < DTSTART <= index_date+760 then output enroll_post;
+run;
+*NOTE: The data set WORK.ENROLL_POST has 201258 observations and 5 variables.;
+proc summary nway data= enroll_post;
+var MEMDAYS;
+by enrolid;
+output out=enroll_post_sum sum=enroll_day;
+run;
+proc univariate data=enroll_post_sum; var enroll_day; histogram; run;
+DATA enroll_post_sum;
+	SET enroll_post_sum;
+	IF enroll_day>=730;
+RUN;
+
+PROC SORT DATA=enroll_post_sum;	by enrolid; RUN;
+PROC SORT DATA=enroll_post;	by enrolid; RUN;
+PROC SORT DATA=all_record;	by enrolid;RUN;
+
+DATA SCD_all_record;
+MERGE enroll_post_sum (in=a) all_record(in=b);
+by enrolid;
+if a=1 and b=1;
+run;
+
+DATA SCD_all_record1;
+MERGE enroll_post (in=a keep=enrolid index_date) SCD_all_record(in=b);
+by enrolid;
+if a=1 and b=1;
+run;
+
+PROC SQL;
+	CREATE TABLE cohort_case as
+	SELECT 	min (enrolid) as enrolid,
+			min(age) as index_age,
+			min(sex) as sex,
+			min(region) as region,
+			min(index_date) as index_date,
+			min(YEAR(index_date)) as index_year
+	FROM SCD_all_record1
+	GROUP BY enrolid;
+QUIT;
+
+DATA cohort_case;
+	SET cohort_case;
+	IF index_age<=9 THEN age_cat1=1;
+	ELSE IF index_age<=19 THEN age_cat1=2;
+	ELSE IF index_age<=29 THEN age_cat1=3;
+	ELSE IF index_age<=39 THEN age_cat1=4;
+	ELSE IF index_age<=49 THEN age_cat1=5;
+	ELSE IF index_age>=50 THEN age_cat1=6;
+RUN;
+
+PROC FREQ DATA=cohort_case;
+	TABLE age_cat1*sex;
+RUN;
+
+PROC MEANS DATA=cohort_case MEDIAN P25 P75;
+	VAR index_age;
+RUN;
+
+*Identification of ER and IR opioid over first 12 months and 24 months';
+
+DATA narcoticall_ndc;
+	SET Myfile.narcoticall_ndc;
+DATA nsaids_ndc;
+	SET Myfile.nsaids_ndc;
+RUN;
+
+PROC SQL;
+CREATE TABLE dx_all_24 as
+	SELECT 	a.*,
+		b.*
+	FROM drug_pres a
+	INNER JOIN cohort_case b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA dx_pre_12;
+	SET dx_all_24;
+	IF index_date<=SVCDATE<index_date+365;
+RUN;
+
+DATA dx_post_12;
+	SET dx_all_24;
+	IF index_date+366<=SVCDATE<=index_date+730;
+RUN;
+
+PROC sql;
+	CREATE table temp_opioids as
+	SELECT a.*,
+		b.flag
+	FROM dx_pre_12 a
+	INNER JOIN narcoticall_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC FREQ DATA=temp_opioids ORDER=FREQ;
+	TABLE flag;
+RUN;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as prior_opioid
+	FROM temp_opioids;
+QUIT;
+
+PROC sql;
+	CREATE table id_file as
+	SELECT a.*,
+		b.prior_opioid
+	FROM cohort_case a
+	LEFT JOIN temp_list b
+	ON a.enrolid =b.enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table temp as
+	SELECT min(flag) as flag,
+			min(enrolid) as enrolid
+	FROM temp_opioids
+	GROUP BY enrolid, flag;
+QUIT;
+PROC sql;
+	CREATE table temp as
+	SELECT min(flag) as flag,
+			count(enrolid) as number
+	FROM temp
+	GROUP BY flag;
+QUIT;
+
+PROC PRINT DATA=temp;RUN;
+
+DATA narcoticall_ndc;
+	SET narcoticall_ndc;
+	IF (find(MSTFMDS, 'Extended Release') OR FLAG='Methadone') THEN ER=1;
+	IF (find(MSTFMDS, 'Extended Release')=0 AND FLAG^='Methadone') THEN IR=1;
+RUN; 
+DATA narcoticall_ndc;
+	SET narcoticall_ndc;
+	IF ER=. THEN ER=0;
+	IF IR=. THEN IR=0;
+RUN;
+
+PROC FREQ DATA=narcoticall_ndc;
+TABLE IR*ER;
+RUN;
+
+PROC sql;
+	CREATE table temp_opioids as
+	SELECT a.*,
+		b.flag,
+		b.ER,
+		b.IR
+	FROM dx_pre_12 a
+	INNER JOIN narcoticall_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+DATA temp_opioids1;
+	SET temp_opioids;
+	IF ER=1;
+RUN;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as prior_ER_opioid
+	FROM temp_opioids1;
+QUIT;
+* consider drop ER variables before join;
+DATA id_file;
+	SET id_file;
+	DROP prior_ER_opioid prior_IR_opioid;
+RUN;
+
+PROC sql;
+	CREATE table id_file as
+	SELECT a.*,
+		b.prior_ER_opioid
+	FROM id_file a
+	LEFT JOIN temp_list b
+	ON a.enrolid =b.enrolid;
+QUIT;
+
+DATA temp_opioids;
+	SET temp_opioids;
+	IF IR=1;
+RUN;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as prior_IR_opioid
+	FROM temp_opioids;
+QUIT;
+
+PROC sql;
+	CREATE table id_file as
+	SELECT a.*,
+		b.prior_IR_opioid
+	FROM id_file a
+	LEFT JOIN temp_list b
+	ON a.enrolid =b.enrolid;
+QUIT;
+PROC PRINT DATA=id_file (obs=50);RUN;
+
+DATA myfile.id_file_prior_opioid;
+	SET id_file;
+RUN;
+
+
+
+PROC sql;
+	CREATE table temp_opioids as
+	SELECT a.*,
+		b.flag,
+		b.ER,
+		b.IR
+	FROM dx_post_12 a
+	INNER JOIN narcoticall_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+DATA temp_opioids1;
+	SET temp_opioids;
+	IF ER=1;
+RUN;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as post_ER_opioid
+	FROM temp_opioids1;
+QUIT;
+
+PROC sql;
+	CREATE table id_file as
+	SELECT a.*,
+		b.post_ER_opioid
+	FROM id_file a
+	LEFT JOIN temp_list b
+	ON a.enrolid =b.enrolid;
+QUIT;
+
+DATA temp_opioids;
+	SET temp_opioids;
+	IF IR=1;
+RUN;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as post_IR_opioid
+	FROM temp_opioids;
+QUIT;
+
+PROC sql;
+	CREATE table id_file as
+	SELECT a.*,
+		b.post_IR_opioid
+	FROM id_file a
+	LEFT JOIN temp_list b
+	ON a.enrolid =b.enrolid;
+QUIT;
+
+DATA myfile.ID_file_opioid;
+	SET id_file;
+	array change _numeric_;
+        do over change;
+            if change=. then change=0;
+        end;
+	IF max(prior_IR_opioid,post_IR_opioid,prior_ER_opioid,post_ER_opioid)=0 THEN opioid_status='Non_user';
+	ELSE IF max(prior_IR_opioid,post_IR_opioid)=1 AND max(prior_ER_opioid,post_ER_opioid)=1 THEN opioid_status='Both_user';
+	ELSE IF max(prior_IR_opioid,post_IR_opioid)=0 AND max(prior_ER_opioid,post_ER_opioid)=1 THEN opioid_status='ER_user';
+	ELSE IF max(prior_IR_opioid,post_IR_opioid)=1 AND max(prior_ER_opioid,post_ER_opioid)=0 THEN opioid_status='IR_user';
+RUN;
+PROC PRINT DATA=id_file (obs=50);RUN;
+
+PROC FREQ DATA=myfile.ID_file_opioid;
+	TABLE opioid_status*age_cat1 /nopercent norow nocol;
+RUN;
+
+DATA child_list;
+	SET id_file;
+	IF index_age<18;
+DATA adult_list;
+	SET id_file;
+	IF index_age>=18;
+RUN;
+
+DATA dx_all_24;
+	SET dx_pre_12 dx_post_12;
+RUN;
+
+PROC sql;
+	CREATE table child_drug as
+	SELECT a.*
+	FROM dx_all_24 a
+	INNER JOIN child_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table child_opioids as
+	SELECT a.*,
+		b.flag
+	FROM child_drug a
+	INNER JOIN narcoticall_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC FREQ DATA=child_opioids ORDER=FREQ;
+TABLE flag;
+RUN;
+
+PROC sql;
+	CREATE table temp as
+	SELECT min(flag) as flag,
+			min(enrolid) as enrolid
+	FROM child_opioids
+	GROUP BY enrolid, flag;
+QUIT;
+PROC sql;
+	CREATE table temp as
+	SELECT min(flag) as flag,
+			count(enrolid) as number
+	FROM temp
+	GROUP BY flag;
+QUIT;
+
+PROC PRINT DATA=temp;
+RUN;
+
+PROC sql;
+	CREATE table list_drug_temp as
+	SELECT distinct enrolid
+	FROM child_opioids;
+QUIT;
+
+PROC sql;
+	CREATE table adult_drug as
+	SELECT a.*
+	FROM dx_all_24 a
+	INNER JOIN adult_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table adult_opioids as
+	SELECT a.*,
+		b.flag
+	FROM adult_drug a
+	INNER JOIN narcoticall_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC FREQ DATA=adult_opioids ORDER=FREQ;
+TABLE flag;
+RUN;
+
+PROC sql;
+	CREATE table temp as
+	SELECT min(flag) as flag,
+			min(enrolid) as enrolid
+	FROM adult_opioids
+	GROUP BY enrolid, flag;
+QUIT;
+PROC sql;
+	CREATE table temp as
+	SELECT min(flag) as flag,
+			count(enrolid) as number
+	FROM temp
+	GROUP BY flag;
+QUIT;
+
+PROC PRINT DATA=temp;
+RUN;
+
+PROC sql;
+	CREATE table list_drug_temp as
+	SELECT distinct enrolid
+	FROM adult_opioids;
+QUIT;
+
+
+* calculate the strength of the drugs;
+PROC sql;
+	CREATE table pre_opioids as
+	SELECT a.*,
+		b.flag
+	FROM dx_pre_12 a
+	INNER JOIN narcoticall_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table post_opioids as
+	SELECT a.*,
+		b.flag,
+		b.STRNGTH
+	FROM dx_post_12 a
+	INNER JOIN narcoticall_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
