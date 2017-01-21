@@ -1,0 +1,139 @@
+LIBNAME WorkingD "C:\Users\jzhou86\Documents\SCD Project\Subproject with Dr. Jain";
+DATA all_records;
+	SET  	WorkingD.inpt_sum_records 
+			WorkingD.outpt_svc_records 
+			WorkingD.inpt_svc_records;
+DATA id_list;
+	SET WorkingD.final_list_12mpost_only;
+RUN;
+
+
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+LIBNAME Inptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\InpatientSummary';
+LIBNAME Outptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\OutpatientService';
+LIBNAME Drugall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Drug Prescriptions';
+LIBNAME inptsvc 'C:\Users\jzhou86\Documents\Opioid in SCD pregnancy\Raw Data\InpatientServices';
+LIBNAME insur 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Insurance Records';
+
+DATA inpt_sum;
+SET Inptall.scd_ccaei_09 Inptall.scd_ccaei_10 Inptall.scd_ccaei_11 Inptall.scd_ccaei_12 Inptall.scd_ccaei_13
+	Inptall.scd_mdcri_09 Inptall.scd_mdcri_10 Inptall.scd_mdcri_11 Inptall.scd_mdcri_12 Inptall.scd_mdcri_13;
+DATA outpt_svc;
+SET	Outptall.scd_ccaeo_09 Outptall.scd_ccaeo_10 Outptall.scd_ccaeo_11 Outptall.scd_ccaeo_12 Outptall.scd_ccaeo_13
+	Outptall.scd_mdcro_09 Outptall.scd_mdcro_10 Outptall.scd_mdcro_11 Outptall.scd_mdcro_12 Outptall.scd_mdcro_13;
+DATA drug_pres;
+SET	Drugall.scd_ccaed_09 Drugall.scd_ccaed_10 Drugall.scd_ccaed_11 Drugall.scd_ccaed_12 Drugall.scd_ccaed_13
+	Drugall.scd_mdcrd_09 Drugall.scd_mdcrd_10 Drugall.scd_mdcrd_11 Drugall.scd_mdcrd_12 Drugall.scd_mdcrd_13;
+DATA inpt_svc;
+SET	inptsvc.scd_ccaes_09 inptsvc.scd_ccaes_10 inptsvc.scd_ccaes_11 inptsvc.scd_ccaes_12 inptsvc.scd_ccaes_13
+	inptsvc.scd_mdcrs_09 inptsvc.scd_mdcrs_10 inptsvc.scd_mdcrs_11 inptsvc.scd_mdcrs_12 inptsvc.scd_mdcrs_13;
+DATA insurance_all;
+SET	insur.scd_ccaet_09 insur.scd_ccaet_10 insur.scd_ccaet_11 insur.scd_ccaet_12 insur.scd_ccaet_13
+	insur.scd_mdcrt_09 insur.scd_mdcrt_10 insur.scd_mdcrt_11 insur.scd_mdcrt_12 insur.scd_mdcrt_13;
+RUN;
+
+DATA all_record;
+	SET outpt_svc
+		inpt_sum
+		inpt_svc;
+RUN;
+
+PROC SQL;
+	CREATE TABLE scd_records as
+	SELECT a.*,
+			b.index_date
+	FROM all_record a
+	INNER JOIN WorkingD.uniqID_12mpost_only b
+	on a.enrolid=b.enrolid;
+QUIT;
+
+
+PROC SQL;
+	CREATE TABLE insurance_records as
+	SELECT a.*,
+			b.index_date
+	FROM insurance_all a
+	INNER JOIN WorkingD.uniqID_12mpost_only b
+	on a.enrolid=b.enrolid;
+QUIT;
+PROC CONTENTS DATA=WorkingD.uniqID_12mpost_only; RUN;
+
+DATA all_records_cancer;
+	SET scd_records;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('14', '15', '16', '17', '18', '19', '20') then case=1;
+		end;
+	if case=1;
+RUN;
+
+PROC PRINT DATA= all_records_cancer; RUN;
+PROC SQL;
+	CREATE TABLE cohort_case as
+	SELECT 	min (enrolid) as enrolid,
+			min(age) as index_age,
+			min(sex) as sex,
+			min(index_date) as index_date,
+			min(SVCDATE) as SVCDATE,
+			min(ADMDATE) as ADMDATE,
+			min(YEAR(index_date)) as index_year
+	FROM all_records_cancer
+	GROUP BY enrolid;
+QUIT;
+
+DATA cohort_case;
+	SET cohort_case;
+	event_date=min(SVCDATE,ADMDATE);
+	laps_time=event_date-index_date;
+RUN;
+
+PROC FREQ DATA=cohort_case;
+	TABLE laps_time;
+RUN;
+
+proc univariate data=cohort_case; var laps_time; histogram; run;
+
+
+PROC SQL;
+	CREATE TABLE insu_records as
+	SELECT 	enrolid,
+			max(DTEND) as END_enroll
+	FROM insurance_all
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+ CREATE table id_list as
+ SELECT a.*,
+		b.END_enroll
+ FROM WorkingD.uniqID_12mpost_only a
+ INNER JOIN insu_records b
+ ON a.enrolid=b.enrolid;
+ QUIT;
+
+PROC SQL;
+	CREATE table id_list_final as
+ 	SELECT a.*,
+		b.event_date
+ FROM id_list a
+ LEFT JOIN cohort_case b
+ ON a.enrolid=b.enrolid;
+ QUIT;
+
+ DATA WorkingD.id_list_final;
+ SET id_list_final;RUN;
+
+ PROC FREQ DATA=id_list_final;
+ TABLE event_date;
+ RUN;
+
+ DATA WorkingD.id_list_final1;
+ 	SET WorkingD.id_list_final;
+	cen_status=0;
+	IF event_date=. THEN time=END_enroll;
+	IF event_date=. THEN cen_status=1;	
+	IF event_date^=. THEN time=event_date;
+RUN;
+
+PROC PRINT DATA=id_list_final; 
