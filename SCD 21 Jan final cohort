@@ -1,0 +1,503 @@
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+
+DATA NSAIDS_NDC;
+	SET Myfile.nsaids_ndc;
+DATA redbook;
+	SET Myfile.redbook;
+DATA id_list;
+	SET Myfile.id_list_add_ome;
+DATA dx_obs;
+	SET Myfile.dx_obs;
+DATA outpt_obs;
+	SET Myfile.outpt_obs;
+DATA inpt_obs;
+	SET Myfile.inpt_obs;
+DATA outpt_baseline;
+	SET Myfile.outpt_baseline;
+DATA inpt_baseline;
+	SET Myfile.inpt_baseline;
+RUN;
+
+DATA Myfile.Hydroxyurea_NDC;
+	SET redbook;
+	WHERE GENNME contains 'Hydroxyurea';
+	FLAG = 	'Hydroxyurea';
+RUN;
+
+PROC sql;
+	CREATE table temp_hydrea as
+	SELECT dx_obs.*
+	FROM dx_obs a
+	INNER JOIN Hydroxyurea_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as post_hydrea
+	FROM temp_hydrea;
+QUIT;
+
+PROC sql;
+	CREATE table id_file as
+	SELECT a.*,
+		b.post_hydrea
+	FROM id_list a
+	LEFT JOIN temp_list b
+	ON a.enrolid =b.enrolid;
+QUIT;
+
+* Add NSAIDS use history in the observation period;
+
+PROC sql;
+	CREATE table temp_nsaids as
+	SELECT a.*
+	FROM dx_obs a
+	INNER JOIN nsaids_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as post_NSAIDS
+	FROM temp_nsaids;
+QUIT;
+
+PROC sql;
+	CREATE table id_file as
+	SELECT id_file.*,
+		b.post_NSAIDS
+	FROM id_file a
+	LEFT JOIN temp_list b
+	ON a.enrolid =b.enrolid;
+QUIT;
+* add ER visits;
+DATA ER_obs;
+	SET outpt_obs;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0981') THEN ER=1;
+	ELSE IF STDPLAC in ('23','220','428') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120', '10420','10320','10220','12220','20220','10520','20120','21120','21220','22320',
+						'22120','30220','30120','30420','30320','30520','30620','31120','31420','31320','31520',
+						'31220','31620') THEN ER=1;
+	IF ER=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE ER_count as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as SVCDATE
+	FROM ER_obs
+	GROUP BY enrolid,SVCDATE;
+QUIT;
+
+PROC SQL;
+CREATE TABLE ER_count as
+	SELECT min(enrolid) as enrolid,
+			count(SVCDATE) as ER_number
+	FROM ER_count
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_file_ER as
+	SELECT a.*,
+			b.ER_number
+	FROM id_file a 
+	LEFT JOIN ER_count b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+* Add inpatient records;
+PROC SQL;
+CREATE TABLE ADM_count as
+	SELECT min(enrolid) as enrolid,
+			min(ADMDATE) as ADMDATE
+	FROM inpt_obs
+	GROUP BY enrolid,ADMDATE;
+QUIT;
+
+PROC SQL;
+CREATE TABLE ADM_count as
+	SELECT min(enrolid) as enrolid,
+			count(ADMDATE) as ADM_number
+	FROM ADM_count
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_file_ER_ADM as
+	SELECT a.*,
+			b.ADM_number
+	FROM id_file_ER a 
+	LEFT JOIN ADM_count b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+* transfusion data to added during 13-24 months' period;
+DATA svc_obs;
+set inpt_obs outpt_obs;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('36430'	'P9011' 'P9016' 'P9021' 'P9022' 'P9038' 'P9039' 'P9040' 'P9051' 'P9054' 'P9057' 'P9058') then transfusion = 1;
+end;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('990') then transfusion = 1;
+end;
+IF REVCODE in: ('038','039') then transfusion = 1;
+if transfusion = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE transfusion as
+	SELECT min(enrolid) as enrolid,
+			1 as transfusion
+	FROM svc_obs
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_file_ER_ADM_Trans as
+	SELECT a.*,
+			b.transfusion
+	FROM id_file_ER_ADM a 
+	LEFT JOIN transfusion b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_file;
+	SET id_file_ER_ADM_Trans;
+RUN;
+* Add acute conditions: veno-occusive crisis, acute chest syndrome, and acute renal injury ;
+DATA svc_obs;
+set inpt_obs outpt_obs;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('28242', '28262', '28264', '28269') then veno_occusive_crisis = 1;
+end;
+if veno_occusive_crisis = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as veno_occusive_crisis
+	FROM svc_obs
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_file_VOC as
+	SELECT a.*,
+			b.veno_occusive_crisis
+	FROM id_file a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA svc_obs;
+set inpt_obs outpt_obs;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('5173') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as acute_chest_syndrome
+	FROM svc_obs
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_file_VOC_ACS as
+	SELECT a.*,
+			b.acute_chest_syndrome
+	FROM id_file_VOC a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA svc_obs;
+set inpt_obs outpt_obs;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('584') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as acute_renal_injury
+	FROM svc_obs
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_file_VOC_ACS_ARI as
+	SELECT a.*,
+			b.acute_renal_injury
+	FROM id_file_VOC_ACS a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+* Add Chronic medical conditions using 24 months' period;
+
+DATA Myfile.id_file_VOC_ACS_ARI;
+	SET id_file_VOC_ACS_ARI;
+DATA id_file;
+	SET id_file_VOC_ACS_ARI;	
+RUN;
+
+DATA svc_obs;
+set inpt_obs outpt_obs inpt_baseline outpt_baseline ;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('4280') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Chronic_heart_failure
+	FROM svc_obs
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_file_CHF as
+	SELECT a.*,
+			b.Chronic_heart_failure
+	FROM id_file a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA svc_obs;
+set inpt_obs outpt_obs inpt_baseline outpt_baseline ;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('571') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Chronic_liver_failure
+	FROM svc_obs
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_file_CHF_CLF as
+	SELECT a.*,
+			b.Chronic_liver_failure
+	FROM id_file_CHF a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA svc_obs;
+set inpt_obs outpt_obs inpt_baseline outpt_baseline ;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('585') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Chronic_renal_disease
+	FROM svc_obs
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_file1 as
+	SELECT a.*,
+			b.Chronic_renal_disease
+	FROM id_file_CHF_CLF a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA svc_obs;
+set inpt_obs outpt_obs inpt_baseline outpt_baseline ;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('430', '431', '432', '43301', '43311', '43321', 
+				'43331', '43341', '43351', '43361', '43371', '43381', '43391', '434') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Stroke
+	FROM svc_obs
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_file2 as
+	SELECT a.*,
+			b.Stroke
+	FROM id_file1 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA svc_obs;
+set inpt_obs outpt_obs inpt_baseline outpt_baseline ;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('4150', '4160'; '4168') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Pulmonary_hypertension
+	FROM svc_obs
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_file3 as
+	SELECT a.*,
+			b.Pulmonary_hypertension
+	FROM id_file2 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA svc_obs;
+set inpt_obs outpt_obs inpt_baseline outpt_baseline ;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('73340','73341','73342','73343','73344', '73349') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Avascular_necrosis
+	FROM svc_obs
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_file4 as
+	SELECT a.*,
+			b.Avascular_necrosis
+	FROM id_file3 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA svc_obs;
+set inpt_obs outpt_obs inpt_baseline outpt_baseline ;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('6073') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Priapism
+	FROM svc_obs
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_file5 as
+	SELECT a.*,
+			b.Priapism
+	FROM id_file4 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA svc_obs;
+set inpt_obs outpt_obs inpt_baseline outpt_baseline ;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2750') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Iron_overload
+	FROM svc_obs
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_file6 as
+	SELECT a.*,
+			b.Iron_overload
+	FROM id_file5 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA svc_obs;
+set inpt_obs outpt_obs inpt_baseline outpt_baseline ;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2839') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Hemolytic_anemia
+	FROM svc_obs
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_file7 as
+	SELECT a.*,
+			b.Hemolytic_anemia
+	FROM id_file6 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA Myfile.id_list_final;
+	SET id_file7;
+   	array change _numeric_;
+        do over change;
+            if change=. then change=0;
+        end;
+RUN;
