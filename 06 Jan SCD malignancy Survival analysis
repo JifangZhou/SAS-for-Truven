@@ -1,0 +1,114 @@
+LIBNAME WorkingD "C:\Users\jzhou86\Documents\SCD Project\Subproject with Dr. Jain";
+DATA all_records;
+	SET  	WorkingD.inpt_sum_records 
+			WorkingD.outpt_svc_records 
+			WorkingD.inpt_svc_records;
+DATA id_list;
+	SET WorkingD.id_list_final1;
+RUN;
+
+DATA id_list_new_cases;
+	SET id_list;
+	lapse_time= time-index_date;
+	IF lapse_time<365 AND cen_status=0 THEN DELETE;
+	index_year =YEAR(index_date);
+RUN;
+
+DATA id_list_cancer;
+	SET id_list_new_cases;
+	IF cen_status=0;
+	IF index_age<=9 THEN age_cat1=1;
+	ELSE IF index_age<=19 THEN age_cat1=2;
+	ELSE IF index_age<=29 THEN age_cat1=3;
+	ELSE IF index_age<=39 THEN age_cat1=4;
+	ELSE IF index_age<=49 THEN age_cat1=5;
+	ELSE IF index_age<=59 THEN age_cat1=6;
+	ELSE IF index_age<=69 THEN age_cat1=7;
+	ELSE IF index_age<=79 THEN age_cat1=8;
+	ELSE IF index_age>=80 THEN age_cat1=9;
+	index_year =YEAR(index_date);
+RUN;
+PROC FREQ DATA=id_list_cancer;
+TABLE index_year;
+RUN;
+PROC MEANS DATA=id_list_cancer;
+VAR index_age;
+RUN;
+PROC TTest DATA=id_list_new_cases;
+CLASS cen_status;
+VAR index_age;
+RUN;
+
+PROC FREQ DATA=id_list_new_cases ;
+TABLE index_year*cen_status /chisq nopercent norow nocol;
+RUN;
+
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+LIBNAME Inptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\InpatientSummary';
+LIBNAME Outptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\OutpatientService';
+LIBNAME Drugall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Drug Prescriptions';
+LIBNAME inptsvc 'C:\Users\jzhou86\Documents\Opioid in SCD pregnancy\Raw Data\InpatientServices';
+LIBNAME insur 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Insurance Records';
+
+DATA inpt_sum;
+SET Inptall.scd_ccaei_09 Inptall.scd_ccaei_10 Inptall.scd_ccaei_11 Inptall.scd_ccaei_12 Inptall.scd_ccaei_13
+	Inptall.scd_mdcri_09 Inptall.scd_mdcri_10 Inptall.scd_mdcri_11 Inptall.scd_mdcri_12 Inptall.scd_mdcri_13;
+DATA outpt_svc;
+SET	Outptall.scd_ccaeo_09 Outptall.scd_ccaeo_10 Outptall.scd_ccaeo_11 Outptall.scd_ccaeo_12 Outptall.scd_ccaeo_13
+	Outptall.scd_mdcro_09 Outptall.scd_mdcro_10 Outptall.scd_mdcro_11 Outptall.scd_mdcro_12 Outptall.scd_mdcro_13;
+DATA drug_pres;
+SET	Drugall.scd_ccaed_09 Drugall.scd_ccaed_10 Drugall.scd_ccaed_11 Drugall.scd_ccaed_12 Drugall.scd_ccaed_13
+	Drugall.scd_mdcrd_09 Drugall.scd_mdcrd_10 Drugall.scd_mdcrd_11 Drugall.scd_mdcrd_12 Drugall.scd_mdcrd_13;
+DATA inpt_svc;
+SET	inptsvc.scd_ccaes_09 inptsvc.scd_ccaes_10 inptsvc.scd_ccaes_11 inptsvc.scd_ccaes_12 inptsvc.scd_ccaes_13
+	inptsvc.scd_mdcrs_09 inptsvc.scd_mdcrs_10 inptsvc.scd_mdcrs_11 inptsvc.scd_mdcrs_12 inptsvc.scd_mdcrs_13;
+DATA insurance_all;
+SET	insur.scd_ccaet_09 insur.scd_ccaet_10 insur.scd_ccaet_11 insur.scd_ccaet_12 insur.scd_ccaet_13
+	insur.scd_mdcrt_09 insur.scd_mdcrt_10 insur.scd_mdcrt_11 insur.scd_mdcrt_12 insur.scd_mdcrt_13;
+RUN;
+
+DATA all_record;
+	SET outpt_svc
+		inpt_sum
+		inpt_svc;
+RUN;
+
+PROC SQL;
+	CREATE TABLE scd_records as
+	SELECT a.*,
+			b.index_date
+	FROM all_record a
+	INNER JOIN id_list_new_cases b
+	on a.enrolid=b.enrolid;
+QUIT;
+
+DATA all_records_cancer;
+	SET scd_records;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('2387') then case=1;
+		end;
+	if case=1;
+RUN;
+
+PROC SQL;
+	CREATE TABLE cohort_case as
+	SELECT 	min (enrolid) as enrolid,
+			min(age) as index_age,
+			min(sex) as sex,
+			min(index_date) as index_date,
+			min(SVCDATE) as SVCDATE,
+			min(ADMDATE) as ADMDATE,
+			min(YEAR(index_date)) as index_year
+	FROM all_records_cancer
+	GROUP BY enrolid;
+QUIT;
+
+PROC PHREG DATA=id_list_new_cases;
+CLASS index_year; 
+MODEL lapse_time*cen_status(1)=; 
+STRATA index_year;
+BASELINE out=temp2 survival=survival;
+SYMBOL l=1 i=join v=dot;
+PROC GPLOT DATA=temp2; PLOT survival*lapse_time=sex; RUN;
