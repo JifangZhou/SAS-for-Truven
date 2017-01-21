@@ -1,0 +1,412 @@
+LIBNAME WorkingD "C:\Users\jzhou86\Documents\SCD Project\Subproject with Dr. Jain";
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+LIBNAME Inptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\InpatientSummary';
+LIBNAME Outptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\OutpatientService';
+LIBNAME Drugall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Drug Prescriptions';
+LIBNAME inptsvc 'C:\Users\jzhou86\Documents\Opioid in SCD pregnancy\Raw Data\InpatientServices';
+LIBNAME insur 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Insurance Records';
+
+DATA inpt_sum;
+SET Inptall.scd_ccaei_09 Inptall.scd_ccaei_10 Inptall.scd_ccaei_11 Inptall.scd_ccaei_12 Inptall.scd_ccaei_13
+	Inptall.scd_mdcri_09 Inptall.scd_mdcri_10 Inptall.scd_mdcri_11 Inptall.scd_mdcri_12 Inptall.scd_mdcri_13;
+DATA outpt_svc;
+SET	Outptall.scd_ccaeo_09 Outptall.scd_ccaeo_10 Outptall.scd_ccaeo_11 Outptall.scd_ccaeo_12 Outptall.scd_ccaeo_13
+	Outptall.scd_mdcro_09 Outptall.scd_mdcro_10 Outptall.scd_mdcro_11 Outptall.scd_mdcro_12 Outptall.scd_mdcro_13;
+DATA drug_pres;
+SET	Drugall.scd_ccaed_09 Drugall.scd_ccaed_10 Drugall.scd_ccaed_11 Drugall.scd_ccaed_12 Drugall.scd_ccaed_13
+	Drugall.scd_mdcrd_09 Drugall.scd_mdcrd_10 Drugall.scd_mdcrd_11 Drugall.scd_mdcrd_12 Drugall.scd_mdcrd_13;
+DATA inpt_svc;
+SET	inptsvc.scd_ccaes_09 inptsvc.scd_ccaes_10 inptsvc.scd_ccaes_11 inptsvc.scd_ccaes_12 inptsvc.scd_ccaes_13
+	inptsvc.scd_mdcrs_09 inptsvc.scd_mdcrs_10 inptsvc.scd_mdcrs_11 inptsvc.scd_mdcrs_12 inptsvc.scd_mdcrs_13;
+DATA insurance_all;
+SET	insur.scd_ccaet_09 insur.scd_ccaet_10 insur.scd_ccaet_11 insur.scd_ccaet_12 insur.scd_ccaet_13
+	insur.scd_mdcrt_09 insur.scd_mdcrt_10 insur.scd_mdcrt_11 insur.scd_mdcrt_12 insur.scd_mdcrt_13;
+DATA redbook;
+SET Myfile.redbook;
+RUN;
+
+DATA data_inpatient_all;
+SET inpt_sum;
+RUN;
+
+DATA all_SCDdx_inpatient_list;
+	SET data_inpatient_all;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('2826','28241','28242') then case=1;
+		end;
+	if case=1;
+RUN;
+* A total of 39137 observations;
+
+PROC SQL;
+CREATE TABLE uniqID_inpatient as
+SELECT min (enrolid) as enrolid,
+	min(age) as index_age,
+	min(sex) as sex,
+	min(ADMDATE) as index_date
+FROM all_SCDdx_inpatient_list
+GROUP BY enrolid;
+QUIT;
+* A total of 10739 unique SCD patients from inpatient records;
+
+DATA data_outpatient_all;
+SET outpt_svc;
+RUN;
+
+DATA all_SCDdx_outpatient_list;
+	SET data_outpatient_all;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('2826','28241','28242') then case=1;
+		end;
+	if case=1;
+RUN;
+*A total of 1631975 observations for SCD-related encounter;
+
+PROC SQL;
+CREATE TABLE uniqID_outpatient as
+SELECT min (enrolid) as enrolid,
+	min(age) as index_age,
+	min(sex) as sex,
+	min(SVCDATE) as index_date,
+	max(SVCDATE) as last_svc
+FROM all_SCDdx_outpatient_list
+GROUP BY enrolid;
+QUIT;
+*A total of 17237 unique patients;
+
+DATA uniqID_outpatient;
+	SET uniqID_outpatient;
+	diff= last_svc-index_date;
+	IF diff GE 30;
+RUN;
+*A total of 16359 unique patients with two SCD outpatient visits 30 days apart;
+
+DATA uniqID_SCD_list;
+	SET uniqID_inpatient
+		uniqID_outpatient;
+RUN;
+
+PROC SQL;
+CREATE TABLE uniqID_list as
+SELECT 	min (enrolid) as enrolid,
+		min(index_age) as index_age,
+		min(sex) as sex,
+		min(index_DATE) as index_date
+FROM uniqID_SCD_list
+GROUP BY enrolid;
+QUIT;
+* A total of 19144 unique patients with index dates from eligible SCD related records;
+
+* Now extract all insurance records for the listed SCD patients;
+PROC SORT DATA=insurance_all;
+	by enrolid DTSTART ;
+RUN;
+
+PROC SORT DATA=uniqID_list;
+	by enrolid;
+RUN;
+
+DATA SCD_insurance_record;
+MERGE uniqID_list (in=a keep=enrolid index_date) insurance_all(in=b keep=enrolid DTSTART DTEND MEMDAYS );
+by enrolid;
+if a=1 and b=1;
+run;
+*577543 records for insurance records;
+
+proc sort data=SCD_insurance_record; by enrolid index_date ; run;
+proc print data= SCD_insurance_record (firstobs=53000 obs=53100); run;
+**Restrict the enroll records >=6 months before SCD diagnosis***;
+data enroll_prior enroll_post;
+set  SCD_insurance_record;
+if index_date-210 <= DTSTART < index_date then output enroll_prior;
+if index_date < DTSTART <= index_date+390 then output enroll_post;
+run;
+*NOTE: The data set WORK.ENROLL_PRIOR has 70845 observations and 5 variables.
+NOTE: The data set WORK.ENROLL_POST has 197193 observations and 5 variables.;
+proc summary nway data= enroll_prior;
+var MEMDAYS;
+by enrolid;
+output out=enroll_prior_sum sum=enroll_day;
+run;
+proc univariate data=enroll_prior_sum; var enroll_day; histogram; run;
+DATA enroll_prior_sum;
+	SET enroll_prior_sum;
+	IF enroll_day>=180;
+RUN;
+* a total of 6536 unique patients have >6 months continuous enrollment history;
+
+proc summary nway data= enroll_post;
+var MEMDAYS;
+by enrolid;
+output out=enroll_post_sum sum=enroll_day;
+run;
+proc univariate data=enroll_post_sum; var enroll_day; histogram; run;
+DATA enroll_post_sum;
+	SET enroll_post_sum;
+	IF enroll_day>=365;
+RUN;
+*a total of 11,165 patients have 12 months' continuous enrollment;
+PROC PRINT DATA=uniqID_enrollment (obs=100); RUN;
+
+PROC SQL;
+CREATE TABLE uniqID_enrollment as
+SELECT a.enrolid
+FROM enroll_prior_sum a
+INNER JOIN enroll_post_sum b
+on a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE uniqID_6mprior_12mpost as
+	SELECT a.*
+	FROM uniqID_SCD_list a
+	INNER JOIN uniqID_enrollment b
+	on a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE WorkingD.uniqID_6mprior_12mpost as
+	SELECT 	min (enrolid) as enrolid,
+			min(index_age) as index_age,
+			min(sex) as sex,
+			min(index_DATE) as index_date
+	FROM uniqID_6mprior_12mpost
+	GROUP BY enrolid;
+QUIT;
+* without considering 6 month prior enrollment, creat a cohort of more patients;
+
+PROC SQL;
+	CREATE TABLE uniqID_12mpost_only as
+	SELECT a.*
+	FROM uniqID_SCD_list a
+	INNER JOIN enroll_post_sum b
+	on a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE WorkingD.uniqID_12mpost_only as
+	SELECT 	min (enrolid) as enrolid,
+			min(index_age) as index_age,
+			min(sex) as sex,
+			min(index_DATE) as index_date
+	FROM uniqID_12mpost_only
+	GROUP BY enrolid;
+QUIT;
+
+DATA id_list;
+	SET WorkingD.uniqID_12mpost_only;
+RUN;
+
+DATA all_record;
+	SET outpt_svc
+		inpt_sum
+		inpt_svc;
+RUN;
+
+PROC SQL;
+	CREATE TABLE id_records as
+	SELECT a.*,
+			b.index_date
+	FROM all_record a
+	INNER JOIN id_list b
+	on a.enrolid=b.enrolid;
+QUIT;
+
+DATA pre_index_records;
+	SET id_records;
+	IF SVCDATE<index_date OR ADMDATE<index_date;
+RUN;
+
+* definition of malignant cancer with invasive nature;
+*ICD-9 140-209;
+
+DATA all_pre_cancer_list;
+	SET pre_index_records;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('14', '15', '16', '17', '18', '19', '20') then case=1;
+		end;
+	if case=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE pre_cancer_unique_list as
+SELECT min(enrolid) as enrolid
+FROM all_pre_cancer_list
+GROUP BY enrolid;
+QUIT;
+*398 cases to be excluded due to cancer prior cancer diagnosis;
+DATA year1_index_records;
+	SET id_records;
+	IF index_date+365>SVCDATE>=index_date OR index_date+365>ADMDATE>=index_date;
+RUN;
+
+DATA year1_cancer_list;
+	SET year1_index_records;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('14', '15', '16', '17', '18', '19', '20') then case=1;
+		end;
+	if case=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE year1_cancer_unique_list as
+SELECT min(enrolid) as enrolid
+FROM year1_cancer_list
+GROUP BY enrolid;
+QUIT;
+*256 rows and 1 columns;
+
+PROC SQL;
+CREATE TABLE id_list_excluding_pre_index as
+	SELECT a.*
+	FROM id_list a
+	LEFT JOIN pre_cancer_unique_list b
+	on a.enrolid=b.enrolid
+	WHERE b.enrolid IS NULL;
+QUIT;
+
+PROC SQL;
+CREATE TABLE id_list_final as
+	SELECT a.*
+	FROM id_list_excluding_pre_index a
+	LEFT JOIN year1_cancer_unique_list b
+	on a.enrolid=b.enrolid
+	WHERE b.enrolid IS NULL;
+QUIT;
+
+DATA WorkingD.final_list_12mpost_only;
+	SET id_list_final;
+RUN;
+
+DATA id_list;
+	SET WorkingD.final_list_12mpost_only;
+RUN;
+
+
+
+
+PROC SQL;
+	CREATE TABLE WorkingD.inpt_sum_records as
+	SELECT a.*,
+			b.index_date
+	FROM inpt_sum a
+	INNER JOIN id_list b
+	on a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE WorkingD.outpt_svc_records as
+	SELECT a.*,
+			b.index_date
+	FROM outpt_svc a
+	INNER JOIN id_list b
+	on a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE WorkingD.drug_pres_records as
+	SELECT a.*,
+			b.index_date
+	FROM drug_pres a
+	INNER JOIN id_list b
+	on a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE WorkingD.inpt_svc_records as
+	SELECT a.*,
+			b.index_date
+	FROM inpt_svc a
+	INNER JOIN id_list b
+	on a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE WorkingD.insurance_all as
+	SELECT a.*,
+			b.index_date
+	FROM insurance_all a
+	INNER JOIN id_list b
+	on a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE cohort_summary as
+	SELECT 	min (enrolid) as enrolid,
+			min(age) as index_age,
+			min(sex) as sex,
+			min(index_date) as index_date,
+			min(MSA) as MSA,
+			min(YEAR(index_date)) as index_year,
+			min(region) as region
+	FROM WorkingD.insurance_all
+	GROUP BY enrolid;
+QUIT;
+
+DATA cohort_summary;
+	SET cohort_summary;
+	IF index_age<=9 THEN age_cat1=1;
+	ELSE IF index_age<=19 THEN age_cat1=2;
+	ELSE IF index_age<=29 THEN age_cat1=3;
+	ELSE IF index_age<=39 THEN age_cat1=4;
+	ELSE IF index_age<=49 THEN age_cat1=5;
+	ELSE IF index_age<=59 THEN age_cat1=6;
+	ELSE IF index_age<=69 THEN age_cat1=7;
+	ELSE IF index_age<=79 THEN age_cat1=8;
+	ELSE IF index_age>=80 THEN age_cat1=9;
+RUN;
+
+PROC PRINT DATA=all_records_cancer (obs=10);run;
+PROC FREQ DATA=cohort_summary;
+TABLE age_cat1;
+RUN;
+
+PROC MEANS DATA=cohort_summary MEDIAN P25 P75;
+VAR index_age;
+RUN;
+
+DATA all_records;
+	SET  	WorkingD.inpt_sum_records 
+			WorkingD.outpt_svc_records 
+			WorkingD.inpt_svc_records;
+RUN;
+
+DATA all_records_cancer;
+	SET all_records;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('15') then case=1;
+		end;
+	if case=1;
+RUN;
+
+PROC SQL;
+	CREATE TABLE cohort_case as
+	SELECT 	min (enrolid) as enrolid,
+			min(age) as index_age,
+			min(sex) as sex,
+			min(index_date) as index_date,
+			min(MSA) as MSA,
+			min(YEAR(index_date)) as index_year,
+			min(case) as case
+	FROM all_records_cancer
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list as
+	SELECT a.*,
+		b.case as ICD14
+	FROM id_list a
+	INNER JOIN cohort_case b
+	ON a.enrolid=b.enrolid;
+QUIT;
