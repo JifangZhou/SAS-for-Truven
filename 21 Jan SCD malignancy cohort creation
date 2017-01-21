@@ -1,0 +1,322 @@
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+LIBNAME Inptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\InpatientSummary';
+LIBNAME Outptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\OutpatientService';
+LIBNAME Drugall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Drug Prescriptions';
+LIBNAME inptsvc 'C:\Users\jzhou86\Documents\Opioid in SCD pregnancy\Raw Data\InpatientServices';
+LIBNAME insur 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Insurance Records';
+LIBNAME Data1415 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\14-15 SCD data';
+
+DATA inpt_sum;
+SET Inptall.scd_ccaei_09 Inptall.scd_ccaei_10 Inptall.scd_ccaei_11 Inptall.scd_ccaei_12 Inptall.scd_ccaei_13
+	Inptall.scd_mdcri_09 Inptall.scd_mdcri_10 Inptall.scd_mdcri_11 Inptall.scd_mdcri_12 Inptall.scd_mdcri_13
+	Data1415.scd_ccaei_142  
+	Data1415.scd_mdcri_142;
+DATA outpt_svc;
+SET	Outptall.scd_ccaeo_09 Outptall.scd_ccaeo_10 Outptall.scd_ccaeo_11 Outptall.scd_ccaeo_12 Outptall.scd_ccaeo_13
+	Outptall.scd_mdcro_09 Outptall.scd_mdcro_10 Outptall.scd_mdcro_11 Outptall.scd_mdcro_12 Outptall.scd_mdcro_13
+	Data1415.scd_ccaeo_142 
+	Data1415.scd_mdcro_142;
+DATA drug_pres;
+SET	Drugall.scd_ccaed_09 Drugall.scd_ccaed_10 Drugall.scd_ccaed_11 Drugall.scd_ccaed_12 Drugall.scd_ccaed_13
+	Drugall.scd_mdcrd_09 Drugall.scd_mdcrd_10 Drugall.scd_mdcrd_11 Drugall.scd_mdcrd_12 Drugall.scd_mdcrd_13
+	Data1415.scd_ccaed_142  
+	Data1415.scd_mdcrd_142;
+DATA inpt_svc;
+SET	inptsvc.scd_ccaes_09 inptsvc.scd_ccaes_10 inptsvc.scd_ccaes_11 inptsvc.scd_ccaes_12 inptsvc.scd_ccaes_13
+	inptsvc.scd_mdcrs_09 inptsvc.scd_mdcrs_10 inptsvc.scd_mdcrs_11 inptsvc.scd_mdcrs_12 inptsvc.scd_mdcrs_13
+	Data1415.scd_ccaes_142 
+	Data1415.scd_mdcrs_142;
+DATA insurance_all;
+SET	insur.scd_ccaet_09 insur.scd_ccaet_10 insur.scd_ccaet_11 insur.scd_ccaet_12 insur.scd_ccaet_13
+	insur.scd_mdcrt_09 insur.scd_mdcrt_10 insur.scd_mdcrt_11 insur.scd_mdcrt_12 insur.scd_mdcrt_13
+	Data1415.scd_ccaet_142 
+	Data1415.scd_mdcrt_142;
+DATA redbook;
+	SET Myfile.redbook;
+RUN;
+
+DATA all_record;
+	SET outpt_svc
+		inpt_sum
+		inpt_svc;
+RUN;
+
+data  id_list1;
+set all_record;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2826','28260','28261','28262','28263','28264','28268','28269') then scd = 1;
+end;
+if scd = 1;
+run; 
+
+PROC SQL;
+	CREATE TABLE id_list1 as
+	SELECT min(enrolid) as enrolid,
+		count(scd) as dx_num,
+		min(SVCDATE) as index_date1,
+		min(ADMDATE) as index_date2
+	FROM id_list1
+	GROUP BY enrolid;
+QUIT;
+
+PROC FREQ DATA=id_list1;
+	TABLE dx_num;
+RUN;
+
+DATA id_list2;
+	SET id_list1;
+	IF dx_num>=2;
+	index_date=min(index_date1,index_date2);
+RUN;
+
+DATA Myfile.Folic_NDC;
+	SET redbook;
+	WHERE GENNME contains 'Folic';	
+RUN;
+
+DATA Drug_NDC;
+	SET 	myfile.hydroxyurea_ndc
+			myfile.iron_chelator_ndc 
+			myfile.esa_ndc
+			myfile.narcoticall_ndc
+			Myfile.Folic_NDC;	
+RUN;
+
+PROC sql;
+	CREATE table id_list3 as
+	SELECT a.*,
+		b.GENNME
+	FROM drug_pres a
+	INNER JOIN Drug_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list4 as
+	SELECT min(enrolid) as enrolid,
+		count(GENNME) as Rx_num
+	FROM id_list3
+	GROUP BY enrolid;
+QUIT;
+
+* procedures;
+DATA id_list5;
+set all_record;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('36430','36455','38100','38101','38120','47562','47600','93886') then scd = 1;
+end;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('990','9901','9902','4143','415','5750','8871') then scd = 1;
+end;
+IF REVCODE in: ('038','039') then scd = 1;
+if scd = 1;
+run; 
+
+PROC SQL;
+	CREATE TABLE id_list6 as
+	SELECT min(enrolid) as enrolid
+	FROM id_list5
+	GROUP BY enrolid;
+QUIT;
+
+* complications;
+DATA id_list7;
+set all_record;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('5851','5852','5853','7910',
+				'48','49','50','486','5173',
+				'4160','43491','4329','4359','345',
+				'430','431','4320','4321','4329',
+				'6073','27503','574','57510','7334',
+				'3629','7590','7892','28952','2894',
+				'70710','7301','28264','28262','28269','0955','0155',
+				'730','7301','7302') then scd = 1;
+end;
+if scd = 1;
+run; 
+
+PROC SQL;
+	CREATE TABLE id_list8 as
+	SELECT min(enrolid) as enrolid
+	FROM id_list7
+	GROUP BY enrolid;
+QUIT;
+
+DATA id_list9;
+	SET id_list4 id_list6 id_list8;
+RUN;
+
+PROC SQL;
+	CREATE TABLE id_list10 as
+	SELECT min(enrolid) as enrolid
+	FROM id_list9
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list11 as
+	SELECT a.enrolid as enrolid,
+			a.index_date as index_date
+	FROM id_list2 a
+	INNER JOIN id_list10 b
+	ON a.enrolid=b.enrolid;
+QUIT;
+* creation of id_list and compare the enrollment period with insurance records;
+PROC SORT DATA=insurance_all;
+	by enrolid DTSTART ;
+RUN;
+
+PROC SORT DATA=id_list11;
+	by enrolid;
+RUN;
+
+DATA SCD_insurance_record;
+MERGE id_list11 (in=a keep=enrolid index_date) insurance_all(in=b keep=enrolid DTSTART DTEND MEMDAYS );
+by enrolid;
+if a=1 and b=1;
+run;
+
+proc sort data=SCD_insurance_record; by enrolid index_date ; run;
+proc print data= SCD_insurance_record (firstobs=53000 obs=53100); run;
+
+data enroll_post;
+set  SCD_insurance_record;
+if index_date < DTSTART <= index_date+390 then output enroll_post;
+run;
+
+proc summary nway data= enroll_post;
+var MEMDAYS;
+by enrolid;
+output out=enroll_post_sum sum=enroll_day;
+run;
+proc univariate data=enroll_post_sum; var enroll_day; histogram; run;
+DATA enroll_post_sum;
+	SET enroll_post_sum;
+	IF enroll_day>=365;
+RUN;
+
+PROC SORT DATA=enroll_post_sum;	by enrolid; RUN;
+PROC SORT DATA=enroll_post;	by enrolid; RUN;
+PROC SORT DATA=all_record;	by enrolid;RUN;
+
+DATA SCD_all_record;
+MERGE enroll_post_sum (in=a) all_record(in=b);
+by enrolid;
+if a=1 and b=1;
+run;
+
+DATA SCD_all_record1;
+MERGE enroll_post (in=a keep=enrolid index_date) SCD_all_record(in=b);
+by enrolid;
+if a=1 and b=1;
+run;
+
+PROC SQL;
+	CREATE TABLE cohort_case as
+	SELECT 	min (enrolid) as enrolid,
+			min(age) as index_age,
+			min(sex) as sex,
+			min(region) as region,
+			min(index_date) as index_date,
+			min(YEAR(index_date)) as index_year
+	FROM SCD_all_record1
+	GROUP BY enrolid;
+QUIT;
+
+DATA myfile.SCD_malignant_cohort_case;
+	SET cohort_case;
+	IF index_age<=9 THEN age_cat1=1;
+	ELSE IF index_age<=19 THEN age_cat1=2;
+	ELSE IF index_age<=29 THEN age_cat1=3;
+	ELSE IF index_age<=39 THEN age_cat1=4;
+	ELSE IF index_age<=49 THEN age_cat1=5;
+	ELSE IF index_age>=50 THEN age_cat1=6;
+RUN;
+
+DATA SCD_record_cancer;
+	SET SCD_all_record1;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('14', '15', '16', '17', '18', '19', '20') then case=1;
+		end;
+	if case=1;
+RUN;
+
+PROC SQL;
+	CREATE TABLE cancer_cohort_case as
+	SELECT 	min (enrolid) as enrolid,
+			min(age) as index_age,
+			min(sex) as sex,
+			min(index_date) as index_date,
+			min(SVCDATE) as SVCDATE,
+			min(ADMDATE) as ADMDATE,
+			min(YEAR(index_date)) as index_year
+	FROM SCD_record_cancer
+	GROUP BY enrolid;
+QUIT;
+
+DATA cancer_cohort_case;
+	SET cancer_cohort_case;
+	event_date=min(SVCDATE,ADMDATE);
+	laps_time=event_date-index_date;
+RUN;
+
+PROC FREQ DATA=cancer_cohort_case;
+	TABLE laps_time;
+RUN;
+
+proc univariate data=cancer_cohort_case; var laps_time; histogram; run;
+
+PROC SQL;
+	CREATE TABLE insu_records as
+	SELECT 	enrolid,
+			max(DTEND) as END_enroll
+	FROM insurance_all
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+ CREATE table id_list12 as
+ SELECT a.*,
+		b.END_enroll
+ FROM cohort_case a
+ INNER JOIN insu_records b
+ ON a.enrolid=b.enrolid;
+ QUIT;
+
+ PROC SQL;
+	CREATE table myfile.id_list_final_SCD_malignancy as
+ 	SELECT a.*,
+		b.event_date
+ FROM id_list12 a
+ LEFT JOIN cancer_cohort_case b
+ ON a.enrolid=b.enrolid;
+ QUIT;
+
+ DATA myfile.id_list_final1;
+ 	SET id_list_final;
+	IF (event_date ^=. AND event_date<index_date+365) THEN DELETE;
+RUN;
+
+PROC SQL;
+	CREATE TABLE myfile.SCD_malignancy_record as
+	SELECT a.*,
+			b.*
+	FROM all_record a
+	INNER JOIN id_list_final1 b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE myfile.SCD_malignancy_dx_record as
+	SELECT a.*,
+			b.*
+	FROM drug_pres a
+	INNER JOIN id_list_final1 b
+	ON a.enrolid=b.enrolid;
+QUIT;
