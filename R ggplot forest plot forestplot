@@ -1,0 +1,40 @@
+Covariate <- c("(Intercept)","30-39 vs 18-29","40-49 vs 18-29","50+ vs 18-29" ,
+"Female vs Male","Hydroxyurea use","NSAIDs use","Prior opioid use",
+">1 admissions vs No admission","One admission vs No admission",">2 ER visits vs No ER visit","1-2 ER visits vs No ER visit",
+"History of transfusion vs No transfusion","Chronic liver disease", "Chronic heart failure","Chronic renal disease" ,
+ "Stroke","Sickle cell crisis","Acute chest syndrome","Acute renal injury",
+ "Pulmonary hypertension","Avascular necrosis","Priapism" ,"Iron overload" ,"Hemolytic anemia" )
+Population <- 483
+OR <-  c[1,]
+lower95 <- low_CI[1,]
+upper95 <- High_CI[1,]
+Type <- c("High-Dose")
+data1 <- as.data.frame(cbind(Covariate, Population, OR ,lower95,upper95,Type))
+
+Population <- 1449
+OR <-  c[2,]
+lower95 <- low_CI[2,]
+upper95 <- High_CI[2,]
+Type <- c("Low-Dose")
+data2 <- as.data.frame(cbind(Covariate, Population, OR ,lower95,upper95,Type))
+
+data<-rbind(data2, data1)
+data<-data[!data$Covariate=="(Intercept)",]
+
+
+data$OR <- as.numeric(as.character(data$OR))
+data$lower95 <- as.numeric(as.character(data$lower95))
+data$upper95 <- as.numeric(as.character(data$upper95))
+data$Population <- as.numeric(as.character(data$Population))
+
+ggplot(data=data,aes(x=OR,y=Covariate))+
+  geom_point(aes(size=Population,fill=Type), colour="blue",shape=21)+
+  geom_errorbarh(aes(xmin=lower95,xmax=upper95),height=0.667)+
+  geom_vline(xintercept=1,linetype="dashed")
+
+pi<-ggplot(data=data,aes(x=OR,y=Covariate))+
+  geom_point(aes(size=Population,color=Type),alpha = I(0.6),shape=20)+
+  geom_errorbarh(aes(xmin=lower95,xmax=upper95),height=0.0, colour="blue")+
+  geom_vline(xintercept=1,linetype="dashed")
+pi+scale_size(range = c(7, 10))
+
