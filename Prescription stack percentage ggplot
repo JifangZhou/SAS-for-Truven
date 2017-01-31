@@ -1,0 +1,11 @@
+library(ggplot2)
+library(reshape2)
+id_final <- read.csv(file="C:/Users/jzhou86/Documents/SCD Project/Working directory/All opioid Prescription records.csv",
+                     head=TRUE,sep=",")
+id_final$FLAG <- factor(id_final$FLAG, levels = c("Oxycodone","Hydrocodone","Hydromorphone","Morphine",
+"Codeine","Methadone","Fentanyl","Tramadol","Others","Nonopioid_User"))
+
+ggplot(id_final, aes(x=age_cat1,fill=FLAG)) + geom_area(stat = "bin")+geom_bar(width=0.9) +scale_fill_brewer(palette="Set3")
+ggplot(id_final, aes(x=as.factor(age_cat1), fill=FLAG)) +  geom_bar() + scale_fill_brewer(palette="Set3")
+
+
