@@ -1,0 +1,45 @@
+  dat <- read.table(text = "  2010	2011	2012	2013
+  Oxycodone	2868	1745	1035	288
+  Hydrocodone	2396	1514	944	265
+  Hydromorphone	955	327	263	51
+  Morphine	884	465	349	90
+  Codeine	581	329	229	48
+  Methadone	439	68	46	13
+  Fentanyl	294	113	78	7
+  Tramadol	254	241	186	83
+  Others	280	96	78	3",sep="",header=TRUE)
+  datm <- melt(cbind(dat, ind = rownames(dat)), id.vars = c('ind'))
+  library(scales)
+  ggplot(datm,aes(x = variable, y = value,fill = ind)) +
+          geom_bar(position = "fill",stat = "identity") +
+          scale_y_continuous(labels = percent_format())
+  
+require(foreign)
+require(nnet)
+require(ggplot2)
+require(reshape2)
+id_final <- read.csv(file="C:/Users/jzhou86/Documents/SCD Project/Working directory/For COP Research Day plots.csv",
+                     head=TRUE,sep=",")
+id_final<-as.data.frame(id_final)
+
+id_opioid<-id_final[, c("sex", "Age", "Daily_OME")]
+id_opioid<-id_opioid[complete.cases(id_opioid),]
+id_opioid$OME_log<-log10(id_opioid$Daily_OME)
+
+attach(id_opioid)
+id_opioid$agecat[Age <= 9] <- "-9"
+id_opioid$agecat[Age > 9 & Age <= 19] <- "10-19"
+id_opioid$agecat[Age > 19 & Age <= 29] <- "20-29"
+id_opioid$agecat[Age > 29 & Age <= 39] <- "30-39"
+id_opioid$agecat[Age > 39 & Age <= 49] <- "40-49"
+id_opioid$agecat[Age > 49 & Age <= 59] <- "50-59"
+id_opioid$agecat[Age > 59 & Age <= 69] <- "60-69"
+id_opioid$agecat[Age > 69 & Age <= 79] <- "70-79"
+id_opioid$agecat[Age > 79] <- "80-"
+detach(id_opioid) 
+
+p <- ggplot(id_opioid, aes(factor(agecat), OME_log))
+p + geom_boxplot()
+p + geom_boxplot(outlier.colour = "black", outlier.size = 0.5,aes(fill = factor(sex)))+scale_fill_manual(values=c("#6155DF", "#df6155"))
+  
+  scale_fill_brewer(palette="RdBu")
