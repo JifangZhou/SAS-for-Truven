@@ -1,0 +1,798 @@
+LIBNAME Myfile "C:\Users\jzhou86\Documents\SCD Project\Subproject ESA transfusion and CKD";
+
+DATA id_file;
+	SET Myfile.SVC_all_ESA_list2;
+DATA inpts_baseline;
+	SET Myfile.inpts_baseline;
+DATA inpts_obs;
+	SET Myfile.inpts_obs;
+DATA outpts_baseline;
+	SET Myfile.outpts_baseline;
+DATA outpts_obs;
+	SET Myfile.outpts_obs;
+DATA dx_baseline;
+	SET Myfile.dx_baseline;
+DATA dx_obs;
+	SET Myfile.dx_obs;
+DATA inpts_sum_baseline;
+	SET Myfile.inpts_sum_baseline;
+DATA inpts_sum_obs;
+	SET Myfile.inpts_sum_obs;
+DATA narcoticall_ndc;
+	SET Myfile.narcoticall_ndc;
+DATA hydroxyurea_ndc;
+	SET Myfile.hydroxyurea_ndc;
+DATA nsaids_ndc;
+	SET Myfile.nsaids_ndc;
+RUN;
+* baseline opioid;
+PROC sql;
+	CREATE table temp_dx as
+	SELECT a.*,
+		b.flag
+	FROM dx_baseline a
+	INNER JOIN narcoticall_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			count(SVCDATE) as prec_number
+	FROM	temp_dx
+	GROUP BY enrolid;
+QUIT;
+
+PROC MEANS DATA=list1;
+	VAR prec_number; 
+	RUN;
+PROC sql;
+	CREATE table id_file1 as
+	SELECT a.*,
+		b.prec_number as pre_opioid_number
+	FROM id_file a
+	LEFT JOIN list1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+* observation opioid;
+PROC sql;
+	CREATE table temp_dx as
+	SELECT a.*,
+		b.flag
+	FROM dx_obs a
+	INNER JOIN narcoticall_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			count(SVCDATE) as prec_number
+	FROM	temp_dx
+	GROUP BY enrolid;
+QUIT;
+
+PROC MEANS DATA=list1;
+	VAR prec_number; 
+	RUN;
+PROC sql;
+	CREATE table id_file2 as
+	SELECT a.*,
+		b.prec_number as post_opioid_number
+	FROM id_file1 a
+	LEFT JOIN list1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*hydroxyurea;
+PROC sql;
+	CREATE table temp_dx as
+	SELECT a.*,
+		b.flag
+	FROM dx_baseline a
+	INNER JOIN hydroxyurea_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			count(SVCDATE) as prec_number
+	FROM	temp_dx
+	GROUP BY enrolid;
+QUIT;
+
+PROC MEANS DATA=list1;
+	VAR prec_number; 
+	RUN;
+PROC sql;
+	CREATE table id_file3 as
+	SELECT a.*,
+		b.prec_number as pre_hydrea_number
+	FROM id_file2 a
+	LEFT JOIN list1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+* observation opioid;
+PROC sql;
+	CREATE table temp_dx as
+	SELECT a.*,
+		b.flag
+	FROM dx_obs a
+	INNER JOIN hydroxyurea_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			count(SVCDATE) as prec_number
+	FROM	temp_dx
+	GROUP BY enrolid;
+QUIT;
+
+PROC MEANS DATA=list1;
+	VAR prec_number; 
+	RUN;
+PROC sql;
+	CREATE table id_file4 as
+	SELECT a.*,
+		b.prec_number as post_hydrea_number
+	FROM id_file3 a
+	LEFT JOIN list1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*NSAIDS prescription;
+PROC sql;
+	CREATE table temp_dx as
+	SELECT a.*,
+		b.flag
+	FROM dx_baseline a
+	INNER JOIN nsaids_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			count(SVCDATE) as prec_number
+	FROM	temp_dx
+	GROUP BY enrolid;
+QUIT;
+
+PROC MEANS DATA=list1;
+	VAR prec_number; 
+	RUN;
+PROC sql;
+	CREATE table id_file5 as
+	SELECT a.*,
+		b.prec_number as pre_NSAIDS_number
+	FROM id_file4 a
+	LEFT JOIN list1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+* observation NSAIDS;
+PROC sql;
+	CREATE table temp_dx as
+	SELECT a.*,
+		b.flag
+	FROM dx_obs a
+	INNER JOIN nsaids_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			count(SVCDATE) as prec_number
+	FROM	temp_dx
+	GROUP BY enrolid;
+QUIT;
+
+PROC MEANS DATA=list1;
+	VAR prec_number; 
+	RUN;
+PROC sql;
+	CREATE table id_file6 as
+	SELECT a.*,
+		b.prec_number as post_NSAIDS_number
+	FROM id_file5 a
+	LEFT JOIN list1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+* Services baseline;
+DATA temp_svc;
+	SET outpts_baseline;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0981') THEN ER=1;
+	ELSE IF STDPLAC in ('23','220','428') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120', '10420','10320','10220','12220','20220','10520','20120','21120','21220','22320',
+						'22120','30220','30120','30420','30320','30520','30620','31120','31420','31320','31520',
+						'31220','31620') THEN ER=1;
+	IF ER=1;
+RUN;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			min(SVCDATE) as SVCDATE
+	FROM	temp_svc
+	GROUP BY enrolid, SVCDATE;
+QUIT;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			count(SVCDATE) as pre_ER_number
+	FROM list1
+	GROUP BY enrolid;
+QUIT;
+
+PROC MEANS DATA=list1 MEDIAN;
+	VAR pre_ER_number; 
+	RUN;
+PROC sql;
+	CREATE table id_file7 as
+	SELECT a.*,
+		b.pre_ER_number as pre_ER_number
+	FROM id_file6 a
+	LEFT JOIN list1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+* observation ER visits;
+DATA temp_svc;
+	SET outpts_obs;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0981') THEN ER=1;
+	ELSE IF STDPLAC in ('23','220','428') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120', '10420','10320','10220','12220','20220','10520','20120','21120','21220','22320',
+						'22120','30220','30120','30420','30320','30520','30620','31120','31420','31320','31520',
+						'31220','31620') THEN ER=1;
+	IF ER=1;
+RUN;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			min(SVCDATE) as SVCDATE
+	FROM	temp_svc
+	GROUP BY enrolid, SVCDATE;
+QUIT;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			count(SVCDATE) as pre_ER_number
+	FROM list1
+	GROUP BY enrolid;
+QUIT;
+
+PROC MEANS DATA=list1 MEDIAN;
+	VAR pre_ER_number; 
+	RUN;
+PROC sql;
+	CREATE table id_file8 as
+	SELECT a.*,
+		b.pre_ER_number as Post_ER_number
+	FROM id_file7 a
+	LEFT JOIN list1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*Admission numbers;
+DATA temp_svc;
+	SET inpts_sum_baseline;
+RUN;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			count(ADMDATE) as pre_ADM_number
+	FROM	temp_svc
+	GROUP BY enrolid;
+QUIT;
+
+PROC MEANS DATA=list1 MEDIAN;
+	VAR pre_ADM_number; 
+	RUN;
+PROC sql;
+	CREATE table id_file9 as
+	SELECT a.*,
+		b.pre_ADM_number as pre_ADM_number
+	FROM id_file8 a
+	LEFT JOIN list1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*Admission number obs;
+DATA temp_svc;
+	SET inpts_sum_obs ;
+RUN;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			count(ADMDATE) as pre_ADM_number
+	FROM	temp_svc
+	GROUP BY enrolid;
+QUIT;
+
+PROC MEANS DATA=list1 MEDIAN;
+	VAR pre_ADM_number; 
+	RUN;
+PROC sql;
+	CREATE table id_file10 as
+	SELECT a.*,
+		b.pre_ADM_number as post_ADM_number
+	FROM id_file9 a
+	LEFT JOIN list1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*Transfusion;
+DATA temp_svc;
+	SET inpts_baseline outpts_baseline;
+	array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('36430'	'P9011' 'P9016' 'P9021' 'P9022' 'P9038' 'P9039' 'P9040' 'P9051' 'P9054' 'P9057' 'P9058') then transfusion = 1;
+end;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('990') then transfusion = 1;
+end;
+IF REVCODE in: ('038','039') then transfusion = 1;
+if transfusion = 1;
+RUN;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			count(enrolid) as pre_trans_number
+	FROM	temp_svc
+	GROUP BY enrolid;
+QUIT;
+
+PROC MEANS DATA=list1 MEDIAN;
+	VAR pre_trans_number; 
+	RUN;
+PROC sql;
+	CREATE table id_file11 as
+	SELECT a.*,
+		b.pre_trans_number as pre_trans_number
+	FROM id_file10 a
+	LEFT JOIN list1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA temp_svc;
+	SET inpts_obs outpts_obs;
+	array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('36430'	'P9011' 'P9016' 'P9021' 'P9022' 'P9038' 'P9039' 'P9040' 'P9051' 'P9054' 'P9057' 'P9058') then transfusion = 1;
+end;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('990') then transfusion = 1;
+end;
+IF REVCODE in: ('038','039') then transfusion = 1;
+if transfusion = 1;
+RUN;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			count(enrolid) as pre_trans_number
+	FROM	temp_svc
+	GROUP BY enrolid;
+QUIT;
+
+PROC MEANS DATA=list1 MEDIAN;
+	VAR pre_trans_number; 
+	RUN;
+PROC sql;
+	CREATE table id_file12 as
+	SELECT a.*,
+		b.pre_trans_number as post_trans_number
+	FROM id_file11 a
+	LEFT JOIN list1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA Myfile.id_list_ESA_Dx_SVC;
+	SET id_file12;
+RUN;
+
+data id_file12;
+   set id_file12;
+   array change _numeric_;
+        do over change;
+            if change=. then change=0;
+        end;
+ run ;
+PROC CONTENTS data=id_file12;RUN;
+
+   proc ttest data=id_file12;
+      paired post_trans_number*pre_trans_number;
+   run;
+*Diagnosis VOC;
+
+DATA temp_svc;
+	SET inpts_sum_baseline outpts_baseline;
+	array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('28242', '28262', '28264', '28269') then case = 1;
+end;
+if case = 1;
+RUN;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			min(SVCDATE) as SVCDATE
+	FROM	temp_svc
+	GROUP BY enrolid, SVCDATE;
+QUIT;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			count(SVCDATE) as pre_trans_number
+	FROM list1
+	GROUP BY enrolid;
+QUIT;
+PROC MEANS DATA=list1;
+	VAR pre_trans_number; 
+	RUN;
+PROC sql;
+	CREATE table id_file13 as
+	SELECT a.*,
+		b.pre_trans_number as pre_VOC_number
+	FROM id_file12 a
+	LEFT JOIN list1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA temp_svc;
+	SET inpts_sum_obs outpts_obs;
+	array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('28242', '28262', '28264', '28269') then case = 1;
+end;
+if case = 1;
+RUN;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			min(SVCDATE) as SVCDATE
+	FROM	temp_svc
+	GROUP BY enrolid, SVCDATE;
+QUIT;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			count(SVCDATE) as pre_trans_number
+	FROM list1
+	GROUP BY enrolid;
+QUIT;
+
+PROC MEANS DATA=list1;
+	VAR pre_trans_number; 
+	RUN;
+PROC sql;
+	CREATE table id_file14 as
+	SELECT a.*,
+		b.pre_trans_number as post_VOC_number
+	FROM id_file13 a
+	LEFT JOIN list1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+* Stroke;
+DATA temp_svc;
+	SET inpts_sum_baseline outpts_baseline;
+	array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('430', '431', '432', '43301', '43311', '43321', 
+'43331', '43341', '43351', '43361', '43371', '43381', '43391', '434') then case = 1;
+end;
+if case = 1;
+RUN;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			min(SVCDATE) as SVCDATE
+	FROM	temp_svc
+	GROUP BY enrolid, SVCDATE;
+QUIT;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			count(SVCDATE) as pre_trans_number
+	FROM list1
+	GROUP BY enrolid;
+QUIT;
+PROC MEANS DATA=list1;
+	VAR pre_trans_number; 
+	RUN;
+PROC sql;
+	CREATE table id_file15 as
+	SELECT a.*,
+		b.pre_trans_number as pre_Stroke_number
+	FROM id_file14 a
+	LEFT JOIN list1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA temp_svc;
+	SET inpts_sum_obs outpts_obs;
+	array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('430', '431', '432', '43301', '43311', '43321', 
+'43331', '43341', '43351', '43361', '43371', '43381', '43391', '434') then case = 1;
+end;
+if case = 1;
+RUN;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			min(SVCDATE) as SVCDATE
+	FROM	temp_svc
+	GROUP BY enrolid, SVCDATE;
+QUIT;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			count(SVCDATE) as pre_trans_number
+	FROM list1
+	GROUP BY enrolid;
+QUIT;
+
+PROC MEANS DATA=list1;
+	VAR pre_trans_number; 
+	RUN;
+PROC sql;
+	CREATE table id_file16 as
+	SELECT a.*,
+		b.pre_trans_number as post_Stroke_number
+	FROM id_file15 a
+	LEFT JOIN list1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+* Trombosis;
+DATA temp_svc;
+	SET inpts_sum_baseline outpts_baseline;
+	array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('415', '453') then case = 1;
+end;
+if case = 1;
+RUN;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			min(SVCDATE) as SVCDATE
+	FROM	temp_svc
+	GROUP BY enrolid, SVCDATE;
+QUIT;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			count(SVCDATE) as pre_trans_number
+	FROM list1
+	GROUP BY enrolid;
+QUIT;
+PROC MEANS DATA=list1;
+	VAR pre_trans_number; 
+	RUN;
+PROC sql;
+	CREATE table id_file17 as
+	SELECT a.*,
+		b.pre_trans_number as pre_Thrombo_number
+	FROM id_file16 a
+	LEFT JOIN list1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA temp_svc;
+	SET inpts_sum_obs outpts_obs;
+	array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('415', '453') then case = 1;
+end;
+if case = 1;
+RUN;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			min(SVCDATE) as SVCDATE
+	FROM	temp_svc
+	GROUP BY enrolid, SVCDATE;
+QUIT;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			count(SVCDATE) as pre_trans_number
+	FROM list1
+	GROUP BY enrolid;
+QUIT;
+
+PROC MEANS DATA=list1;
+	VAR pre_trans_number; 
+	RUN;
+PROC sql;
+	CREATE table id_file18 as
+	SELECT a.*,
+		b.pre_trans_number as post_Thrombo_number
+	FROM id_file17 a
+	LEFT JOIN list1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+* Seizure;
+DATA temp_svc;
+	SET inpts_sum_baseline outpts_baseline;
+	array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('345') then case = 1;
+end;
+if case = 1;
+RUN;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			min(SVCDATE) as SVCDATE
+	FROM	temp_svc
+	GROUP BY enrolid, SVCDATE;
+QUIT;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			count(SVCDATE) as pre_trans_number
+	FROM list1
+	GROUP BY enrolid;
+QUIT;
+PROC MEANS DATA=list1;
+	VAR pre_trans_number; 
+	RUN;
+PROC sql;
+	CREATE table id_file19 as
+	SELECT a.*,
+		b.pre_trans_number as pre_Seizure_number
+	FROM id_file18 a
+	LEFT JOIN list1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA temp_svc;
+	SET inpts_sum_obs outpts_obs;
+	array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('345') then case = 1;
+end;
+if case = 1;
+RUN;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			min(SVCDATE) as SVCDATE
+	FROM	temp_svc
+	GROUP BY enrolid, SVCDATE;
+QUIT;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			count(SVCDATE) as pre_trans_number
+	FROM list1
+	GROUP BY enrolid;
+QUIT;
+
+PROC MEANS DATA=list1;
+	VAR pre_trans_number; 
+	RUN;
+PROC sql;
+	CREATE table id_file20 as
+	SELECT a.*,
+		b.pre_trans_number as post_Seizure_number
+	FROM id_file19 a
+	LEFT JOIN list1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+* ACS;
+DATA temp_svc;
+	SET inpts_sum_baseline outpts_baseline;
+	array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('3173') then case = 1;
+end;
+if case = 1;
+RUN;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			min(SVCDATE) as SVCDATE
+	FROM	temp_svc
+	GROUP BY enrolid, SVCDATE;
+QUIT;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			count(SVCDATE) as pre_trans_number
+	FROM list1
+	GROUP BY enrolid;
+QUIT;
+PROC MEANS DATA=list1;
+	VAR pre_trans_number; 
+	RUN;
+PROC sql;
+	CREATE table id_file21 as
+	SELECT a.*,
+		b.pre_trans_number as pre_ACS_number
+	FROM id_file20 a
+	LEFT JOIN list1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA temp_svc;
+	SET inpts_sum_obs outpts_obs;
+	array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('3173') then case = 1;
+end;
+if case = 1;
+RUN;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			min(SVCDATE) as SVCDATE
+	FROM	temp_svc
+	GROUP BY enrolid, SVCDATE;
+QUIT;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			count(SVCDATE) as pre_trans_number
+	FROM list1
+	GROUP BY enrolid;
+QUIT;
+
+PROC MEANS DATA=list1;
+	VAR pre_trans_number; 
+	RUN;
+PROC sql;
+	CREATE table id_file22 as
+	SELECT a.*,
+		b.pre_trans_number as post_ACS_number
+	FROM id_file21 a
+	LEFT JOIN list1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA Myfile.id_file23;
+SET id_file22;
+IF pre_VOC_number=0 THEN pre_VOC_number=1;
+ELSE IF pre_VOC_number=. THEN pre_VOC_number=0;
+IF post_VOC_number=0 THEN post_VOC_number=1;
+ELSE IF post_VOC_number=. THEN post_VOC_number=0;
+RUN;
+
+  proc ttest data=id_file23;
+      paired post_VOC_number*pre_VOC_number;
+   run;
