@@ -1,0 +1,531 @@
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+LIBNAME Inptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\InpatientSummary';
+LIBNAME Outptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\OutpatientService';
+LIBNAME Drugall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Drug Prescriptions';
+LIBNAME inptsvc 'C:\Users\jzhou86\Documents\Opioid in SCD pregnancy\Raw Data\InpatientServices';
+LIBNAME insur 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Insurance Records';
+LIBNAME Data1415 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\14-15 SCD data';
+
+DATA inpt_sum;
+SET Inptall.scd_ccaei_09 Inptall.scd_ccaei_10 Inptall.scd_ccaei_11 Inptall.scd_ccaei_12 Inptall.scd_ccaei_13
+	Inptall.scd_mdcri_09 Inptall.scd_mdcri_10 Inptall.scd_mdcri_11 Inptall.scd_mdcri_12 Inptall.scd_mdcri_13
+	Data1415.scd_ccaei_142  
+	Data1415.scd_mdcri_142;
+DATA outpt_svc;
+SET	Outptall.scd_ccaeo_09 Outptall.scd_ccaeo_10 Outptall.scd_ccaeo_11 Outptall.scd_ccaeo_12 Outptall.scd_ccaeo_13
+	Outptall.scd_mdcro_09 Outptall.scd_mdcro_10 Outptall.scd_mdcro_11 Outptall.scd_mdcro_12 Outptall.scd_mdcro_13
+	Data1415.scd_ccaeo_142 
+	Data1415.scd_mdcro_142;
+DATA drug_pres;
+SET	Drugall.scd_ccaed_09 Drugall.scd_ccaed_10 Drugall.scd_ccaed_11 Drugall.scd_ccaed_12 Drugall.scd_ccaed_13
+	Drugall.scd_mdcrd_09 Drugall.scd_mdcrd_10 Drugall.scd_mdcrd_11 Drugall.scd_mdcrd_12 Drugall.scd_mdcrd_13
+	Data1415.scd_ccaed_142  
+	Data1415.scd_mdcrd_142;
+DATA inpt_svc;
+SET	inptsvc.scd_ccaes_09 inptsvc.scd_ccaes_10 inptsvc.scd_ccaes_11 inptsvc.scd_ccaes_12 inptsvc.scd_ccaes_13
+	inptsvc.scd_mdcrs_09 inptsvc.scd_mdcrs_10 inptsvc.scd_mdcrs_11 inptsvc.scd_mdcrs_12 inptsvc.scd_mdcrs_13
+	Data1415.scd_ccaes_142 
+	Data1415.scd_mdcrs_142;
+DATA insurance_all;
+SET	insur.scd_ccaet_09 insur.scd_ccaet_10 insur.scd_ccaet_11 insur.scd_ccaet_12 insur.scd_ccaet_13
+	insur.scd_mdcrt_09 insur.scd_mdcrt_10 insur.scd_mdcrt_11 insur.scd_mdcrt_12 insur.scd_mdcrt_13
+	Data1415.scd_ccaet_142 
+	Data1415.scd_mdcrt_142;
+DATA redbook;
+	SET Myfile.redbook;
+DATA narcoticall_ndc;
+	SET Myfile.narcoticall_ndc;
+DATA hydroxyurea_ndc;
+	SET Myfile.hydroxyurea_ndc;
+DATA nsaids_ndc;
+	SET Myfile.nsaids_ndc;
+DATA esa_ndc;
+	SET Myfile.esa_ndc;
+RUN;
+
+DATA all_record;
+	SET outpt_svc
+		inpt_sum
+		inpt_svc;
+RUN;
+
+data  id_list1;
+set all_record;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('28241','28242','28261','28262','28263','28264','28268','28269') then scd = 1;
+end;
+if scd = 1;
+run; 
+
+PROC SQL;
+	CREATE TABLE id_list1 as
+	SELECT min(enrolid) as enrolid,
+		count(scd) as dx_num,
+		min(SVCDATE) as index_date1,
+		min(ADMDATE) as index_date2,
+		max(SVCDATE) as index_date3,
+		max(ADMDATE) as index_date4
+	FROM id_list1
+	GROUP BY enrolid;
+QUIT;
+
+DATA id_list1;
+	SET id_list1;
+	index_date=min(index_date1,index_date2);
+	last_date=max(index_date3,index_date4);
+	IF last_date-index_date>=30;
+RUN;
+
+PROC SQL;
+	CREATE TABLE id_list_ini as
+	SELECT a.*,
+			b.index_date
+	FROM all_record a
+	INNER JOIN id_list1 b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+* Excluding sickle cell trait cases;
+
+data  id_list_sct;
+set id_list_ini;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2825') then sct = 1;
+end;
+if sct = 1;
+run; 
+
+PROC SQL;
+	CREATE TABLE id_list_sct as
+	SELECT min(enrolid) as enrolid,
+		count(sct) as dx_num
+	FROM id_list_sct
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list1_no_sct as
+	SELECT a.*
+	FROM id_list1 a
+	LEFT JOIN id_list_sct b
+	ON a.enrolid=b.enrolid 
+	WHERE b.enrolid IS NULL;
+QUIT;
+
+DATA Myfile.Wisconsin_algorithm_12278;
+	SET id_list1_no_sct;
+RUN;
+* clean up the records to reflect eligible patients after Wisconsin algorithm;
+
+PROC SQL;
+CREATE TABLE inpt_sum as
+SELECT a.*
+FROM inpt_sum a
+INNER JOIN id_list1_no_sct b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE outpt_svc as
+SELECT a.*
+FROM outpt_svc a
+INNER JOIN id_list1_no_sct b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE inpt_svc as
+SELECT a.*
+FROM inpt_svc a
+INNER JOIN id_list1_no_sct b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE drug_pres as
+SELECT a.*
+FROM drug_pres a
+INNER JOIN id_list1_no_sct b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+* Select all cases with ESA in the outpatient dispensing records;
+PROC SQL;
+CREATE TABLE ESApresc as
+SELECT b.*,
+		a.GENNME,
+		a.METSIZE
+FROM ESA_NDC a
+INNER JOIN drug_pres b
+ON a.NDCNUM = b.NDCNUM
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE uniqID_ESA_NDC as
+SELECT min (enrolid) as enrolid,
+	min(SVCDATE) as index_date
+FROM ESApresc
+GROUP BY enrolid;
+QUIT;
+
+*Select all cases with ESA in the inpatient setting;
+
+DATA ESApresc;
+SET inpt_sum inpt_svc;
+	case=0;
+	array proc{*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J0881','J0882','J0885','J0886','Q4081') then case=2;
+		end;
+	if case=2;
+RUN;
+
+PROC SQL;
+CREATE TABLE uniqID_ESA_inpts as
+SELECT min (enrolid) as enrolid,
+	min(SVCDATE) as index_date
+FROM ESApresc
+GROUP BY enrolid;
+QUIT;
+
+*Select all cases with ESA in the outpatient setting;
+
+DATA ESApresc;
+SET outpt_svc;
+	case=0;
+	array proc{*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J0881','J0882','J0885','J0886','Q4081') then case=2;
+		end;
+	if case=2;
+RUN;
+
+PROC SQL;
+CREATE TABLE uniqID_ESA_outpts as
+SELECT min (enrolid) as enrolid,
+	min(SVCDATE) as index_date
+FROM ESApresc
+GROUP BY enrolid;
+QUIT;
+
+* all unique patients with HCPCS codes for ESA administration;
+DATA uniqID_ESA_all;
+	SET uniqID_ESA_outpts uniqID_ESA_inpts uniqID_ESA_NDC ;
+RUN;
+
+PROC SQL;
+CREATE TABLE uniqID_ESA_list as
+SELECT min (enrolid) as enrolid,
+		min(index_date) as index_date
+FROM uniqID_ESA_all
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE uniqID1 as
+SELECT b.enrolid as enrolid
+FROM uniqID_ESA_outpts a
+INNER JOIN uniqID_ESA_NDC b
+ON a.enrolid=b.enrolid
+WHERE  a.enrolid IS NULL;
+QUIT;
+
+* check continuous enrollment 12 months before and after the index date;
+PROC SQL;
+CREATE TABLE insurance_ESA as
+SELECT b.*,
+		a.*
+FROM uniqID_ESA_list a
+INNER JOIN insurance_all b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA enroll_pre enroll_post;
+	SET  insurance_ESA;
+	IF index_date - 390 <= DTSTART <index_date  then output enroll_pre;
+	IF index_date < DTSTART <= index_date + 390 then output enroll_post;
+RUN;
+
+PROC SORT DATA=enroll_pre;
+	by enrolid DTSTART ;
+RUN;
+
+proc summary nway data= enroll_pre;
+var MEMDAYS;
+by enrolid;
+output out=Insurance_day sum=enroll_day;
+run;
+
+proc univariate data=Insurance_day;
+      var enroll_day;
+      histogram;
+   run;
+DATA enroll_merge;
+SET Insurance_day;
+if 365 <= enroll_day then index=1;
+if enroll_day <365 then index=0;
+if enroll_day =. then index=na;
+run;
+
+DATA enroll_merge_pre;
+	SET enroll_merge;
+	IF index = 1;
+	pre_index=1;
+RUN;
+
+* Assess the number of continuously enrolled days after the index date;
+PROC SORT DATA=enroll_post;
+	by enrolid DTSTART ;
+RUN;
+
+proc summary nway data= enroll_post;
+var MEMDAYS;
+by enrolid;
+output out=Insurance_day sum=enroll_day;
+run;
+
+DATA enroll_merge;
+SET Insurance_day;
+if 365 <= enroll_day then index=1;
+if enroll_day <365 then index=0;
+if enroll_day =. then index=na;
+run;
+
+DATA enroll_merge_post;
+	SET enroll_merge;
+	IF index = 1;
+	post_index=1;
+RUN;
+
+DATA id_list;
+	MERGE enroll_merge_post enroll_merge_pre;
+	BY enrolid;
+	IF post_index=1 AND pre_index=1;
+RUN;
+
+
+
+PROC SQL;
+CREATE TABLE id_list as
+SELECT a.enrolid as enrolid,
+		b.index_date as index_date
+FROM id_list a
+INNER JOIN uniqID_ESA_list b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+
+PROC SQL;
+CREATE TABLE final_list_ESA as
+SELECT a.enrolid as enrolid,
+		min(b.DOBYR) as DOBYR,
+		a.index_date as index_date
+FROM id_list a
+INNER JOIN outpt_svc b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE final_list_ESA as
+SELECT min (enrolid) as enrolid,
+	min(DOBYR) as DOBYR,
+	min(index_date) as index_date
+FROM final_list_ESA
+GROUP BY enrolid;
+QUIT;
+
+DATA Myfile.id_list_ESA;
+	SET final_list_ESA;
+	IF YEAR(index_date)-DOBYR>=18;
+RUN;
+
+* extract all records from 12 months before and after the index_date;
+LIBNAME ESA_WORK "C:\Users\jzhou86\Documents\SCD Project\Subproject ESA transfusion and CKD";
+
+PROC SQL;
+CREATE TABLE inpt_sum_ESA as
+SELECT a.*,
+		b.*
+FROM inpt_sum a
+INNER JOIN SVC_all_ESA b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE outpt_svc_ESA as
+SELECT a.*,
+	b.*
+FROM outpt_svc a
+INNER JOIN SVC_all_ESA b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE inpt_svc_ESA as
+SELECT a.*,
+	b.*
+FROM inpt_svc a
+INNER JOIN SVC_all_ESA b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE drug_pres_ESA as
+SELECT a.*,
+	b.*
+FROM drug_pres a
+INNER JOIN SVC_all_ESA b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA ESA_WORK.final_list_ESA;
+	SET SVC_all_ESA;RUN;
+* drug prescription;
+DATA ESA_WORK.dx_baseline;
+	SET drug_pres_ESA;
+IF index_date-365<=svcdate<index_date;
+RUN;
+
+DATA ESA_WORK.dx_obs;
+	SET drug_pres_ESA;
+IF index_date<=svcdate<=index_date+365;
+RUN;
+* Outpatient services;
+DATA ESA_WORK.outpts_baseline;
+	SET outpt_svc_ESA;
+IF index_date-365<=svcdate<index_date;
+RUN;
+
+DATA ESA_WORK.outpts_obs;
+	SET outpt_svc_ESA;
+IF index_date<=svcdate<=index_date+365;
+RUN;
+* inpatient services;
+DATA ESA_WORK.inpts_baseline;
+	SET inpt_svc_ESA;
+IF index_date-365<=svcdate<index_date;
+RUN;
+
+DATA ESA_WORK.inpts_obs;
+	SET inpt_svc_ESA;
+IF index_date<=svcdate<=index_date+365;
+RUN;
+
+* inpatient summary;
+DATA ESA_WORK.inpts_sum_baseline;
+	SET inpt_sum_ESA;
+IF index_date-365<=admdate<index_date;
+RUN;
+
+DATA ESA_WORK.inpts_sum_obs;
+	SET inpt_sum_ESA;
+IF index_date<=admdate<=index_date+365;
+RUN;
+
+* number of ESA injections;
+DATA SVC_all;
+	SET ESA_WORK.inpts_obs ESA_WORK.outpts_obs;
+	case=0;
+	array proc{*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J0881','J0882','J0885','J0886','Q4081') then case=1;
+		end;
+	if case=1;
+RUN;
+
+PROC FREQ DATA=SVC_all;
+	TABLE proc1;
+RUN;
+
+PROC SQL;
+CREATE TABLE SVC_all_ESA as
+SELECT min (enrolid) as enrolid,
+	count(index_date) as number,
+	min(index_date) as index_date
+FROM SVC_all
+GROUP BY enrolid;
+QUIT;
+
+PROC MEANS DATA=SVC_all_ESA p25 p75 median CLM;
+VAR number; RUN;
+* add CKD diagnosis to the list;
+DATA SVC_all;
+	SET ESA_WORK.inpts_obs ESA_WORK.outpts_obs;
+	case=0;
+	array proc{*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J0882','J0886','Q4081') then case=1;
+		end;
+	if case=1;
+RUN;
+
+PROC FREQ DATA=SVC_all;
+	TABLE proc1;
+RUN;
+
+PROC SQL;
+CREATE TABLE CKD_ESA as
+SELECT min (enrolid) as enrolid,
+	count(index_date) as number,
+	1 as CKD
+FROM SVC_all
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE SVC_all_ESA_list as
+SELECT a.*,
+		b.CKD
+FROM SVC_all_ESA a
+LEFT JOIN CKD_ESA b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE temp as
+SELECT min (enrolid) as enrolid,
+	min(sex) as sex,
+	min(region) as region,
+	min(DOBYR) as DOBYR
+FROM all_record
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE SVC_all_ESA_list1 as
+SELECT a.*,
+		b.*
+FROM SVC_all_ESA_list a
+LEFT JOIN temp b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA ESA_WORK.SVC_all_ESA_list2;
+SET SVC_all_ESA_list1;
+IF CKD=. THEN CKD=0;
+IF number<=12 THEN ESA_cat=0;
+IF number>12 THEN ESA_cat=1;
+index_year=YEAR(index_date);
+index_age=index_year-DOBYR;
+IF index_age<=29 THEN age_cat1=1;
+	ELSE IF index_age<=39 THEN age_cat1=2;
+	ELSE IF index_age<=49 THEN age_cat1=3;
+	ELSE IF index_age<=59 THEN age_cat1=4;
+	ELSE IF index_age<=69 THEN age_cat1=5;
+	ELSE IF index_age>=70 THEN age_cat1=6;
+RUN;
+
+PROC MEANS DATA=SVC_all_ESA_list2 p25 p75 median CLM;
+CLASS ESA_cat;
+VAR index_age; RUN;
+
+PROC TTEST DATA=SVC_all_ESA_list2;
+CLASS ESA_cat;
+VAR index_age; RUN;
+
+PROC FREQ DATA=SVC_all_ESA_list2;
+TABLE CKD* /nopercent nocol norow chisq;
+RUN;
