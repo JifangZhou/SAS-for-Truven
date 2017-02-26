@@ -1,0 +1,183 @@
+LIBNAME WorkingD "C:\Users\jzhou86\Documents\SCD Project\Subproject ESA transfusion and CKD";
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+LIBNAME Inptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\InpatientSummary';
+LIBNAME Outptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\OutpatientService';
+LIBNAME Drugall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Drug Prescriptions';
+LIBNAME inptsvc 'C:\Users\jzhou86\Documents\Opioid in SCD pregnancy\Raw Data\InpatientServices';
+LIBNAME insur 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Insurance Records';
+
+DATA inpt_sum;
+SET Inptall.scd_ccaei_09 Inptall.scd_ccaei_10 Inptall.scd_ccaei_11 Inptall.scd_ccaei_12 Inptall.scd_ccaei_13
+	Inptall.scd_mdcri_09 Inptall.scd_mdcri_10 Inptall.scd_mdcri_11 Inptall.scd_mdcri_12 Inptall.scd_mdcri_13
+	Inptall.scd_ccaei_142 Inptall.scd_ccaei_151
+	Inptall.scd_mdcri_142 Inptall.scd_mdcri_151;
+DATA outpt_svc;
+SET	Outptall.scd_ccaeo_09 Outptall.scd_ccaeo_10 Outptall.scd_ccaeo_11 Outptall.scd_ccaeo_12 Outptall.scd_ccaeo_13
+	Outptall.scd_mdcro_09 Outptall.scd_mdcro_10 Outptall.scd_mdcro_11 Outptall.scd_mdcro_12 Outptall.scd_mdcro_13
+	Outptall.scd_ccaeo_142 Outptall.scd_ccaeo_151
+	Outptall.scd_mdcro_142 Outptall.scd_mdcro_151;
+DATA drug_pres;
+SET	Drugall.scd_ccaed_09 Drugall.scd_ccaed_10 Drugall.scd_ccaed_11 Drugall.scd_ccaed_12 Drugall.scd_ccaed_13
+	Drugall.scd_mdcrd_09 Drugall.scd_mdcrd_10 Drugall.scd_mdcrd_11 Drugall.scd_mdcrd_12 Drugall.scd_mdcrd_13
+	Drugall.scd_ccaed_142 Drugall.scd_ccaed_151
+	Drugall.scd_mdcrd_142 Drugall.scd_mdcrd_151;
+DATA inpt_svc;
+SET	inptsvc.scd_ccaes_09 inptsvc.scd_ccaes_10 inptsvc.scd_ccaes_11 inptsvc.scd_ccaes_12 inptsvc.scd_ccaes_13
+	inptsvc.scd_mdcrs_09 inptsvc.scd_mdcrs_10 inptsvc.scd_mdcrs_11 inptsvc.scd_mdcrs_12 inptsvc.scd_mdcrs_13
+	inptsvc.scd_ccaes_142 inptsvc.scd_ccaes_151
+	inptsvc.scd_mdcrs_142 inptsvc.scd_mdcrs_151;
+DATA insurance_all;
+SET	insur.scd_ccaet_09 insur.scd_ccaet_10 insur.scd_ccaet_11 insur.scd_ccaet_12 insur.scd_ccaet_13
+	insur.scd_mdcrt_09 insur.scd_mdcrt_10 insur.scd_mdcrt_11 insur.scd_mdcrt_12 insur.scd_mdcrt_13
+	insur.scd_ccaet_142 insur.scd_ccaet_151
+	insur.scd_mdcrt_142 insur.scd_mdcrt_151;
+DATA redbook;
+SET Myfile.redbook;
+RUN;
+
+DATA all_record;
+	SET inpt_sum outpt_svc;
+	IF (YEAR(ADMDATE)=2015 OR YEAR(SVCDATE)=2015) THEN DELETE;
+RUN;
+
+PROC SQL;
+CREATE TABLE id_record as
+SELECT min (enrolid) as enrolid,
+	min(age) as age,
+	min(sex) as sex,
+	min(SVCDATE) as index_date1,
+	min(ADMDATE) as index_date2,
+	count(ADMDATE) as number_ipt
+FROM all_record
+GROUP BY enrolid,SVCDATE;
+QUIT;
+
+DATA id_record;
+	SET id_record;
+	IF age<=9 THEN age_cat1=1;
+	ELSE IF age<=19 THEN age_cat1=2;
+	ELSE IF age<=29 THEN age_cat1=3;
+	ELSE IF age<=39 THEN age_cat1=4;
+	ELSE IF age<=49 THEN age_cat1=5;
+	ELSE IF age<=59 THEN age_cat1=6;
+	ELSE IF age<=69 THEN age_cat1=7;
+	ELSE IF age<=79 THEN age_cat1=8;
+	ELSE IF age>=80 THEN age_cat1=9;
+	index_date=min(index_date1,index_date2);
+	index_year=YEAR(index_date);
+RUN;
+
+PROC FREQ DATA=id_record;
+	TABLE index_year;
+RUN;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			min(SVCDATE) as SVCDATE
+	FROM	all_record
+	GROUP BY enrolid, SVCDATE;
+QUIT;
+
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			count(SVCDATE) as pre_ER_number
+	FROM list1
+	GROUP BY enrolid;
+QUIT;
+
+PROC MEANS DATA=list1 MEDIAN P25 P75;
+	VAR pre_ER_number;
+RUN;
+
+DATA all_VTE_list;
+	SET all_record;
+	PE=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('4151') then PE=1;
+		end;
+RUN;
+
+DATA all_VTE_list;
+	SET all_VTE_list;
+	DVT=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('4511','4512','4518','4519','4530','4532','4533','4534','4538','4539') then DVT=1;
+		end;
+RUN;
+
+PROC SQL;
+CREATE TABLE list as
+SELECT min (enrolid) as enrolid,
+	min(age) as age,
+	min(sex) as sex,
+	max(PE) as PE,
+	max(DVT) as DVT
+FROM all_VTE_list
+GROUP BY enrolid;
+QUIT;
+
+DATA list;
+	SET list;
+	IF age<=15 THEN age_cat1=1;
+	ELSE IF age<=30 THEN age_cat1=2;
+	ELSE IF age<=45 THEN age_cat1=3;
+	ELSE IF age>=46 THEN age_cat1=4;
+	VTE=MAX(PE, DVT);
+RUN;
+
+DATA temp;
+SET list;
+IF (DVT=1 AND PE=1);
+RUN;
+
+PROC FREQ DATA=temp;
+	TABLE sex;
+RUN;
+
+PROC FREQ DATA=temp;
+	TABLE age_cat1;
+RUN;
+
+DATA all_record;
+	SET inpt_sum outpt_svc;
+	IF (YEAR(ADMDATE)=2015 OR YEAR(SVCDATE)=2015)
+	Myfile.narcoticall_ndc
+Myfile.hydroxyurea_ndc
+
+DATA all_record;
+	SET	Drugall.scd_ccaed_09 Drugall.scd_ccaed_10 Drugall.scd_ccaed_11 Drugall.scd_ccaed_12 Drugall.scd_ccaed_13
+	Drugall.scd_mdcrd_09 Drugall.scd_mdcrd_10 Drugall.scd_mdcrd_11 Drugall.scd_mdcrd_12 Drugall.scd_mdcrd_13
+	Drugall.scd_ccaed_142 Drugall.scd_mdcrd_142 ;
+RUN;
+
+
+DATA all_record;
+SET	Drugall.scd_ccaed_151
+	Drugall.scd_mdcrd_151;
+RUN;
+DATA case_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Dabigatran' OR GENNME contains 'Rivaroxaban' OR GENNME contains 'Apixaban' OR GENNME contains 'Edoxaban'); 
+RUN;
+
+
+PROC SQL;
+CREATE TABLE case_presc as
+SELECT b.*
+FROM case_NDC a
+INNER JOIN all_record b
+ON a.NDCNUM = b.NDCNUM
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE uniqID as
+SELECT min (enrolid) as enrolid,
+	count(SVCDATE) as number
+FROM case_presc
+GROUP BY enrolid;
+QUIT;
