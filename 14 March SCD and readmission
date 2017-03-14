@@ -1,0 +1,373 @@
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+LIBNAME Inptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\InpatientSummary';
+LIBNAME Outptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\OutpatientService';
+LIBNAME Drugall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Drug Prescriptions';
+LIBNAME inptsvc 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\InpatientServices';
+LIBNAME insur 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Insurance Records';
+LIBNAME Destina 'C:\Users\jzhou86\Documents\SCD Project\SCD readmission';
+
+DATA inpt_sum;
+SET Inptall.scd_ccaei_09 Inptall.scd_ccaei_10 Inptall.scd_ccaei_11 Inptall.scd_ccaei_12 Inptall.scd_ccaei_13
+	Inptall.scd_mdcri_09 Inptall.scd_mdcri_10 Inptall.scd_mdcri_11 Inptall.scd_mdcri_12 Inptall.scd_mdcri_13
+	Inptall.scd_ccaei_142  
+	Inptall.scd_mdcri_142;
+DATA outpt_svc;
+SET	Outptall.scd_ccaeo_09 Outptall.scd_ccaeo_10 Outptall.scd_ccaeo_11 Outptall.scd_ccaeo_12 Outptall.scd_ccaeo_13
+	Outptall.scd_mdcro_09 Outptall.scd_mdcro_10 Outptall.scd_mdcro_11 Outptall.scd_mdcro_12 Outptall.scd_mdcro_13
+	Outptall.scd_ccaeo_142 
+	Outptall.scd_mdcro_142;
+DATA drug_pres;
+SET	Drugall.scd_ccaed_09 Drugall.scd_ccaed_10 Drugall.scd_ccaed_11 Drugall.scd_ccaed_12 Drugall.scd_ccaed_13
+	Drugall.scd_mdcrd_09 Drugall.scd_mdcrd_10 Drugall.scd_mdcrd_11 Drugall.scd_mdcrd_12 Drugall.scd_mdcrd_13
+	Drugall.scd_ccaed_142  
+	Drugall.scd_mdcrd_142;
+DATA inpt_svc;
+SET	inptsvc.scd_ccaes_09 inptsvc.scd_ccaes_10 inptsvc.scd_ccaes_11 inptsvc.scd_ccaes_12 inptsvc.scd_ccaes_13
+	inptsvc.scd_mdcrs_09 inptsvc.scd_mdcrs_10 inptsvc.scd_mdcrs_11 inptsvc.scd_mdcrs_12 inptsvc.scd_mdcrs_13
+	inptsvc.scd_ccaes_142 
+	inptsvc.scd_mdcrs_142;
+DATA insurance_all;
+SET	insur.scd_ccaet_09 insur.scd_ccaet_10 insur.scd_ccaet_11 insur.scd_ccaet_12 insur.scd_ccaet_13
+	insur.scd_mdcrt_09 insur.scd_mdcrt_10 insur.scd_mdcrt_11 insur.scd_mdcrt_12 insur.scd_mdcrt_13
+	insur.scd_ccaet_142 
+	insur.scd_mdcrt_142;
+DATA cohort_6pre_6post;
+	SET	Destina.cohort_case_6pre_6post;
+	case_6pre_6post=1;
+DATA cohort_6pre_3post;
+	SET	Destina.cohort_case_6pre_3post;
+	case_6pre_3post=1;
+DATA cohort_6pre_1post;
+	SET	Destina.cohort_case_6pre_1post;
+	case_6pre_1post=1;
+RUN;
+
+DATA all_record;
+	SET outpt_svc
+		inpt_sum;
+RUN;
+* conbine all enrollment criteria together;
+PROC SQL;
+	CREATE TABLE cohort_list as
+	SELECT a.*,
+		b.case_6pre_3post as case_6pre_3post
+	FROM cohort_6pre_1post a
+	LEFT JOIN cohort_6pre_3post b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE cohort_list as
+	SELECT a.*,
+		b.case_6pre_6post as case_6pre_6post
+	FROM cohort_list a
+	LEFT JOIN cohort_6pre_6post b
+	ON a.enrolid=b.enrolid;
+QUIT;
+* Assess second admission date;
+* extract all readmission information;
+PROC SQL;
+	CREATE TABLE cohort_list_admission as
+	SELECT a.*,
+		b.index_adm as index_adm,
+		b.index_date as index_date
+	FROM inpt_sum a
+	INNER JOIN cohort_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA cohort_list_adm_after_index_date;
+	SET cohort_list_admission;
+	IF ADMDATE>=index_date;
+RUN;
+
+PROC SQL;
+	CREATE TABLE cohort_list_readmission as
+	SELECT min(enrolid) as enrolid,
+		min(ADMDATE) as index_readm
+	FROM cohort_list_adm_after_index_date
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE readmission_record as
+	SELECT a.*
+	FROM inpt_sum a
+	INNER JOIN cohort_list_readmission b
+	ON a.enrolid=b.enrolid AND a.ADMDATE=b.index_readm;
+QUIT;
+
+* Add readmission records back to the cohort list;
+PROC SQL;
+	CREATE TABLE cohort_list_add_readmission as
+	SELECT a.*,
+		b.ADMDATE as readmission_date,
+		b.DISDATE as readmission_disdate,
+		b.days as readmission_days,
+		b.dx1 as readmission_dx1,
+		b.dx2 as readmission_dx2,
+		b.dx3 as readmission_dx3
+	FROM cohort_list a
+	LEFT JOIN readmission_record b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA cohort_list_add_readmission1;
+	SET cohort_list_add_readmission;
+	day30=0;
+	day90=0;
+	day180=0;
+	IF readmission_date<=30+index_date THEN day30=1;
+	IF readmission_date<=90+index_date THEN day90=1;
+	IF readmission_date<=180+index_date THEN day180=1;
+	IF readmission_date=. THEN day30=0;
+	IF readmission_date=. THEN day90=0;
+	IF readmission_date=. THEN day180=0;
+RUN;
+*Similarly, add first ER visit following the index date to the cohort;
+DATA all_ER_outpt;
+	SET outpt_svc;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0981') THEN ER=1;
+	ELSE IF STDPLAC in ('23','220','428') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120', '10420','10320','10220','12220','20220','10520','20120','21120','21220','22320',
+						'22120','30220','30120','30420','30320','30520','30620','31120','31420','31320','31520',
+						'31220','31620') THEN ER=1;
+	IF ER=1;
+RUN;
+
+PROC SQL;
+	CREATE TABLE cohort_list_ER as
+	SELECT a.*,
+		b.index_adm as index_adm,
+		b.index_date as index_date
+	FROM all_ER_outpt a
+	INNER JOIN cohort_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA cohort_list_ER;
+	SET cohort_list_ER;
+	IF SVCDATE>=index_date;
+RUN;
+
+PROC SQL;
+	CREATE TABLE cohort_ER as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) as index_ER
+	FROM cohort_list_ER
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE ER_record as
+	SELECT a.*
+	FROM all_ER_outpt a
+	INNER JOIN cohort_ER b
+	ON a.enrolid=b.enrolid AND a.SVCDATE=b.index_ER;
+QUIT;
+* Add ER records back to the cohort list;
+PROC SQL;
+	CREATE TABLE cohort_list_add_ER as
+	SELECT a.*,
+		b.SVCDATE as ER_date,
+		b.dx1 as ER_dx1,
+		b.dx2 as ER_dx2,
+		b.dx3 as ER_dx3
+	FROM cohort_list_add_readmission1 a
+	LEFT JOIN ER_record b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA cohort_list_add_ER;
+	SET cohort_list_add_ER;
+	ER_day30=0;
+	ER_day90=0;
+	ER_day180=0;
+	IF ER_date<=30+index_date THEN ER_day30=1;
+	IF ER_date<=90+index_date THEN ER_day90=1;
+	IF ER_date<=180+index_date THEN ER_day180=1;
+	IF ER_date=. THEN ER_day30=0;
+	IF ER_date=. THEN ER_day90=0;
+	IF ER_date=. THEN ER_day180=0;
+RUN;
+
+PROC SQL;
+	CREATE TABLE temp as
+	SELECT min(enrolid) as enrolid
+	FROM cohort_list_add_ER
+	GROUP BY enrolid;
+QUIT;
+*Add composite outcomes assessment;
+DATA cohort_list_add_ER1;
+	SET cohort_list_add_ER;
+	compo_day30=0;
+	compo_day90=0;
+	compo_day180=0;
+	compo_day=min(ER_date,readmission_date);
+	IF compo_day<=30+index_date THEN compo_day30=1;
+	IF compo_day<=90+index_date THEN compo_day90=1;
+	IF compo_day<=180+index_date THEN compo_day180=1;
+	IF compo_day=. THEN compo_day30=0;
+	IF compo_day=. THEN compo_day90=0;
+	IF compo_day=. THEN compo_day180=0;
+RUN;
+
+*Add birth year, region;
+PROC SQL;
+	CREATE TABLE cohort_all_pt as
+	SELECT min(enrolid) as enrolid,
+			min(DOBYR) as DOBYR,
+			min(region) as region
+	FROM all_record
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE cohort_list_final_resource as
+	SELECT a.*,
+		b.DOBYR as DOBYR,
+		b.region as region
+	FROM cohort_list_add_ER1 a
+	INNER JOIN cohort_all_pt b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+* Now add hydrea exposure information;
+
+PROC SQL;
+CREATE TABLE pres_list as
+	SELECT a.*,
+			b.index_date as index_date,
+			b.days as days
+	FROM drug_pres a
+	INNER JOIN cohort_list_final_resource b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA pre_dx;
+	SET pres_list;
+	IF index_date-180-days<=SVCDATE<index_date;
+RUN;
+DATA post_dx;
+	SET pres_list;
+	IF index_date<=SVCDATE<=index_date+180;
+RUN;
+
+* Assess pre-index date hydrea exposure;
+PROC SQL;
+CREATE TABLE hydrea_list as
+	SELECT a.*
+	FROM pre_dx a
+	INNER JOIN myfile.hydroxyurea_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+DATA hydrea_list;
+	SET hydrea_list;
+	last_supply=SVCDATE+daysupp;
+	index_adm=index_date;
+	end_supply=min(index_adm, last_supply);
+	daysupp_adj=end_supply-SVCDATE;
+RUN;
+PROC SQL;
+CREATE TABLE hydrea_userlist as
+	SELECT min(enrolid) as enrolid,
+		1  as pre_hydrea,
+		sum(daysupp_adj) as total_supply,
+		min(days) as days,
+		min(SVCDATE) as hydrea_pre_ini,
+		min(index_adm) as index_adm
+	FROM hydrea_list
+	GROUP BY enrolid;
+QUIT;
+
+DATA hydrea_userlist;
+	SET hydrea_userlist;
+	MPR=100*(total_supply+days)/(index_adm-hydrea_pre_ini+days);
+	IF MPR>=80 THEN hydrea_status=2;
+	IF MPR<80 THEN hydrea_status=1;
+RUN;
+
+PROC FREQ DATA=hydrea_userlist order=freq;
+TABLE hydrea_status;
+RUN;
+
+* Add pre hydroxyurea records back to the cohort list;
+PROC SQL;
+	CREATE TABLE cohort_list_final_pre_hydrea as
+	SELECT a.*,
+		b.hydrea_pre_ini as hydrea_pre_ini,
+		b.MPR as pre_hydrea_MPR,
+		b.hydrea_status as pre_hydrea_status
+	FROM cohort_list_final_resource a
+	LEFT JOIN hydrea_userlist b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*Similarly, add post hydroxyurea initiation dates;
+PROC SQL;
+CREATE TABLE hydrea_list as
+	SELECT a.*
+	FROM post_dx a
+	INNER JOIN myfile.hydroxyurea_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+DATA hydrea_list;
+	SET hydrea_list;
+	IF SVCDATE>=index_date+days-1;
+RUN;
+PROC SQL;
+CREATE TABLE hydrea_userlist as
+	SELECT min(enrolid) as enrolid,
+		1  as post_hydrea,
+		min(SVCDATE) as hydrea_post_ini
+	FROM hydrea_list
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE destina.cohort_list_final_hydrea as
+	SELECT a.*,
+		b.hydrea_post_ini as hydrea_post_ini,
+		b.post_hydrea as post_hydrea_status
+	FROM cohort_list_final_pre_hydrea a
+	LEFT JOIN hydrea_userlist b
+	ON a.enrolid=b.enrolid;
+QUIT;
+PROC SQL;
+	CREATE TABLE temp as
+	SELECT min(enrolid) as enrolid
+	FROM destina.cohort_list_final_hydrea
+	GROUP BY enrolid;
+QUIT;
+* Add enrollment data;
+proc sort data=SCD_insurance_record; by enrolid; run;
+proc sort data=insurance_all; by enrolid; run;
+DATA SCD_insurance_record;
+MERGE destina.cohort_list_final_hydrea (in=a keep=enrolid index_date) insurance_all(in=b keep=enrolid DTSTART DTEND MEMDAYS );
+by enrolid;
+if a=1 and b=1;
+run;
+
+proc sort data=SCD_insurance_record; by enrolid index_date ; run;
+proc print data= SCD_insurance_record (firstobs=13000 obs=13100); run;
+
+PROC SQL;
+CREATE TABLE list as
+	SELECT min(enrolid) as enrolid,
+		max(DTEND) as last_enroll_date
+	FROM SCD_insurance_record
+	GROUP BY enrolid;
+QUIT;
+
+PROC FREQ DATA=list ORDER=FREQ;
+TABLE last_enroll_date;run;
+
+PROC SQL;
+	CREATE TABLE destina.cohort_list_final_hydrea1 as
+	SELECT a.*,
+		b.last_enroll_date as last_enroll_date
+	FROM destina.cohort_list_final_hydrea a
+	LEFT JOIN list b
+	ON a.enrolid=b.enrolid;
+QUIT;
