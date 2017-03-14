@@ -1,0 +1,83 @@
+LIBNAME Destina 'C:\Users\jzhou86\Documents\SCD Project\SCD readmission';
+DATA id_list;
+SET Destina.cohort_list_final_hydrea1;
+RUN;
+
+PROC CONTENTS DATA=id_list;RUN;
+
+DATA working_table;
+SET id_list;
+KEEP 	enrolid DOBYR sex region ER_date ER_dx1-ER_dx3  case_6pre_1post case_6pre_3post  case_6pre_6post  days  index_adm  index_date  
+		hydrea_pre_ini  hydrea_post_ini  pre_hydrea_MPR readmission_date  readmission_days  readmission_disdate  
+		readmission_dx1-readmission_dx3 last_enroll_date;
+RUN;
+
+DATA working_table;
+SET working_table;
+array icd {*} ER_dx1-ER_dx3;
+do i = 1 to dim(icd);
+if icd{i} in: ('28242','28262','28264','28269','5173') then ER_VOC = 1;
+end;
+array readmicd {*} readmission_dx1-readmission_dx3;
+do i = 1 to dim(readmicd);
+if readmicd{i} in: ('28242','28262','28264','28269','5173') then readm_VOC = 1;
+end;
+run; 
+
+PROC SQL;
+	CREATE TABLE destina.cohort_list as
+	SELECT	min(enrolid) as enrolid,
+			min(DOBYR) as DOBYR,
+			min(sex) as sex,
+			min(case_6pre_1post) as case_6pre_1post,
+			min(case_6pre_3post) as case_6pre_3post,
+			min(case_6pre_6post) as case_6pre_6post,
+			min(hydrea_pre_ini) as hydrea_pre_ini,
+			min(hydrea_post_ini) as hydrea_post_ini,
+			min(index_adm) as index_adm,
+			min(index_date) as index_date,
+			min(days) as days,
+			min(readmission_date) as readmission_date,
+			min(readmission_days) as readmission_days,
+			max(readm_VOC) as readm_VOC,
+			min(ER_date) as ER_date,
+			max(ER_VOC) as ER_VOC,
+			min(pre_hydrea_MPR) as pre_hydrea_MPR,
+			min(last_enroll_date) as last_enroll_date		
+	FROM working_table
+	GROUP BY enrolid;
+QUIT;
+
+DATA cohort_list1;
+	SET cohort_list;
+	KEEP enrolid case_6pre_6post index_date readmission_date readm_VOC pre_hydrea_MPR hydrea_status readmission_status exit ER_date ER_VOC;
+	IF case_6pre_6post=1;
+	IF pre_hydrea_MPR>=80 THEN hydrea_status=2;
+	IF pre_hydrea_MPR<80 THEN hydrea_status=1;
+	IF pre_hydrea_MPR=. THEN hydrea_status=0;
+	readmission_status=1;
+	IF (readmission_date=. AND ER_date=.) THEN readmission_status=0;
+	IF max(readm_VOC,ER_VOC)^=1 THEN readmission_status=0;
+	exit=min(readmission_date,ER_date);
+	IF readmission_status=0 THEN exit=index_date+180;
+	exit=exit-index_date;
+	index_date=0;
+RUN;
+
+DATA cohort_list1;
+	SET cohort_list;
+	IF case_6pre_6post=1;
+	hydrea_status=0;
+	day30=0;
+	day90=0;
+	day180=0;
+	IF hydrea_pre_ini^=. THEN hydrea_status=1;
+	IF (hydrea_post_ini^=. AND hydrea_post_ini<=readmission_date-90 )THEN hydrea_status=1;
+	IF (readmission_date^=. AND readmission_date-index_date<=30) THEN day30=1;
+	IF (readmission_date^=. AND readmission_date-index_date<=90) THEN day90=1;
+	IF (readmission_date^=. AND readmission_date-index_date<=180) THEN day180=1;
+RUN;
+
+proc freq data=cohort_list1 order=data;
+        tables day30*hydrea_status / relrisk nopercent norow;
+        run;
