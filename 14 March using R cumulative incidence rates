@@ -1,0 +1,10 @@
+install.packages("etm")
+require(etm)
+data(abortion)
+workingT<- read.csv(file="C:/Users/jzhou86/Documents/SCD Project/SCD readmission/CIF SCD readmission.csv",
+                     head=TRUE,sep=",")
+head(workingT)
+cif.workingT <- etmCIF(Surv(index_date, exit, readmission_status != 0) ~ hydrea_status, workingT, etype = readmission_status, failcode = 1)
+cif.workingT
+plot(cif.workingT)
+summary(cif.workingT)
