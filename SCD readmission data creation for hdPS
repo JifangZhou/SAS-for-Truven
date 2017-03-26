@@ -1,0 +1,266 @@
+LIBNAME Destina 'C:\Users\jzhou86\Documents\SCD Project\SCD readmission';
+DATA id_list;
+SET Destina.cohort_list_final_hydrea1;
+RUN;
+
+PROC CONTENTS DATA=id_list;RUN;
+
+DATA id_list_1;
+SET id_list;
+KEEP enrolid DOBYR sex region day30 pre_hydrea_status index_adm index_date days;
+RUN;
+
+PROC SQL;
+	CREATE TABLE id_list_2 as
+	SELECT	min(enrolid) as enrolid,
+			min(DOBYR) as DOBYR,
+			min(sex) as sex,
+			min(region) as region,
+			min(index_adm) as index_adm,
+			min(index_date) as index_date,
+			min(days) as days,
+			max(day30) as day30,
+			min(pre_hydrea_status) as pre_hydrea_status	
+	FROM id_list_1
+	GROUP BY enrolid;
+QUIT;
+
+DATA id_list_3;
+SET id_list_2;
+age=YEAR(index_adm)-DOBYR;
+IF age<=17 THEN age_gp=0;
+ELSE IF age>=18 THEN age_gp=1;
+hydrea_status=1;
+IF pre_hydrea_status=. THEN hydrea_status=0;
+index_year=YEAR(index_adm);
+DROP DOBYR pre_hydrea_status index_date age;
+RUN;
+
+*Extract all dx, proc, Rx from outpatient settings;
+LIBNAME Inptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\InpatientSummary';
+LIBNAME Outptall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\OutpatientService';
+LIBNAME Drugall 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\Drug Prescriptions';
+LIBNAME inptsvc 'C:\Users\jzhou86\Documents\SCD Project\Raw Data\InpatientServices';
+LIBNAME WorkingD 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+
+
+DATA inpt_sum;
+SET Inptall.scd_ccaei_09 Inptall.scd_ccaei_10 Inptall.scd_ccaei_11 Inptall.scd_ccaei_12 Inptall.scd_ccaei_13
+	Inptall.scd_mdcri_09 Inptall.scd_mdcri_10 Inptall.scd_mdcri_11 Inptall.scd_mdcri_12 Inptall.scd_mdcri_13
+	Inptall.scd_ccaei_142  
+	Inptall.scd_mdcri_142;
+DATA outpt_svc;
+SET	Outptall.scd_ccaeo_09 Outptall.scd_ccaeo_10 Outptall.scd_ccaeo_11 Outptall.scd_ccaeo_12 Outptall.scd_ccaeo_13
+	Outptall.scd_mdcro_09 Outptall.scd_mdcro_10 Outptall.scd_mdcro_11 Outptall.scd_mdcro_12 Outptall.scd_mdcro_13
+	Outptall.scd_ccaeo_142 
+	Outptall.scd_mdcro_142;
+DATA drug_pres;
+SET	Drugall.scd_ccaed_09 Drugall.scd_ccaed_10 Drugall.scd_ccaed_11 Drugall.scd_ccaed_12 Drugall.scd_ccaed_13
+	Drugall.scd_mdcrd_09 Drugall.scd_mdcrd_10 Drugall.scd_mdcrd_11 Drugall.scd_mdcrd_12 Drugall.scd_mdcrd_13
+	Drugall.scd_ccaed_142  
+	Drugall.scd_mdcrd_142;
+DATA inpt_svc;
+SET	inptsvc.scd_ccaes_09 inptsvc.scd_ccaes_10 inptsvc.scd_ccaes_11 inptsvc.scd_ccaes_12 inptsvc.scd_ccaes_13
+	inptsvc.scd_mdcrs_09 inptsvc.scd_mdcrs_10 inptsvc.scd_mdcrs_11 inptsvc.scd_mdcrs_12 inptsvc.scd_mdcrs_13
+	inptsvc.scd_ccaes_142 
+	inptsvc.scd_mdcrs_142;
+DATA redbook;
+SET WorkingD.redbook;
+RUN;
+*extract all Rx history;
+PROC SQL;
+CREATE TABLE pres_list as
+	SELECT a.*,
+			b.index_adm as index_adm,
+			b.days as days
+	FROM drug_pres a
+	INNER JOIN id_list_3 b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA pre_dx;
+	SET pres_list;
+	IF index_adm-180<=SVCDATE<=index_adm+days-1;
+RUN;
+
+PROC CONTENTS DATA=pre_dx;RUN;
+PROC SQL;
+	CREATE TABLE pre_dx_1 as
+	SELECT	a.enrolid as enrolid,
+			b.GENNME as GENNME
+	FROM pre_dx a
+	INNER JOIN redbook b
+	ON a.NDCNUM=b.NDCNUM;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE pre_dx_2 as
+	SELECT	min(enrolid) as enrolid,
+			min(GENNME) as GENNME	
+	FROM pre_dx_1
+	GROUP BY enrolid,GENNME;
+QUIT;
+
+DATA destina.dx;
+	SET pre_dx_2;
+RUN;
+*Extract inpatient and outpatient procedures;
+PROC SQL;
+CREATE TABLE opt_proc_list as
+	SELECT a.*,
+			b.index_adm as index_adm,
+			b.days as days
+	FROM outpt_svc a
+	INNER JOIN id_list_3 b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA opt_proc_list;
+	SET opt_proc_list;
+	IF index_adm-180<=SVCDATE<=index_adm+days-1;
+RUN;
+
+DATA opt_proc_list1;
+	SET opt_proc_list;
+	KEEP enrolid proc1;
+RUN;
+
+PROC SQL;
+	CREATE TABLE opt_proc_list2 as
+	SELECT	min(enrolid) as enrolid,
+			min(proc1) as px	
+	FROM opt_proc_list1
+	GROUP BY enrolid,proc1;
+QUIT;
+
+DATA out_px;
+	SET opt_proc_list2;
+	IF px=. THEN DELETE;
+RUN;
+*extract outpatient dx1-dx3;
+DATA opt_dx_list1;
+	SET opt_proc_list;
+	KEEP enrolid dx1;
+	RENAME dx1=dx;
+RUN;
+
+DATA opt_dx_list2;
+	SET opt_proc_list;
+	KEEP enrolid dx2;
+	RENAME dx2=dx;
+RUN;
+
+DATA opt_dx_list3;
+	SET opt_proc_list;
+	KEEP enrolid dx3;
+	RENAME dx3=dx;
+RUN;
+
+DATA opt_dx;
+	SET opt_dx_list1 opt_dx_list2 opt_dx_list3;
+RUN;
+
+PROC SQL;
+	CREATE TABLE opt_dx_list1 as
+	SELECT	min(enrolid) as enrolid,
+			min(dx) as dx	
+	FROM opt_dx
+	GROUP BY enrolid,dx;
+QUIT;
+
+DATA destina.out_dx;
+	SET opt_dx_list1;
+	IF dx=. THEN DELETE;
+RUN;
+
+*extract ipt dx and px;
+DATA ipt_all;
+	SET inpt_svc inpt_sum;
+RUN;
+
+PROC SQL;
+CREATE TABLE inpt_list as
+	SELECT a.*,
+			b.index_adm as index_adm,
+			b.days as days
+	FROM ipt_all a
+	INNER JOIN id_list_3 b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA inpt_list1;
+	SET inpt_list;
+	IF (index_adm=ADMDATE OR index_adm<=SVCDATE<=index_adm+days-1);
+RUN;
+
+*extract ipt_dx;
+DATA ipt_dx_list1;
+	SET inpt_list1;
+	KEEP enrolid dx1;
+	RENAME dx1=dx;
+RUN;
+
+DATA ipt_dx_list2;
+	SET inpt_list1;
+	KEEP enrolid dx2;
+	RENAME dx2=dx;
+RUN;
+
+DATA ipt_dx_list3;
+	SET inpt_list1;
+	KEEP enrolid dx3;
+	RENAME dx3=dx;
+RUN;
+
+DATA ipt_dx;
+	SET ipt_dx_list1 ipt_dx_list2 ipt_dx_list3;
+RUN;
+
+PROC SQL;
+	CREATE TABLE ipt_dx_list1 as
+	SELECT	min(enrolid) as enrolid,
+			min(dx) as dx	
+	FROM ipt_dx
+	GROUP BY enrolid,dx;
+QUIT;
+
+DATA ipt_dx;
+	SET ipt_dx_list1;
+	IF dx=. THEN DELETE;
+RUN;
+
+*extract ipt_px all the procedures;
+DATA ipt_proc_list1;
+	SET inpt_list1;
+	KEEP enrolid proc1;
+	RENAME proc1=px;
+RUN;
+
+DATA ipt_proc_list2;
+	SET inpt_list1;
+	KEEP enrolid proc2;
+	RENAME proc2=px;
+RUN;
+
+DATA ipt_proc_list3;
+	SET inpt_list1;
+	KEEP enrolid proc3;
+	RENAME proc3=px;
+RUN;
+
+DATA ipt_px;
+	SET ipt_proc_list1 ipt_proc_list2 ipt_proc_list3;
+RUN;
+
+PROC SQL;
+	CREATE TABLE ipt_px_list1 as
+	SELECT	min(enrolid) as enrolid,
+			min(px) as px	
+	FROM ipt_px
+	GROUP BY enrolid,px;
+QUIT;
+
+DATA destina.ipt_px;
+	SET ipt_px_list1;
+	IF px=. THEN DELETE;
+RUN;
