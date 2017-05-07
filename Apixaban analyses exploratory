@@ -1,0 +1,379 @@
+LIBNAME Rawdata 'C:\Users\jzhou86\Documents\Apixaban with Nutescu\Rawdata\Index case creation';
+
+DATA all_apx;
+SET Rawdata.apx_ccaed_09 Rawdata.apx_ccaed_10 Rawdata.apx_ccaed_11 Rawdata.apx_ccaed_12 Rawdata.apx_ccaed_13 Rawdata.apx_ccaed_142 Rawdata.apx_ccaed_151
+	Rawdata.apx_mdcrd_09 Rawdata.apx_mdcrd_10 Rawdata.apx_mdcrd_11 Rawdata.apx_mdcrd_12 Rawdata.apx_mdcrd_13 Rawdata.apx_mdcrd_142 Rawdata.apx_mdcrd_151;
+RUN;
+
+DATA all_apx_temp;
+SET all_apx;
+SVC_year=YEAR(SVCDATE);
+RUN;
+PROC FREQ DATA=all_apx_temp;
+TABLE SVC_year;
+RUN;
+
+PROC SQL;
+	CREATE table apx_id as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as initiation_date,
+			min(sex) as sex,
+			min(region) as region,
+			min(DOBYR) as DOBYR,
+			count(SVCDATE) as number_pres
+	FROM all_apx
+	GROUP BY enrolid;
+QUIT;
+
+DATA apx_id;
+SET apx_id;
+initiation_year=YEAR(initiation_date);
+age=initiation_year-DOBYR;
+IF age in (1:9) THEN agecate = 1 ;
+IF age in (10:19) THEN	agecate = 2 ;
+IF age in (20:29) THEN agecate = 3 ;
+IF age in (30:39) THEN	agecate = 4 ;
+IF age in (40:49) THEN agecate = 5 ;
+IF age in (50:59) THEN	agecate = 6 ;
+IF age in (60:69) THEN agecate = 7 ;
+IF age in (70:79) THEN	agecate = 8 ;
+IF age in (80:89) THEN	agecate = 9 ;
+IF age in (90:109) THEN	agecate = 10 ;
+number_class = 0;
+IF number_pres>=4 THEN number_class = 1;
+RUN;
+
+PROC FREQ DATA=apx_id ;
+TABLE region*number_class /norow nopercent nocol chisq;
+RUN;
+
+PROC FREQ DATA=apx_id ;
+TABLE region;
+RUN;
+
+PROC MEANS DATA=apx_id ;
+VAR age;
+RUN;
+
+PROC TTEST DATA=apx_id;
+CLASS number_class;
+VAR age;
+RUN;
+LIBNAME Rawdata 'C:\Users\jzhou86\Documents\Apixaban with Nutescu\Rawdata';
+*Exposure to other types of anticoagulant agents prior to Apixaban initiation;
+DATA Rawdata.apx_id;
+SET apx_id;RUN;
+DATA all_precsc;
+SET Rawdata.scd_ccaed_09 Rawdata.scd_ccaed_10 Rawdata.scd_ccaed_11 Rawdata.scd_ccaed_12 Rawdata.scd_ccaed_13 Rawdata.scd_ccaed_142 Rawdata.scd_ccaed_151
+	Rawdata.scd_mdcrd_09 Rawdata.scd_mdcrd_10 Rawdata.scd_mdcrd_11 Rawdata.scd_mdcrd_12 Rawdata.scd_mdcrd_13 Rawdata.scd_mdcrd_142 Rawdata.scd_mdcrd_151;
+RUN; 
+
+
+LIBNAME Redbook 'C:\Users\jzhou86\Documents\SCD Project\Working directory';
+DATA redbook;
+SET Redbook.redbook;
+RUN;
+
+
+* Apixaban;
+DATA case_NDC;
+	SET redbook;
+	WHERE GENNME contains 'Apixaban'; 
+RUN;
+PROC sql;
+		CREATE TABLE apixaban_file as
+		SELECT a.*
+ 		FROM all_precsc a
+		INNER JOIN case_NDC b
+		ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC SQL;
+	CREATE table temp_id as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as apixaban_ini_date
+	FROM apixaban_file
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL; 
+		CREATE TABLE apx_id_addapx as
+		SELECT a.*,
+				b.apixaban_ini_date as apixaban_ini_date
+ 		FROM apx_id a
+		LEFT JOIN temp_id b
+		ON a.enrolid = b.enrolid;
+QUIT;
+
+*Warfarin;
+DATA case_NDC;
+	SET redbook;
+	WHERE GENNME contains 'Warfarin'; 
+RUN;
+PROC sql;
+		CREATE TABLE Warfarin_file as
+		SELECT a.*
+ 		FROM all_precsc a
+		INNER JOIN case_NDC b
+		ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC SQL;
+	CREATE table temp_id as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as Warfarin_ini_date
+	FROM Warfarin_file
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL; 
+		CREATE TABLE apx_id_addapx_addwar as
+		SELECT a.*,
+				b.Warfarin_ini_date as Warfarin_ini_date
+ 		FROM apx_id_addapx a
+		LEFT JOIN temp_id b
+		ON a.enrolid = b.enrolid;
+QUIT;
+
+*Dabigatran (Pradaxa);
+DATA case_NDC;
+	SET redbook;
+	WHERE GENNME contains 'Dabigatran'; 
+RUN;
+PROC sql;
+		CREATE TABLE Dabigatran_file as
+		SELECT a.*
+ 		FROM all_precsc a
+		INNER JOIN case_NDC b
+		ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC SQL;
+	CREATE table temp_id as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as Dabigatran_ini_date
+	FROM Dabigatran_file
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL; 
+		CREATE TABLE apx_id_addapx_addwar_adddab as
+		SELECT a.*,
+				b.Dabigatran_ini_date as Dabigatran_ini_date
+ 		FROM apx_id_addapx_addwar a
+		LEFT JOIN temp_id b
+		ON a.enrolid = b.enrolid;
+QUIT;
+*Rivaroxaban (Xarelto);
+DATA case_NDC;
+	SET redbook;
+	WHERE GENNME contains 'Rivaroxaban'; 
+RUN;
+PROC sql;
+		CREATE TABLE Rivaroxaban_file as
+		SELECT a.*
+ 		FROM all_precsc a
+		INNER JOIN case_NDC b
+		ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC SQL;
+	CREATE table temp_id as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as Rivaroxaban_ini_date
+	FROM Rivaroxaban_file
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL; 
+		CREATE TABLE apx_id_apx_war_dab_riv as
+		SELECT a.*,
+				b.Rivaroxaban_ini_date as Rivaroxaban_ini_date
+ 		FROM apx_id_addapx_addwar_adddab a
+		LEFT JOIN temp_id b
+		ON a.enrolid = b.enrolid;
+QUIT;
+*Edoxaban (SAVAYSA) NDC:	65597-201-10 or 65597-0201-10;
+
+DATA case_NDC;
+	SET redbook;
+	WHERE GENNME contains 'Edoxaban'; 
+RUN;
+*No records found in the prescription database for Edoxaban;
+DATA RAWDATA.apx_id_addMeds;
+	SET apx_id_apx_war_dab_riv;
+	RUN;
+LIBNAME workingD 'C:\Users\jzhou86\Documents\Apixaban with Nutescu\Working Directory';
+DATA id_list;
+	SET workingD.apx_id_addMeds;
+	IF enrolid=. THEN delete;
+	ever_Riv=0;pre_Riv=0;post_Riv=0;
+IF Rivaroxaban_ini_date ^=. THEN ever_Riv=1;
+IF (Rivaroxaban_ini_date< initiation_date AND ever_Riv=1) THEN pre_Riv=1;
+IF (Rivaroxaban_ini_date>= initiation_date AND ever_Riv=1) THEN post_Riv=1;
+	ever_Dab=0;pre_Dab=0;post_Dab=0;
+IF Dabigatran_ini_date ^=. THEN ever_Dab=1;
+IF (Dabigatran_ini_date< initiation_date AND ever_Dab=1) THEN pre_Dab=1;
+IF (Dabigatran_ini_date>= initiation_date AND ever_Dab=1) THEN post_Dab=1;
+	ever_War=0;pre_War=0;post_War=0;
+IF Warfarin_ini_date ^=. THEN ever_War=1;
+IF (Warfarin_ini_date< initiation_date AND ever_War=1) THEN pre_War=1;
+IF (Warfarin_ini_date>= initiation_date AND ever_War=1) THEN post_War=1;
+RUN;
+
+DATA temp;
+SET id_list;
+count_med=ever_Riv+ever_Dab+ever_War;
+IF count_med=2;
+IF (ever_War=1 AND ever_riv=1);
+RUN;
+
+DATA temp;
+SET id_list;
+post_med=post_Riv+post_Dab+post_War;
+IF post_med=2;
+IF (post_war=1 AND post_dab=1);
+RUN;
+
+PROC FREQ DATA=temp;
+TABLE post_med;
+RUN;
+
+DATA workingD.id_list0506;
+	SET id_list;
+RUN;
+*Assess pre-existing conditions;
+LIBNAME Rawdata 'C:\Users\jzhou86\Documents\Apixaban with Nutescu\Rawdata';
+
+DATA all_records;
+SET Rawdata.scd_ccaeo_09 Rawdata.scd_ccaeo_10 Rawdata.scd_ccaeo_11 Rawdata.scd_ccaeo_12 Rawdata.scd_ccaeo_13 Rawdata.scd_ccaeo_142 Rawdata.scd_ccaeo_151
+	Rawdata.scd_mdcro_09 Rawdata.scd_mdcro_10 Rawdata.scd_mdcro_11 Rawdata.scd_mdcro_12 Rawdata.scd_mdcro_13 Rawdata.scd_mdcro_142 Rawdata.scd_mdcro_151
+	Rawdata.scd_ccaei_09 Rawdata.scd_ccaei_10 Rawdata.scd_ccaei_11 Rawdata.scd_ccaei_12 Rawdata.scd_ccaei_13 Rawdata.scd_ccaei_142 Rawdata.scd_ccaei_151
+	Rawdata.scd_mdcri_09 Rawdata.scd_mdcri_10 Rawdata.scd_mdcri_11 Rawdata.scd_mdcri_12 Rawdata.scd_mdcri_13 Rawdata.scd_mdcri_142 Rawdata.scd_mdcri_151;
+RUN; 
+
+*include only before the initiation dates' records;
+
+PROC SQL;
+	CREATE table all_records_adddate as
+	SELECT a.*,
+			b.initiation_date as index_date
+	FROM all_records a
+	INNER JOIN id_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA all_records_cleaned;
+	SET all_records_adddate;
+	IF (SVCDATE<index_date OR ADMDATE<index_date);
+RUN;
+
+data  all_PE ;
+set all_records_cleaned ;
+array icd{*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('6732',
+				'41511','41519',
+				'I260','I269','O882') then case = 1;
+end;
+if case = 1;
+run; 
+data  all_DVT ;
+set all_records_cleaned ;
+array icd{*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: (	'4532','4538','45389','45111','45119','45181',
+				'4534','45341','45342',
+				'67133','67144',
+				'45183','45189',
+				'45382','48383','45384','45385','45386','45387',
+				'I261','I262','I263','I264','I265','I266','I267','I268',
+				'I80','I81',
+				'I820','I821','I822','I823','I828','I829',
+				'O082','O223','O229','O871') then case = 1;
+end;
+if case = 1;
+run; 
+data  all_AF;
+set all_records_cleaned ;
+array icd{*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: (	'42731',
+				'I480','I481','I482','I4891') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+	CREATE table PE_id as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as PE_date_opt,
+			min(ADMDATE) as PE_date_ipt
+	FROM all_PE 
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table DVT_id as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as DVT_date_opt,
+			min(ADMDATE) as DVT_date_ipt
+	FROM all_DVT
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table AF_id as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as AF_date_opt,
+			min(ADMDATE) as AF_date_ipt
+	FROM all_AF
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_list1 as
+	SELECT a.*,
+			b.*
+	FROM id_list a
+	LEFT JOIN PE_id b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_list2 as
+	SELECT a.*,
+			b.*
+	FROM id_list1 a
+	LEFT JOIN DVT_id b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_list3 as
+	SELECT a.*,
+			b.*
+	FROM id_list2 a
+	LEFT JOIN AF_id b
+	ON a.enrolid=b.enrolid;
+QUIT;
+DATA id_list4;
+	SET id_list3;
+	PE=0;DVT=0;AF=0;VTE=0;
+	IF (PE_date_opt ^=. OR PE_date_ipt ^=.) THEN PE=1;
+	IF (DVT_date_opt ^=. OR DVT_date_ipt ^=.) THEN DVT=1;
+	IF (AF_date_opt ^=. OR AF_date_ipt ^=.) THEN AF=1;
+	IF (PE=1 OR DVT=1) THEN VTE=1;
+RUN;
+
+DATA workingD.id_list_addDx;
+	SET id_list4;
+RUN;
+
+DATA temp;
+	SET id_list4;
+	case=0;
+	IF (AF=1 AND DVT=0 AND PE=1) THEN case=1;
+RUN;
+
+PROC FREQ DATA=temp;
+	TABLE case;
+RUN;
+
+
