@@ -1,0 +1,61 @@
+LIBNAME Rawdata 'C:\Users\jzhou86\Documents\Apixaban with Nutescu\Rawdata';
+
+DATA all_apx;
+SET Rawdata.apx_ccaed_09 Rawdata.apx_ccaed_10 Rawdata.apx_ccaed_11 Rawdata.apx_ccaed_12 Rawdata.apx_ccaed_13 Rawdata.apx_ccaed_142 Rawdata.apx_ccaed_151
+	Rawdata.apx_mdcrd_09 Rawdata.apx_mdcrd_10 Rawdata.apx_mdcrd_11 Rawdata.apx_mdcrd_12 Rawdata.apx_mdcrd_13 Rawdata.apx_mdcrd_142 Rawdata.apx_mdcrd_151;
+RUN;
+
+DATA all_apx_temp;
+SET all_apx;
+SVC_year=YEAR(SVCDATE);
+RUN;
+PROC FREQ DATA=all_apx_temp;
+TABLE SVC_year;
+RUN;
+
+PROC SQL;
+	CREATE table apx_id as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as initiation_date,
+			min(sex) as sex,
+			min(region) as region,
+			min(DOBYR) as DOBYR,
+			count(SVCDATE) as number_pres
+	FROM all_apx
+	GROUP BY enrolid;
+QUIT;
+
+DATA apx_id;
+SET apx_id;
+initiation_year=YEAR(initiation_date);
+age=initiation_year-DOBYR;
+IF age in (1:9) THEN agecate = 1 ;
+IF age in (10:19) THEN	agecate = 2 ;
+IF age in (20:29) THEN agecate = 3 ;
+IF age in (30:39) THEN	agecate = 4 ;
+IF age in (40:49) THEN agecate = 5 ;
+IF age in (50:59) THEN	agecate = 6 ;
+IF age in (60:69) THEN agecate = 7 ;
+IF age in (70:79) THEN	agecate = 8 ;
+IF age in (80:89) THEN	agecate = 9 ;
+IF age in (90:109) THEN	agecate = 10 ;
+number_class = 0;
+IF number_pres>=4 THEN number_class = 1;
+RUN;
+
+PROC FREQ DATA=apx_id ;
+TABLE region*number_class /norow nopercent nocol chisq;
+RUN;
+
+PROC FREQ DATA=apx_id ;
+TABLE region;
+RUN;
+
+PROC MEANS DATA=apx_id ;
+VAR age;
+RUN;
+
+PROC TTEST DATA=apx_id;
+CLASS number_class;
+VAR age;
+RUN;
