@@ -1,0 +1,76 @@
+LIBNAME Rawdata 'F:\User Folders\jzhou86\Apixaban user cases';
+
+DATA all_apx;
+SET Rawdata.apx_ccaed_09 Rawdata.apx_ccaed_10 Rawdata.apx_ccaed_11 Rawdata.apx_ccaed_12 Rawdata.apx_ccaed_13 Rawdata.apx_ccaed_142 Rawdata.apx_ccaed_151
+	Rawdata.apx_mdcrd_09 Rawdata.apx_mdcrd_10 Rawdata.apx_mdcrd_11 Rawdata.apx_mdcrd_12 Rawdata.apx_mdcrd_13 Rawdata.apx_mdcrd_142 Rawdata.apx_mdcrd_151;
+RUN;
+
+PROC SQL;
+	CREATE table apx_id as
+	SELECT min(enrolid) as enrolid
+	FROM all_apx
+	GROUP BY enrolid;
+QUIT;
+
+LIBNAME myfile 'F:\User Folders\jzhou86\Apixaban user cases';
+
+libname ccae09 'E:\Truven Data\CCAE\2009';
+libname mdcr09 'E:\Truven Data\MDCR\2009';
+libname ccae10 'E:\Truven Data\CCAE\2010';
+libname mdcr10 'E:\Truven Data\MDCR\2010';
+libname ccae11 'E:\Truven Data\CCAE\2011';
+libname mdcr11 'E:\Truven Data\MDCR\2011';
+libname ccae12 'E:\Truven Data\CCAE\2012';
+libname mdcr12 'E:\Truven Data\MDCR\2012';
+libname ccae13 'E:\Truven Data\CCAE\2013';
+libname mdcr13 'E:\Truven Data\MDCR\2013';
+libname ccae14 'E:\Truven Data\CCAE\2014';
+libname mdcr14 'E:\Truven Data\MDCR\2014';
+libname ccae15 'E:\Truven Data\CCAE\2015';
+libname mdcr15 'E:\Truven Data\MDCR\2015';
+
+%macro scd (input = , output = );
+options compress = yes reuse = yes;
+	PROC sql;
+		CREATE TABLE &output. as
+		SELECT a.*
+ 		FROM &input. a 
+		INNER JOIN apx_id b
+		ON a.enrolid = b.enrolid;
+	QUIT;
+%mend scd;
+
+*inpatient summary;
+
+%scd (input = ccae09.ccaei093, output = myfile.scd_ccaei_09);
+%scd (input = ccae10.ccaei103, output = myfile.scd_ccaei_10);
+%scd (input = ccae11.ccaei113, output = myfile.scd_ccaei_11);
+%scd (input = ccae12.ccaei122, output = myfile.scd_ccaei_12);
+%scd (input = ccae13.ccaei131, output = myfile.scd_ccaei_13);
+%scd (input = mdcr09.mdcri093, output = myfile.scd_mdcri_09);
+%scd (input = mdcr10.mdcri103, output = myfile.scd_mdcri_10);
+%scd (input = mdcr11.mdcri113, output = myfile.scd_mdcri_11);
+%scd (input = mdcr12.mdcri122, output = myfile.scd_mdcri_12);
+%scd (input = mdcr13.mdcri131, output = myfile.scd_mdcri_13);
+%scd (input = ccae14.ccaei142, output = myfile.scd_ccaei_142);
+%scd (input = ccae15.ccaei151, output = myfile.scd_ccaei_151);
+%scd (input = mdcr14.mdcri142, output = myfile.scd_mdcri_142);
+%scd (input = mdcr15.mdcri151, output = myfile.scd_mdcri_151);
+
+*outpatient files;
+
+%scd (input = ccae09.ccaeo093, output = myfile.scd_ccaeo_09);
+%scd (input = ccae10.ccaeo103, output = myfile.scd_ccaeo_10);
+%scd (input = ccae11.ccaeo113, output = myfile.scd_ccaeo_11);
+%scd (input = ccae12.ccaeo122, output = myfile.scd_ccaeo_12);
+%scd (input = ccae13.ccaeo131, output = myfile.scd_ccaeo_13);
+%scd (input = mdcr09.mdcro093, output = myfile.scd_mdcro_09);
+%scd (input = mdcr10.mdcro103, output = myfile.scd_mdcro_10);
+%scd (input = mdcr11.mdcro113, output = myfile.scd_mdcro_11);
+%scd (input = mdcr12.mdcro122, output = myfile.scd_mdcro_12);
+%scd (input = mdcr13.mdcro131, output = myfile.scd_mdcro_13);
+%scd (input = ccae14.ccaeo142, output = myfile.scd_ccaeo_142);
+%scd (input = ccae15.ccaeo151, output = myfile.scd_ccaeo_151);
+%scd (input = mdcr14.mdcro142, output = myfile.scd_mdcro_142);
+%scd (input = mdcr15.mdcro151, output = myfile.scd_mdcro_151);
+
