@@ -1,0 +1,58 @@
+LIBNAME Rawdata 'F:\User Folders\jzhou86\Apixaban user cases';
+LIBNAME Redbk 'E:\Truven Data';
+
+libname ccae09 'E:\Truven Data\CCAE\2009';
+libname mdcr09 'E:\Truven Data\MDCR\2009';
+libname ccae10 'E:\Truven Data\CCAE\2010';
+libname mdcr10 'E:\Truven Data\MDCR\2010';
+libname ccae11 'E:\Truven Data\CCAE\2011';
+libname mdcr11 'E:\Truven Data\MDCR\2011';
+libname ccae12 'E:\Truven Data\CCAE\2012';
+libname mdcr12 'E:\Truven Data\MDCR\2012';
+libname ccae13 'E:\Truven Data\CCAE\2013';
+libname mdcr13 'E:\Truven Data\MDCR\2013';
+libname ccae14 'E:\Truven Data\CCAE\2014';
+libname mdcr14 'E:\Truven Data\MDCR\2014';
+libname ccae15 'E:\Truven Data\CCAE\2015';
+libname mdcr15 'E:\Truven Data\MDCR\2015';
+
+
+DATA redbook;
+SET Redbk.redbook;
+RUN;
+
+* Apixaban;
+DATA case_NDC;
+	SET redbook;
+	WHERE GENNME contains 'Apixaban'; 
+RUN;
+
+
+%macro apx (input = , output = );
+options compress = yes reuse = yes;
+PROC sql;
+		CREATE TABLE &output. as
+		SELECT a.*
+ 		FROM &input. a
+		INNER JOIN case_NDC b
+		ON a.NDCNUM = b.NDCNUM
+		GROUP BY enrolid;
+	QUIT;
+%mend apx;
+*drug files;
+
+%apx (input = ccae09.ccaed093, output = Rawdata.apx_ccaed_09);
+%apx (input = ccae10.ccaed103, output = Rawdata.apx_ccaed_10);
+%apx (input = ccae11.ccaed113, output = Rawdata.apx_ccaed_11);
+%apx (input = ccae12.ccaed122, output = Rawdata.apx_ccaed_12);
+%apx (input = ccae13.ccaed131, output = Rawdata.apx_ccaed_13);
+%apx (input = mdcr09.mdcrd093, output = Rawdata.apx_mdcrd_09);
+%apx (input = mdcr10.mdcrd103, output = Rawdata.apx_mdcrd_10);
+%apx (input = mdcr11.mdcrd113, output = Rawdata.apx_mdcrd_11);
+%apx (input = mdcr12.mdcrd122, output = Rawdata.apx_mdcrd_12);
+%apx (input = mdcr13.mdcrd131, output = Rawdata.apx_mdcrd_13);
+%apx (input = ccae14.ccaed142, output = Rawdata.apx_ccaed_142);
+%apx (input = ccae15.ccaed151, output = Rawdata.apx_ccaed_151);
+%apx (input = mdcr14.mdcrd142, output = Rawdata.apx_mdcrd_142);
+%apx (input = mdcr15.mdcrd151, output = Rawdata.apx_mdcrd_151);
+
