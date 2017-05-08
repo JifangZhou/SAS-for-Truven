@@ -1,0 +1,58 @@
+LIBNAME Rawdata 'F:\User Folders\jzhou86\Apixaban user cases';
+
+DATA all_apx;
+SET Rawdata.apx_ccaed_09 Rawdata.apx_ccaed_10 Rawdata.apx_ccaed_11 Rawdata.apx_ccaed_12 Rawdata.apx_ccaed_13 Rawdata.apx_ccaed_142 Rawdata.apx_ccaed_151
+	Rawdata.apx_mdcrd_09 Rawdata.apx_mdcrd_10 Rawdata.apx_mdcrd_11 Rawdata.apx_mdcrd_12 Rawdata.apx_mdcrd_13 Rawdata.apx_mdcrd_142 Rawdata.apx_mdcrd_151;
+RUN;
+
+PROC SQL;
+	CREATE table apx_id as
+	SELECT min(enrolid) as enrolid
+	FROM all_apx
+	GROUP BY enrolid;
+QUIT;
+
+LIBNAME myfile 'F:\User Folders\jzhou86\Apixaban user cases';
+
+libname ccae09 'E:\Truven Data\CCAE\2009';
+libname mdcr09 'E:\Truven Data\MDCR\2009';
+libname ccae10 'E:\Truven Data\CCAE\2010';
+libname mdcr10 'E:\Truven Data\MDCR\2010';
+libname ccae11 'E:\Truven Data\CCAE\2011';
+libname mdcr11 'E:\Truven Data\MDCR\2011';
+libname ccae12 'E:\Truven Data\CCAE\2012';
+libname mdcr12 'E:\Truven Data\MDCR\2012';
+libname ccae13 'E:\Truven Data\CCAE\2013';
+libname mdcr13 'E:\Truven Data\MDCR\2013';
+libname ccae14 'E:\Truven Data\CCAE\2014';
+libname mdcr14 'E:\Truven Data\MDCR\2014';
+libname ccae15 'E:\Truven Data\CCAE\2015';
+libname mdcr15 'E:\Truven Data\MDCR\2015';
+
+%macro scd (input = , output = );
+options compress = yes reuse = yes;
+	PROC sql;
+		CREATE TABLE &output. as
+		SELECT a.*
+ 		FROM &input. a 
+		INNER JOIN apx_id b
+		ON a.enrolid = b.enrolid;
+	QUIT;
+%mend scd;
+
+*all drugs summary;
+
+%scd (input = ccae09.ccaed093, output = myfile.scd_ccaed_09);
+%scd (input = ccae10.ccaed103, output = myfile.scd_ccaed_10);
+%scd (input = ccae11.ccaed113, output = myfile.scd_ccaed_11);
+%scd (input = ccae12.ccaed122, output = myfile.scd_ccaed_12);
+%scd (input = ccae13.ccaed131, output = myfile.scd_ccaed_13);
+%scd (input = mdcr09.mdcrd093, output = myfile.scd_mdcrd_09);
+%scd (input = mdcr10.mdcrd103, output = myfile.scd_mdcrd_10);
+%scd (input = mdcr11.mdcrd113, output = myfile.scd_mdcrd_11);
+%scd (input = mdcr12.mdcrd122, output = myfile.scd_mdcrd_12);
+%scd (input = mdcr13.mdcrd131, output = myfile.scd_mdcrd_13);
+%scd (input = ccae14.ccaed142, output = myfile.scd_ccaed_142);
+%scd (input = ccae15.ccaed151, output = myfile.scd_ccaed_151);
+%scd (input = mdcr14.mdcrd142, output = myfile.scd_mdcrd_142);
+%scd (input = mdcr15.mdcrd151, output = myfile.scd_mdcrd_151);
