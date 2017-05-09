@@ -1,0 +1,281 @@
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\SCD and DVT\SCD DVT working directory';
+
+DATA id_list;
+	SET myfile.id_list_12mprior_scd_status;
+RUN;
+
+PROC SQL;
+	CREATE TABLE id_list1 as
+	SELECT a.*,
+		b.case_type as case_Type
+	FROM id_list a
+	LEFT JOIN myfile.id_list_from_er b
+	ON a.enrolid = b.enrolid AND a.index_date=b.index_date;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list2 as
+	SELECT a.*,
+		b.case_type as case_Type1
+	FROM id_list1 a
+	LEFT JOIN myfile.id_list_from_primary_adm b
+	ON a.enrolid = b.enrolid AND a.index_date=b.index_date;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list3 as
+	SELECT a.*,
+		b.case_type as case_Type2
+	FROM id_list2 a
+	LEFT JOIN myfile.id_list_from_secondary_adm b
+	ON a.enrolid = b.enrolid AND a.index_date=b.index_date;
+QUIT;
+
+DATA id_list4;
+	SET id_list3;
+	IF case_Type= 'VTE_ER' THEN case_type_final=0;
+	IF case_Type1= 'VTE_ADM_primary' THEN case_type_final=1;
+	IF case_Type2= 'VTE_ADM_secondary' THEN case_type_final=2;
+RUN;
+
+PROC SQL;
+	CREATE TABLE id_list5 as
+	SELECT a.*,
+		b.incident_PE_date as incident_PE_date
+	FROM id_list4 a
+	LEFT JOIN myfile.id_list_pe b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list6 as
+	SELECT a.*,
+		b.incident_DVT_date as incident_DVT_date
+	FROM id_list5 a
+	LEFT JOIN myfile.id_list_dvt b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA analytical_file_id_list;
+	SET id_list6;
+	IF index_date=incident_DVT_date THEN VTE_type='DVT';
+	IF index_date=incident_PE_date THEN VTE_type='PE';
+	IF (index_date=incident_PE_date AND index_date=incident_DVT_date) THEN VTE_type='BOTH';
+	age=index_year-DOBYR;
+IF age in (1:9) THEN agecate = 1 ;
+IF age in (10:19) THEN	agecate = 2 ;
+IF age in (20:29) THEN agecate = 3 ;
+IF age in (30:39) THEN	agecate = 4 ;
+IF age in (40:49) THEN agecate = 5 ;
+IF age in (50:59) THEN	agecate = 6 ;
+IF age in (60:69) THEN agecate = 7 ;
+IF age in (70:79) THEN	agecate = 8 ;
+IF age in (80:89) THEN	agecate = 9 ;
+IF age in (90:109) THEN	agecate = 10 ;
+RUN;
+
+PROC FREQ DATA=analytical_file_id_list;
+TABLE agecate;
+RUN;
+
+
+PROC FREQ DATA=analytical_file_id_list;
+TABLE agecate*SCD_status/nocol norow nopercent chisq;
+RUN;
+
+PROC MEANS DATA=analytical_file_id_list;
+CLASS SCD_status;
+VAR age;
+RUN;
+
+PROC SQL;
+	CREATE TABLE id_list7 as
+	SELECT a.*,
+		b.Warfarin_ini_date as Warfarin_pre_date
+	FROM analytical_file_id_list a
+	LEFT JOIN myfile.warfarin_id_pre b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list8 as
+	SELECT a.*,
+		b.Warfarin_ini_date as Warfarin_post_date
+	FROM id_list7 a
+	LEFT JOIN myfile.warfarin_id_post b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list9 as
+	SELECT a.*,
+		b.Warfarin_ini_date as dabigatran_pre_date
+	FROM id_list8 a
+	LEFT JOIN myfile.dabigatran_id_pre b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list10 as
+	SELECT a.*,
+		b.Warfarin_ini_date as dabigatran_post_date
+	FROM id_list9 a
+	LEFT JOIN myfile.dabigatran_id_post b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list11 as
+	SELECT a.*,
+		b.Warfarin_ini_date as rivaroxaban_pre_date
+	FROM id_list10 a
+	LEFT JOIN myfile.rivaroxaban_id_pre b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list12 as
+	SELECT a.*,
+		b.Warfarin_ini_date as rivaroxaban_post_date
+	FROM id_list11 a
+	LEFT JOIN myfile.rivaroxaban_id_post b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list13 as
+	SELECT a.*,
+		b.Warfarin_ini_date as apixaban_pre_date
+	FROM id_list12 a
+	LEFT JOIN myfile.apixaban_id_pre b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list14 as
+	SELECT a.*,
+		b.Warfarin_ini_date as apixaban_post_date
+	FROM id_list13 a
+	LEFT JOIN myfile.apixaban_id_post b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA myfile.analytical_file_id_list;
+SET id_list14;
+RUN;
+
+DATA temp;
+SET	myfile.analytical_file_id_list;
+pre_naive=0;
+IF (rivaroxaban_pre_date=. AND apixaban_pre_date=. AND dabigatran_pre_date=. AND Warfarin_pre_date=. )THEN pre_naive=1;
+IF pre_naive=1;
+RUN;
+
+PROC FREQ DATA=temp;
+TABLE pre_naive*SCD_status/nocol norow nopercent chisq;
+RUN;
+
+DATA temp;
+SET	myfile.analytical_file_id_list;
+pre_drug=0;
+IF apixaban_pre_date^=. THEN pre_drug=1;
+RUN;
+
+PROC FREQ DATA=temp;
+TABLE pre_drug*SCD_status/nocol norow nopercent chisq;
+RUN;
+
+DATA temp;
+SET	myfile.analytical_file_id_list;
+pre_naive=0;
+IF (rivaroxaban_pre_date=. AND apixaban_pre_date=. AND dabigatran_pre_date=. AND Warfarin_pre_date=. )THEN pre_naive=1;
+IF pre_naive=1;
+post_drug=0;
+IF (Warfarin_post_date^=. AND Warfarin_post_date-index_date=0) THEN post_drug=1;
+ELSE IF (Warfarin_post_date^=. AND Warfarin_post_date-index_date<=3) THEN post_drug=2;
+ELSE IF (Warfarin_post_date^=. AND Warfarin_post_date-index_date<=7) THEN post_drug=3;
+ELSE IF (Warfarin_post_date^=. AND Warfarin_post_date-index_date<=14) THEN post_drug=4;
+ELSE IF (Warfarin_post_date^=. AND Warfarin_post_date-index_date<=30) THEN post_drug=5;
+ELSE IF (Warfarin_post_date^=. AND Warfarin_post_date-index_date>=31) THEN post_drug=6;
+RUN;
+
+PROC FREQ DATA=temp;
+TABLE post_drug*SCD_status/nocol norow nopercent chisq;
+RUN;
+
+DATA temp;
+SET	myfile.analytical_file_id_list;
+pre_naive=0;
+IF (rivaroxaban_pre_date=. AND apixaban_pre_date=. AND dabigatran_pre_date=. AND Warfarin_pre_date=. )THEN pre_naive=1;
+IF pre_naive=1;
+post_drug=0;
+IF (dabigatran_post_date^=. AND dabigatran_post_date-index_date=0) THEN post_drug=1;
+ELSE IF (dabigatran_post_date^=. AND dabigatran_post_date-index_date<=3) THEN post_drug=2;
+ELSE IF (dabigatran_post_date^=. AND dabigatran_post_date-index_date<=7) THEN post_drug=3;
+ELSE IF (dabigatran_post_date^=. AND dabigatran_post_date-index_date<=14) THEN post_drug=4;
+ELSE IF (dabigatran_post_date^=. AND dabigatran_post_date-index_date<=30) THEN post_drug=5;
+ELSE IF (dabigatran_post_date^=. AND dabigatran_post_date-index_date>=31) THEN post_drug=6;
+RUN;
+
+PROC FREQ DATA=temp;
+TABLE post_drug*SCD_status/nocol norow nopercent chisq;
+RUN;
+
+DATA temp;
+SET	myfile.analytical_file_id_list;
+pre_naive=0;
+IF (rivaroxaban_pre_date=. AND apixaban_pre_date=. AND dabigatran_pre_date=. AND Warfarin_pre_date=. )THEN pre_naive=1;
+IF pre_naive=1;
+post_drug=0;
+IF (rivaroxaban_post_date^=. AND rivaroxaban_post_date-index_date=0) THEN post_drug=1;
+ELSE IF (rivaroxaban_post_date^=. AND rivaroxaban_post_date-index_date<=3) THEN post_drug=2;
+ELSE IF (rivaroxaban_post_date^=. AND rivaroxaban_post_date-index_date<=7) THEN post_drug=3;
+ELSE IF (rivaroxaban_post_date^=. AND rivaroxaban_post_date-index_date<=14) THEN post_drug=4;
+ELSE IF (rivaroxaban_post_date^=. AND rivaroxaban_post_date-index_date<=30) THEN post_drug=5;
+ELSE IF (rivaroxaban_post_date^=. AND rivaroxaban_post_date-index_date>=31) THEN post_drug=6;
+RUN;
+
+PROC FREQ DATA=temp;
+TABLE post_drug*SCD_status/nocol norow nopercent chisq;
+RUN;
+
+DATA temp;
+SET	myfile.analytical_file_id_list;
+pre_naive=0;
+IF (rivaroxaban_pre_date=. AND apixaban_pre_date=. AND dabigatran_pre_date=. AND Warfarin_pre_date=. )THEN pre_naive=1;
+IF pre_naive=1;
+post_drug=0;
+IF (apixaban_post_date^=. AND apixaban_post_date-index_date=0) THEN post_drug=1;
+ELSE IF (apixaban_post_date^=. AND apixaban_post_date-index_date<=3) THEN post_drug=2;
+ELSE IF (apixaban_post_date^=. AND apixaban_post_date-index_date<=7) THEN post_drug=3;
+ELSE IF (apixaban_post_date^=. AND apixaban_post_date-index_date<=14) THEN post_drug=4;
+ELSE IF (apixaban_post_date^=. AND apixaban_post_date-index_date<=30) THEN post_drug=5;
+ELSE IF (apixaban_post_date^=. AND apixaban_post_date-index_date>=31) THEN post_drug=6;
+RUN;
+
+PROC FREQ DATA=temp;
+TABLE post_drug*SCD_status/nocol norow nopercent chisq;
+RUN;
+
+DATA temp;
+SET	myfile.analytical_file_id_list;
+pre_naive=0;
+IF (rivaroxaban_pre_date=. AND apixaban_pre_date=. AND dabigatran_pre_date=. AND Warfarin_pre_date=. )THEN pre_naive=1;
+IF pre_naive=1;
+IF (rivaroxaban_post_date=. AND apixaban_post_date=. AND dabigatran_post_date=. AND Warfarin_post_date=. )THEN DELETE;
+IF rivaroxaban_post_date=. THEN rivaroxaban_post_date=999999;
+IF apixaban_post_date=. THEN apixaban_post_date=999999;
+IF dabigatran_post_date=. THEN dabigatran_post_date=999999;
+IF Warfarin_post_date=. THEN Warfarin_post_date=999999;
+initiation_post_date=min(rivaroxaban_post_date,apixaban_post_date,dabigatran_post_date,Warfarin_post_date);
+IF (initiation_post_date^=. AND apixaban_post_date-index_date=0) THEN post_drug=1;
+ELSE IF (initiation_post_date^=. AND initiation_post_date-index_date<=3) THEN post_drug=2;
+ELSE IF (initiation_post_date^=. AND initiation_post_date-index_date<=7) THEN post_drug=3;
+ELSE IF (initiation_post_date^=. AND initiation_post_date-index_date<=14) THEN post_drug=4;
+ELSE IF (initiation_post_date^=. AND initiation_post_date-index_date<=30) THEN post_drug=5;
+ELSE IF (initiation_post_date^=. AND initiation_post_date-index_date>=31) THEN post_drug=6;
+RUN;
+
+PROC FREQ DATA=temp;
+TABLE post_drug*SCD_status/nocol norow nopercent chisq;
+RUN;
