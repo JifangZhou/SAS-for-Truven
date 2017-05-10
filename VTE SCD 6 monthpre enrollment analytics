@@ -1,0 +1,118 @@
+DATA inpt_sum;
+SET Rawdata.scd_ccaei_09 Rawdata.scd_ccaei_10 Rawdata.scd_ccaei_11 Rawdata.scd_ccaei_12 Rawdata.scd_ccaei_13
+	Rawdata.scd_mdcri_09 Rawdata.scd_mdcri_10 Rawdata.scd_mdcri_11 Rawdata.scd_mdcri_12 Rawdata.scd_mdcri_13
+	Rawdata.scd_ccaei_142 Rawdata.scd_ccaei_151  
+	Rawdata.scd_mdcri_142 Rawdata.scd_mdcri_151;
+DATA outpatient_records;
+SET Rawdata.scd_ccaeo_09 Rawdata.scd_ccaeo_10 Rawdata.scd_ccaeo_11 Rawdata.scd_ccaeo_12 Rawdata.scd_ccaeo_13
+	Rawdata.scd_mdcro_09 Rawdata.scd_mdcro_10 Rawdata.scd_mdcro_11 Rawdata.scd_mdcro_12 Rawdata.scd_mdcro_13
+	Rawdata.scd_ccaeo_142 Rawdata.scd_ccaeo_151  
+	Rawdata.scd_mdcro_142 Rawdata.scd_mdcro_151;
+DATA insurance_all;
+SET	Rawdata.scd_ccaet_09 Rawdata.scd_ccaet_10 Rawdata.scd_ccaet_11 Rawdata.scd_ccaet_12 Rawdata.scd_ccaet_13
+	Rawdata.scd_mdcrt_09 Rawdata.scd_mdcrt_10 Rawdata.scd_mdcrt_11 Rawdata.scd_mdcrt_12 Rawdata.scd_mdcrt_13
+	Rawdata.scd_ccaet_142 Rawdata.scd_ccaet_151  
+	Rawdata.scd_mdcrt_142 Rawdata.scd_mdcrt_151;
+DATA drugs_all;
+SET	Rawdata.scd_ccaed_09 Rawdata.scd_ccaed_10 Rawdata.scd_ccaed_11 Rawdata.scd_ccaed_12 Rawdata.scd_ccaed_13
+	Rawdata.scd_mdcrd_09 Rawdata.scd_mdcrd_10 Rawdata.scd_mdcrd_11 Rawdata.scd_mdcrd_12 Rawdata.scd_mdcrd_13
+	Rawdata.scd_ccaed_142 Rawdata.scd_ccaed_151  
+	Rawdata.scd_mdcrd_142 Rawdata.scd_mdcrd_151;
+DATA ipt_svc_all;
+SET	Rawdata.scd_ccaes_09 Rawdata.scd_ccaes_10 Rawdata.scd_ccaes_11 Rawdata.scd_ccaes_12 Rawdata.scd_ccaes_13
+	Rawdata.scd_mdcrs_09 Rawdata.scd_mdcrs_10 Rawdata.scd_mdcrs_11 Rawdata.scd_mdcrs_12 Rawdata.scd_mdcrs_13
+	Rawdata.scd_ccaes_142 Rawdata.scd_ccaes_151  
+	Rawdata.scd_mdcrs_142 Rawdata.scd_mdcrs_151;
+RUN;
+
+PROC SQL;
+	CREATE TABLE inpt_eligible_VTE as
+	SELECT a.*,
+			b.index_date as index_date
+	FROM inpt_sum a
+	INNER JOIN analytical_file_id_list b
+	on a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE opt_eligible_VTE as
+	SELECT a.*,
+			b.index_date as index_date
+	FROM outpatient_records a
+	INNER JOIN analytical_file_id_list b
+	on a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE drug_eligible_vte as
+	SELECT a.*,
+			b.index_date as index_date
+	FROM drugs_all a
+	INNER JOIN analytical_file_id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE ipt_svc_eligible_vte as
+	SELECT a.*,
+			b.index_date as index_date
+	FROM ipt_svc_all a
+	INNER JOIN analytical_file_id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE insurance_eligible_vte as
+	SELECT a.*,
+			b.index_date as index_date
+	FROM insurance_all a
+	INNER JOIN analytical_file_id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA myfile.drug_eligible_vte_pre;
+	SET drug_eligible_vte;
+	IF index_date>SVCDATE;
+RUN;
+DATA myfile.drug_eligible_vte_post;
+	SET drug_eligible_vte;
+	IF SVCDATE>=index_date;
+RUN;
+
+DATA myfile.insurance_eligible_vte_pre;
+	SET insurance_eligible_vte;
+	IF index_date>DTSTART;
+RUN;
+DATA myfile.insurance_eligible_vte_post;
+	SET insurance_eligible_vte;
+	IF DTSTART>=index_date;
+RUN;
+
+DATA myfile.ipt_svc_eligible_vte_pre;
+	SET ipt_svc_eligible_vte;
+	IF index_date>SVCDATE;
+RUN;
+DATA myfile.ipt_svc_eligible_vte_post;
+	SET ipt_svc_eligible_vte;
+	IF SVCDATE>=index_date;
+RUN;
+
+DATA myfile.opt_eligible_vte_pre;
+	SET opt_eligible_VTE;
+	IF index_date>SVCDATE;
+RUN;
+DATA myfile.opt_eligible_vte_post;
+	SET opt_eligible_VTE;
+	IF SVCDATE>=index_date;
+RUN;
+
+DATA myfile.inpt_eligible_vte_pre;
+	SET inpt_eligible_VTE;
+	IF index_date>ADMDATE;
+RUN;
+DATA myfile.inpt_eligible_vte_post;
+	SET inpt_eligible_VTE;
+	IF ADMDATE>=index_date;
+RUN;
+
+
