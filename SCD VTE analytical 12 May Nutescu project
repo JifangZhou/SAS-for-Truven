@@ -1,0 +1,695 @@
+LIBNAME Myfile 'F:\User Folders\jzhou86\VTE working Directory';
+LIBNAME Rawdata 'F:\User Folders\jzhou86\VTE genral cases';
+LIBNAME Redbook 'E:\Truven Data';
+
+DATA drug_eligible_vte_pre;
+	SET myfile.drug_eligible_vte_pre;
+DATA drug_eligible_vte_post;
+	SET myfile.drug_eligible_vte_post;
+DATA insurance_eligible_vte_pre;
+	SET myfile.insurance_eligible_vte_pre;
+DATA insurance_eligible_vte_post;
+	SET myfile.insurance_eligible_vte_post;
+DATA ipt_svc_eligible_vte_pre;
+	SET myfile.ipt_svc_eligible_vte_pre;
+DATA ipt_svc_eligible_vte_post;
+	SET myfile.ipt_svc_eligible_vte_post;
+DATA opt_eligible_vte_pre;
+	SET myfile.opt_eligible_VTE_pre;
+DATA opt_eligible_vte_post;
+	SET myfile.opt_eligible_VTE_post;
+DATA inpt_eligible_vte_pre;
+	SET myfile.inpt_eligible_VTE_pre;
+DATA inpt_eligible_vte_post;
+	SET myfile.inpt_eligible_VTE_post;
+DATA redbook;
+	SET redbook.redbook;
+DATA analytical_cohort_10_may;
+	SET myfile.analytical_cohort_10_may;
+DATA enroll_post_1mo;
+	SET myfile.enroll_post_1mo;
+RUN;
+
+* select eligible patients for cohort creation;
+PROC SQL;
+	CREATE TABLE id_list as
+	SELECT a.*
+	FROM analytical_cohort_10_may a
+	INNER JOIN enroll_post_1mo b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC FREQ DATA=id_list;
+TABLE SCD_status; RUN;
+
+PROC CONTENTS DATA=id_list;
+RUN;
+
+*Demographic variables;
+PROC MEANS DATA=id_list;
+CLASS SCD_status;
+VAR age;
+RUN;
+
+
+PROC FREQ DATA=id_list;
+TABLE agecate*SCD_status /nocol nopercent norow chisq;
+RUN;
+
+PROC FREQ DATA=id_list;
+TABLE agecate;
+RUN;
+
+PROC FREQ DATA=id_list;
+TABLE sex*SCD_status /nocol nopercent norow chisq;
+RUN;
+
+PROC FREQ DATA=id_list;
+TABLE sex;
+RUN;
+
+PROC FREQ DATA=id_list;
+TABLE region*SCD_status /nocol nopercent norow chisq;
+RUN;
+
+PROC FREQ DATA=id_list;
+TABLE region;
+RUN;
+
+PROC FREQ DATA=id_list;
+TABLE VTE_type*SCD_status /nocol nopercent norow chisq;
+RUN;
+
+PROC FREQ DATA=id_list;
+TABLE VTE_type;
+RUN;
+
+PROC FREQ DATA=id_list;
+TABLE case_type_final*SCD_status /nocol nopercent norow chisq;
+RUN;
+
+PROC FREQ DATA=id_list;
+TABLE case_type_final;
+RUN;
+
+DATA myfile.id_list_11_May;
+	SET id_list;
+RUN;
+*Length of stay (If diagnosed at ER, the length of stay is 1);
+*Extract the index admission record;
+DATA ipt_summary_data;
+	SET inpt_eligible_vte_pre inpt_eligible_vte_post;
+RUN;
+DATA id_list_adm;
+	SET id_list;
+	IF case_type_final=0 THEN delete;
+RUN;
+PROC SQL;
+	CREATE TABLE index_adm_vte as
+	SELECT a.*,
+			b.index_date as index_date
+	FROM ipt_summary_data a
+	INNER JOIN id_list_adm b
+	ON a.enrolid = b.enrolid AND a.DISDATE=b.index_date;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE temp as
+	SELECT min(enrolid) as enrolid,
+			max(days) as LOS
+	FROM index_adm_vte
+	GROUP BY enrolid;
+QUIT;
+
+*Merge back LOS for the index admission;
+PROC SQL;
+	CREATE TABLE id_list_add_LOS as
+	SELECT a.*,
+			b.LOS as LOS_index_VTE_event
+	FROM id_list a
+	LEFT JOIN temp b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*if the index VTE event was an ER visit, then length of stay will be 1;
+DATA id_list_add_LOS;
+	SET id_list_add_LOS;
+	IF LOS_index_VTE_event=. THEN LOS_index_VTE_event=1;
+	IF LOS_index_VTE_event=1 THEN LOS_index_VTE_cate=1;
+	ELSE IF LOS_index_VTE_event<=3 THEN LOS_index_VTE_cate=2;
+	ELSE IF LOS_index_VTE_event<=7 THEN LOS_index_VTE_cate=3;
+	ELSE IF LOS_index_VTE_event<=14 THEN LOS_index_VTE_cate=4;
+	ELSE IF LOS_index_VTE_event<=30 THEN LOS_index_VTE_cate=5;
+	ELSE IF LOS_index_VTE_event>=31 THEN LOS_index_VTE_cate=6;
+RUN;
+
+PROC MEANS DATA=id_list_add_LOS;
+VAR LOS_index_VTE_event;
+RUN;
+
+PROC TTEST DATA=id_list_add_LOS;
+CLASS SCD_status;
+VAR LOS_index_VTE_event;
+RUN;
+
+PROC FREQ DATA=id_list_add_LOS;
+TABLE LOS_index_VTE_cate*SCD_status /nocol nopercent norow chisq;
+RUN;
+
+PROC FREQ DATA=id_list_add_LOS;
+TABLE LOS_index_VTE_cate;
+RUN;
+*Subgroup analysis;
+DATA id_list_add_LOS1;
+	SET id_list_add_LOS;
+	IF (case_type_final=2 OR case_type_final=1);
+RUN;
+
+PROC FREQ DATA=id_list_add_LOS1;
+TABLE LOS_index_VTE_cate*SCD_status /nocol nopercent norow chisq;
+RUN;
+
+PROC FREQ DATA=id_list_add_LOS1;
+TABLE LOS_index_VTE_cate;
+RUN;
+
+PROC TTEST DATA=id_list_add_LOS1;
+CLASS case_type_final;
+VAR LOS_index_VTE_event;
+RUN;
+
+*Health services utilization;
+*Number of admissions over the 6 months' time period;
+*extract all inpatient admissions prior to the index date;
+DATA ipt_summary_data_pre;
+	SET inpt_eligible_vte_pre inpt_eligible_vte_post;
+	IF index_date-180<=ADMDATE<=index_date;
+RUN;
+*count number of admissions;
+PROC SQL;
+	CREATE TABLE temp as
+	SELECT min(enrolid) as enrolid,
+			count(ADMDATE) as number_adm
+	FROM ipt_summary_data_pre
+	GROUP BY enrolid;
+QUIT;
+
+*Merge back LOS for the index admission;
+PROC SQL;
+	CREATE TABLE id_list_add_LOS_adm as
+	SELECT a.*,
+			b.number_adm as number_adm_prior
+	FROM id_list_add_LOS a
+	LEFT JOIN temp b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list_add_LOS_adm;
+	SET id_list_add_LOS_adm;
+	IF number_adm_prior=. THEN number_adm_prior=0;
+	IF number_adm_prior=0 THEN number_adm_prior_cate=0;
+	ELSE IF number_adm_prior=1 THEN number_adm_prior_cate=1;
+	ELSE IF number_adm_prior>=2 THEN number_adm_prior_cate=2;
+RUN;
+
+PROC MEANS DATA=id_list_add_LOS_adm;
+VAR number_adm_prior_cate;
+RUN;
+
+PROC FREQ DATA=id_list_add_LOS_adm;
+TABLE number_adm_prior_cate*SCD_status /nocol nopercent norow chisq;
+RUN;
+
+DATA myfile.id_list_add_LOS_adm;
+	SET id_list_add_LOS_adm;
+RUN;
+
+*Assess number of ER visits;
+*Combine all ER data prior to the index Date;
+*Only ER records will be used;
+DATA opt_ER_data_pre;
+	SET opt_eligible_vte_pre opt_eligible_vte_post;
+	IF index_date-180<=SVCDATE<=index_date;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0637','0981') THEN ER=1;
+	ELSE IF STDPROV in ('220','428') THEN ER=1;
+	ELSE IF STDPLAC in ('23') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120','10220','10320','10420','10520',
+						'12220','20120','20220','21120','21220','22120','22320',
+						'30120','30220','30320','30420','30520','30620',
+						'31120','31220','31320','31420','31520','31620') THEN ER=1;
+	IF ER=1;
+RUN;
+
+PROC SQL;
+	CREATE TABLE temp as
+	SELECT 	min(enrolid) as enrolid,
+			min(SVCDATE) as SVCDATE
+	FROM opt_ER_data_pre
+	GROUP BY enrolid, SVCDATE;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE temp as
+	SELECT 	min(enrolid) as enrolid,
+			count(SVCDATE) as number_ER_prior
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+
+*Merge back ER records to the main file;
+PROC SQL;
+	CREATE TABLE id_list_add_LOS_adm_ER as
+	SELECT a.*,
+			b.number_ER_prior as number_ER_prior
+	FROM id_list_add_LOS_adm a
+	LEFT JOIN temp b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list_add_LOS_adm_ER;
+	SET id_list_add_LOS_adm_ER;
+	IF number_ER_prior=. THEN number_ER_prior=0;
+	IF number_ER_prior=0 THEN number_ER_prior_cate=0;
+	ELSE IF number_ER_prior<=2 THEN number_ER_prior_cate=1;
+	ELSE IF number_ER_prior>=3 THEN number_ER_prior_cate=2;
+RUN;
+
+PROC MEANS DATA=id_list_add_LOS_adm_ER;
+VAR number_ER_prior_cate;
+RUN;
+
+PROC FREQ DATA=id_list_add_LOS_adm_ER;
+TABLE number_ER_prior_cate*SCD_status /nocol nopercent norow chisq;
+RUN;
+PROC FREQ DATA=id_list_add_LOS_adm_ER;
+TABLE number_ER_prior_cate;
+RUN;
+DATA myfile.id_list_add_LOS_adm_ER;
+	SET id_list_add_LOS_adm_ER;
+RUN;
+
+*Assessment of transfusion events;
+DATA opt_data_pre;
+	SET opt_eligible_vte_pre opt_eligible_vte_post;
+	IF index_date-180<=SVCDATE<=index_date;
+RUN;
+
+DATA opt_ipt_data_pre;
+	SET ipt_summary_data_pre opt_data_pre;
+RUN;
+
+
+DATA opt_ipt_data_pre;
+set opt_ipt_data_pre;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('36430'	'P9011' 'P9016' 'P9021' 'P9022' 'P9038' 'P9039' 'P9040' 'P9051' 'P9054' 'P9057' 'P9058') then transfusion = 1;
+end;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('990') then transfusion = 1;
+end;
+IF REVCODE in: ('038','039') then transfusion = 1;
+if transfusion = 1;
+run; 
+
+PROC SQL;
+	CREATE TABLE temp as
+	SELECT 	min(enrolid) as enrolid,
+			max(transfusion) as transfusion_status
+	FROM opt_ipt_data_pre
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE table id_list_add_LOS_adm_ER_trans as
+SELECT a.*,
+	b.transfusion_status as transfusion_status
+FROM id_list_add_LOS_adm_ER a
+LEFT JOIN temp b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list_add_LOS_adm_ER_trans;
+	SET id_list_add_LOS_adm_ER_trans;
+	IF transfusion_status=. THEN transfusion_status=0;
+RUN;
+
+
+PROC FREQ DATA=id_list_add_LOS_adm_ER_trans;
+TABLE transfusion_status*SCD_status /nocol nopercent norow chisq;
+RUN;
+PROC FREQ DATA=id_list_add_LOS_adm_ER_trans;
+TABLE transfusion_status;
+RUN;
+
+*Assessment of malignancies in these patients;
+DATA opt_ipt_cancer;
+set opt_ipt_data_pre;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('14','15','16','17','18','19','20','C0','C1','C2','C3','C4','C5','C6','C7','C8','C90','C91','C92','C93',
+				'C94','C95','C96') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+	CREATE TABLE temp as
+	SELECT 	min(enrolid) as enrolid,
+		1 as cancer_status
+	FROM opt_ipt_cancer
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE table id_list_add_cancer as
+SELECT a.*,
+	b.cancer_status as cancer_status
+FROM id_list_add_LOS_adm_ER_trans a
+LEFT JOIN temp b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA myfile.id_list_add_cancer;
+	SET id_list_add_cancer;
+	IF cancer_status=. THEN cancer_status=0;
+RUN;
+
+
+PROC FREQ DATA=id_list_add_cancer;
+TABLE cancer_status*SCD_status /nocol nopercent norow chisq;
+RUN;
+PROC FREQ DATA=id_list_add_cancer;
+TABLE cancer_status;
+RUN;
+
+*Assessment of AF in these patients;
+DATA opt_ipt_AF;
+set opt_ipt_data_pre;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('42731',	'I480','I481','I482') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+	CREATE TABLE temp as
+	SELECT 	min(enrolid) as enrolid,
+		1 as AF_status
+	FROM opt_ipt_AF
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE table id_list_add_cancer_AF as
+SELECT a.*,
+	b.AF_status as AF_status
+FROM id_list_add_cancer a
+LEFT JOIN temp b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list_add_cancer_AF;
+	SET id_list_add_cancer_AF;
+	IF AF_status=. THEN AF_status=0;
+RUN;
+
+
+PROC FREQ DATA=id_list_add_cancer_AF;
+TABLE AF_status*SCD_status /nocol nopercent norow chisq;
+RUN;
+PROC FREQ DATA=id_list_add_cancer_AF;
+TABLE AF_status;
+RUN;
+
+*Assessment of Atrial flutter in these patients;
+DATA opt_ipt_A_Flutter;
+set opt_ipt_data_pre;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('42732',	'I483','I484') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+	CREATE TABLE temp as
+	SELECT 	min(enrolid) as enrolid,
+		1 as AFlutter_status
+	FROM opt_ipt_A_Flutter
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE table id_list_add_cancer_AF_AFlutter as
+SELECT a.*,
+	b.AFlutter_status as AFlutter_status
+FROM id_list_add_cancer_AF a
+LEFT JOIN temp b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA myfile.id_list_add_cancer_AF_AFlutter;
+	SET id_list_add_cancer_AF_AFlutter;
+	IF AFlutter_status=. THEN AFlutter_status=0;
+RUN;
+
+
+PROC FREQ DATA=id_list_add_cancer_AF_AFlutter;
+TABLE AFlutter_status*SCD_status /nocol nopercent norow chisq;
+RUN;
+PROC FREQ DATA=id_list_add_cancer_AF_AFlutter;
+TABLE AFlutter_status;
+RUN;
+
+*Assessment of medication history over the 6 months;
+*Select oral anticoagulant drug records over the 6 months;
+DATA drugs_data_pre;
+	SET drug_eligible_vte_pre drug_eligible_vte_post;
+	IF index_date-180<=SVCDATE<=index_date;
+RUN;
+
+
+*Select all dispensing records after the index date;
+DATA drugs_data_pre;
+	SET drug_eligible_vte_pre drug_eligible_vte_post;
+	IF SVCDATE>=index_date;
+RUN;
+
+*Select injectable medication records from the services records over the baseline period;
+DATA inpt_service_data_pre;
+	SET ipt_svc_eligible_vte_pre ipt_svc_eligible_vte_post;
+	IF index_date-180<=SVCDATE<=index_date;
+RUN;
+
+DATA all_service_pre;
+	SET inpt_service_data_pre opt_ipt_data_pre;
+RUN;
+	
+*Select all the injection administration records;
+DATA injectable_AC_all;
+SET all_service_pre;
+	case=0;
+	array proc{*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J1644') then case='UFH';
+	end;
+	array proca{*} proc1-proc15;
+		do i = 1 to dim(proca);
+		if proc{i} in: ('J1652') then case='Fondaparinux';
+	end;
+	array procb{*} proc1-proc15;
+		do i = 1 to dim(procb);
+		if proc{i} in: ('J1645','J1650','J1655') then case='LMWH';
+	end;
+	array procc{*} proc1-proc15;
+		do i = 1 to dim(procc);
+		if proc{i} in: ('C9121','J0883','J0884','J0583','J1945') then case='DTI_inject';
+	end;
+	if case^=0;
+RUN;
+DATA injectable_AC_temp;
+SET injectable_AC_all;
+	case=0;
+	array proc{*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J1644') then case=1;
+	end;
+	array proca{*} proc1-proc15;
+		do i = 1 to dim(proca);
+		if proc{i} in: ('J1652') then case=2;
+	end;
+	array procb{*} proc1-proc15;
+		do i = 1 to dim(procb);
+		if proc{i} in: ('J1645','J1650','J1655') then case=3;
+	end;
+	array procc{*} proc1-proc15;
+		do i = 1 to dim(procc);
+		if proc{i} in: ('C9121','J0883','J0884','J0583','J1945') then case=4;
+	end;
+	if case^=0;
+RUN;
+
+
+
+PROC FREQ DATA=injectable_AC_temp;
+TABLE case;
+RUN;
+
+DATA myfile.injectable_AC_temp;
+	SET injectable_AC_temp;
+RUN;
+
+PROC SQL;
+	CREATE TABLE temp as
+	SELECT 	min(enrolid) as enrolid,
+		1 as injectable_AC_prior_status,
+		min(SVCDATE) as initial_injectable_AC_date
+	FROM injectable_AC_temp
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE table id_list_add_injectable_AC as
+SELECT a.*,
+	b.injectable_AC_prior_status as injectable_AC_prior_status,
+	b.initial_injectable_AC_date as initial_injectable_AC_date_prior
+FROM id_list_add_cancer_AF_AFlutter a
+LEFT JOIN temp b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list_add_injectable_AC;
+	SET id_list_add_injectable_AC;
+	IF injectable_AC_prior_status=. THEN injectable_AC_prior_status=0;
+RUN;
+
+PROC FREQ DATA=id_list_add_injectable_AC;
+TABLE injectable_AC_prior_status*SCD_status /nocol nopercent norow chisq;
+RUN;
+PROC FREQ DATA=id_list_add_injectable_AC;
+TABLE injectable_AC_prior_status;
+RUN;
+*Evaluate whether the drugs were used during 7 days preceding the index date;
+DATA injectable_AC_7_days_prior;
+	SET injectable_AC_temp;
+	IF SVCDATE>=index_date-7;
+RUN;
+PROC SQL;
+	CREATE TABLE temp as
+	SELECT 	min(enrolid) as enrolid,
+		1 as injectable_AC_prior_7_days
+	FROM injectable_AC_7_days_prior
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+CREATE table id_list_add_injectable_AC_7days as
+SELECT a.*,
+	b.injectable_AC_prior_7_days as injectable_AC_prior_7_days
+FROM id_list_add_injectable_AC a
+LEFT JOIN temp b
+ON a.enrolid = b.enrolid;
+QUIT;
+DATA id_list_add_injectable_AC_7days;
+	SET id_list_add_injectable_AC_7days;
+	IF injectable_AC_prior_7_days=. THEN injectable_AC_prior_7_days=0;
+RUN;
+PROC FREQ DATA=id_list_add_injectable_AC_7days;
+TABLE injectable_AC_prior_7_days*SCD_status /nocol nopercent norow chisq;
+RUN;
+PROC FREQ DATA=id_list_add_injectable_AC_7days;
+TABLE injectable_AC_prior_7_days;
+RUN;
+*Evaluate the injectables administered during index admission or index ER visits;
+PROC SQL;
+	CREATE TABLE injectable_AC_index_event as
+	SELECT 	a.*,
+			b.LOS_index_VTE_event as LOS_index_VTE_event
+	FROM injectable_AC_temp a
+	INNER JOIN id_list_add_injectable_AC_7days b
+	ON a.enrolid=b.enrolid;
+QUIT;
+DATA injectable_AC_index_event;
+	SET injectable_AC_index_event;
+	IF SVCDATE>=index_date-LOS_index_VTE_event+1;
+RUN;
+PROC SQL;
+	CREATE TABLE temp as
+	SELECT 	min(enrolid) as enrolid,
+		1 as injectable_AC_prior_index_event
+	FROM injectable_AC_index_event
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+CREATE table id_list_injectable_index_event as
+SELECT a.*,
+	b.injectable_AC_prior_index_event as injectable_AC_prior_index_event
+FROM id_list_add_injectable_AC_7days a
+LEFT JOIN temp b
+ON a.enrolid = b.enrolid;
+QUIT;
+DATA id_list_injectable_index_event;
+	SET id_list_injectable_index_event;
+	IF injectable_AC_prior_index_event=. THEN injectable_AC_prior_index_event=0;
+RUN;
+PROC FREQ DATA=id_list_injectable_index_event;
+TABLE injectable_AC_prior_index_event*SCD_status /nocol nopercent norow chisq;
+RUN;
+PROC FREQ DATA=id_list_injectable_index_event;
+TABLE injectable_AC_prior_index_event;
+RUN;
+
+
+*Assess different types of injectable ACs;
+*UFH;
+
+DATA injectable_AC_UHF;
+	SET injectable_AC_temp;
+	IF case=1;
+RUN;
+DATA injectable_AC_LMWH;
+	SET injectable_AC_temp;
+	IF case=3;
+RUN;
+
+PROC SQL;
+	CREATE TABLE UHF_list as
+	SELECT 	min(enrolid) as enrolid,
+		1 as injectable_UHF_prior
+	FROM injectable_AC_UHF
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE TABLE LMWH_list as
+	SELECT 	min(enrolid) as enrolid,
+		1 as injectable_LMWH_prior
+	FROM injectable_AC_LMWH
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE table id_list_injectable_UHF as
+SELECT a.*,
+	b.injectable_UHF_prior as injectable_UHF_prior
+FROM id_list_injectable_index_event a
+LEFT JOIN UHF_list b
+ON a.enrolid = b.enrolid;
+QUIT;
+PROC SQL;
+CREATE table id_list_injectable_UHF_LMWH as
+SELECT a.*,
+	b.injectable_LMWH_prior as injectable_LMWH_prior
+FROM id_list_injectable_UHF a
+LEFT JOIN LMWH_list b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA myfile.id_list_injectable_UHF_LMWH;
+	SET id_list_injectable_UHF_LMWH;
+	IF injectable_UHF_prior=. THEN injectable_UHF_prior=0;
+	IF injectable_LMWH_prior=. THEN injectable_LMWH_prior=0;
+RUN;
+
