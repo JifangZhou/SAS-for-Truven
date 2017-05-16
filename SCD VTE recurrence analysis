@@ -1,0 +1,281 @@
+LIBNAME Myfile 'F:\User Folders\jzhou86\VTE working Directory';
+LIBNAME Rawdata 'F:\User Folders\jzhou86\VTE genral cases';
+LIBNAME Redbook 'E:\Truven Data';
+
+DATA drug_eligible_vte_pre;
+	SET myfile.drug_eligible_vte_pre;
+DATA drug_eligible_vte_post;
+	SET myfile.drug_eligible_vte_post;
+DATA insurance_eligible_vte_pre;
+	SET myfile.insurance_eligible_vte_pre;
+DATA insurance_eligible_vte_post;
+	SET myfile.insurance_eligible_vte_post;
+DATA ipt_svc_eligible_vte_pre;
+	SET myfile.ipt_svc_eligible_vte_pre;
+DATA ipt_svc_eligible_vte_post;
+	SET myfile.ipt_svc_eligible_vte_post;
+DATA opt_eligible_vte_pre;
+	SET myfile.opt_eligible_VTE_pre;
+DATA opt_eligible_vte_post;
+	SET myfile.opt_eligible_VTE_post;
+DATA inpt_eligible_vte_pre;
+	SET myfile.inpt_eligible_VTE_pre;
+DATA inpt_eligible_vte_post;
+	SET myfile.inpt_eligible_VTE_post;
+DATA redbook;
+	SET redbook.redbook;
+DATA analytical_cohort_15_may;
+	SET myfile.id_list_recur_adm_er1;
+RUN;
+
+*Assessment of pre index date ipt and opt events (diagnosis for conditiona);
+DATA ipt_summary_data_pre;
+	SET inpt_eligible_vte_pre inpt_eligible_vte_post;
+	IF index_date-180<=ADMDATE<index_date;
+RUN;
+
+DATA opt_data_pre;
+	SET opt_eligible_vte_pre opt_eligible_vte_post;
+	IF index_date-180<=SVCDATE<index_date;
+RUN;
+
+DATA opt_ipt_data_pre;
+	SET ipt_summary_data_pre opt_data_pre;
+RUN;
+*Assessment of post index date ipt and opt events (diagnosis for conditions);
+DATA ipt_summary_data_post;
+	SET inpt_eligible_vte_pre inpt_eligible_vte_post;
+	IF ADMDATE>=index_date;
+RUN;
+
+DATA opt_data_post;
+	SET opt_eligible_vte_pre opt_eligible_vte_post;
+	IF SVCDATE>=index_date;
+RUN;
+
+DATA opt_ipt_data_post;
+	SET ipt_summary_data_post opt_data_post;
+RUN;
+
+*Assessment of pre and post index date injectable drug events (administration);
+*Select injectable medication records from the services records over the baseline period;
+DATA inpt_service_data_pre;
+	SET ipt_svc_eligible_vte_pre ipt_svc_eligible_vte_post;
+	IF index_date-180<=SVCDATE<index_date;
+RUN;
+
+DATA all_service_pre;
+	SET inpt_service_data_pre opt_ipt_data_pre;
+RUN;
+*Select injectable medication records from the services records over the observation period;
+DATA inpt_service_data_post;
+	SET ipt_svc_eligible_vte_pre ipt_svc_eligible_vte_post;
+	IF SVCDATE>=index_date;
+RUN;
+
+DATA all_service_post;
+	SET inpt_service_data_post opt_data_post;
+RUN;
+
+*Select oral anticoagulant drug records over the 6 months;
+DATA drugs_data_pre;
+	SET drug_eligible_vte_pre drug_eligible_vte_post;
+	IF index_date-180<=SVCDATE<index_date;
+RUN;
+
+*Select all dispensing records after the index date;
+DATA drugs_data_post;
+	SET drug_eligible_vte_pre drug_eligible_vte_post;
+	IF SVCDATE>=index_date;
+RUN;
+
+*Assessing all service-pre exposure to injectables, first date, after the index date;
+
+
+DATA injectable_AC_post_temp;
+SET all_service_post;
+	case=0;
+	array proc{*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J1644') then case=1;*case='UFH';
+	end;
+	array proca{*} proc1-proc15;
+		do i = 1 to dim(proca);
+		if proc{i} in: ('J1652') then case=2;*case='Fondaparinux';
+	end;
+	array procb{*} proc1-proc15;
+		do i = 1 to dim(procb);
+		if proc{i} in: ('J1645','J1650','J1655') then case=3;*case='LMWH';
+	end;
+	array procc{*} proc1-proc15;
+		do i = 1 to dim(procc);
+		if proc{i} in: ('C9121','J0883','J0884','J0583','J1945') then case=4;*case='DTI_inject';
+	end;
+	if case^=0;
+RUN;
+
+DATA UFH_post_list;
+	SET injectable_AC_post_temp;
+	IF case=1;
+RUN;
+PROC SQL;
+	CREATE TABLE UFH_post_list as
+	SELECT 	min(enrolid) as enrolid,
+		1 as UFH_post_status,
+		min(SVCDATE) as initial_injectable_AC_date
+	FROM UFH_post_list
+	GROUP BY enrolid;
+QUIT;
+
+*Add insurance end date to individual patients;
+PROC CONTENTS DATA=insurance_eligible_vte_post; RUN;
+PROC SQL;
+	CREATE TABLE end_enroll_list as
+	SELECT 	min(enrolid) as enrolid,
+		max(DTEND) as last_enroll_date
+	FROM insurance_eligible_vte_post
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE table id_list_add_last_enroll_date as
+SELECT a.*,
+	b.last_enroll_date as last_enroll_date
+FROM analytical_cohort_15_may a
+LEFT JOIN end_enroll_list b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA temp;
+	SET id_list_add_last_enroll_date;
+	IF time<=7 THEN delete;
+RUN;
+
+proc univariate data=temp;
+      var time;
+      histogram;
+   run;
+* Assessing recurrence only using data 7 days from the index dates;
+DATA inpatient_eligible_records;
+	SET inpt_eligible_vte_pre inpt_eligible_vte_post;
+	IF DISDATE<=index_date+7 THEN DELETE;
+	IF ADMDATE<=index_date+7 THEN DELETE;
+	case_type=0;
+	IF dx1 in: ('6732',
+				'41511','41519',
+				'4532','4538','45389','45111','45119','45181',
+				'4534','45341','45342',
+				'67133','67144',
+				'45183','45189',
+				'45382','48383','45384','45385','45386','45387',
+				'I26','O882',
+				'I80','I81',
+				'I820','I821','I822','I823','I828','I829',
+				'O082','O223','O229','O871','O882') THEN case_type= 1;/*hospitalized mainly for other than VTE*/
+	IF dx2 in: ('6732',
+				'41511','41519',
+				'4532','4538','45389','45111','45119','45181',
+				'4534','45341','45342',
+				'67133','67144',
+				'45183','45189',
+				'45382','48383','45384','45385','45386','45387',
+				'I26','O882',
+				'I80','I81',
+				'I820','I821','I822','I823','I828','I829',
+				'O082','O223','O229','O871','O882') THEN case_type = 2; /*hospitalized for other than VTE*/
+	IF case_type=0 THEN DELETE;
+RUN;
+PROC SQL;
+	CREATE TABLE id_list_recurrence_primary_adm as
+	SELECT min(enrolid) as enrolid,
+		min(ADMDATE) as VTE_recur_date,
+		1 as VTE_recur_ADM
+	FROM inpatient_eligible_records
+	GROUP BY enrolid;
+QUIT;
+
+*Assess the VTE recurrence from ER visits from the outpaient settings;
+DATA outpatient_eligible_records;
+	SET opt_eligible_vte_pre opt_eligible_vte_post;
+	IF SVCDATE<=index_date+7 THEN DELETE;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0637','0981') THEN ER=1;
+	ELSE IF STDPROV in ('220','428') THEN ER=1;
+	ELSE IF STDPLAC in ('23') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120','10220','10320','10420','10520',
+						'12220','20120','20220','21120','21220','22120','22320',
+						'30120','30220','30320','30420','30520','30620',
+						'31120','31220','31320','31420','31520','31620') THEN ER=1;
+	IF ER=1;
+	case_type=1;
+	array icd {*} dx1-dx2;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('6732',
+				'41511','41519',
+				'4532','4538','45389','45111','45119','45181',
+				'4534','45341','45342',
+				'67133','67144',
+				'45183','45189',
+				'45382','48383','45384','45385','45386','45387',
+				'I26','O882',
+				'I80','I81',
+				'I820','I821','I822','I823','I828','I829',
+				'O082','O223','O229','O871','O882') then case_type=0;
+		end;
+	if case_type=0;
+	RUN;
+PROC SQL;
+	CREATE TABLE id_list_recurrence_ER as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) as VTE_recur_date,
+		1 as VTE_recur_ER
+	FROM outpatient_eligible_records
+	GROUP BY enrolid;
+QUIT;
+
+	*Combine the ER visits and admission records together, assess the DVT and PE recurrence dates;
+PROC SQL;
+	CREATE TABLE id_list_add_recur_adm as
+	SELECT a.*,
+			b.VTE_recur_ADM as VTE_recur_ADM_7day,
+			b.VTE_recur_date as VTE_recur_date_7day
+	FROM id_list_add_last_enroll_date a
+	LEFT JOIN id_list_recurrence_primary_adm b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list_recur_adm_ER as
+	SELECT a.*,
+			b.VTE_recur_date as VTE_recur_ER_date_7day,
+			b.VTE_recur_ER as VTE_recur_ER_7day
+	FROM id_list_add_recur_adm a
+	LEFT JOIN id_list_recurrence_ER b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list_recur_adm_ER1;
+	SET id_list_recur_adm_ER;
+	IF (VTE_recur_ER_7day=1 OR VTE_recur_ADM_7day=1) THEN VTE_recur_7day_status=1;
+	VTE_recur_7day_earliest=min(VTE_recur_ER_date_7day, VTE_recur_date_7day);
+	time_7day=VTE_recur_7day_earliest-index_date;
+RUN;
+
+DATA temp;
+	SET id_list_recur_adm_ER1;
+	fstat=0;
+	IF time_7day=. THEN lenfol=MDY(12,31,2015)-index_date;
+	IF time_7day^=. THEN lenfol=time_7day;
+	IF time_7day^=. THEN fstat=1;
+RUN;
+
+proc univariate data=temp;
+      var time_7day;
+      histogram;
+   run;
+
+proc lifetest DATA=temp plots=(lls);
+  time lenfol*fstat(0); 
+  strata SCD_status; 
+RUN;
