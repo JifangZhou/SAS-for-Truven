@@ -1,0 +1,338 @@
+LIBNAME WorkingD "C:\Users\jzhou86\Documents\SCD Project\SCD and DVT\SCD DVT working directory";
+
+DATA id_list;
+	SET workingD.id_list_recur_16_may;
+	rand_num=uniform(0);
+	IF age in (0:4) THEN 		agecate = 1 ;
+	IF age in (5:9) THEN		agecate = 2 ;
+	IF age in (10:14) THEN 		agecate = 3 ;
+	IF age in (15:19) THEN		agecate = 4 ;
+	IF age in (20:24) THEN 		agecate = 5 ;
+	IF age in (25:29) THEN		agecate = 6 ;
+	IF age in (30:34) THEN 		agecate = 7 ;
+	IF age in (35:39) THEN		agecate = 8 ;
+	IF age in (40:44) THEN		agecate = 9 ;
+	IF age in (45:49) THEN		agecate = 10 ;
+	IF age in (50:54) THEN 		agecate = 11 ;
+	IF age in (55:59) THEN		agecate = 12 ;
+	IF age in (60:64) THEN 		agecate = 13 ;
+	IF age in (65:69) THEN		agecate = 14 ;
+	IF age in (70:74) THEN 		agecate = 15 ;
+	IF age in (75:79) THEN		agecate = 16 ;
+	IF age in (80:84) THEN 		agecate = 17 ;
+	IF age in (85:89) THEN		agecate = 18 ;
+	IF age in (90:94) THEN		agecate = 19 ;
+	IF age in (95:99) THEN		agecate = 20 ;
+	IF age in (100:109) THEN	agecate = 21 ;
+	vte_type1=2;*PE with and without DVT;
+	IF VTE_type='DVT' THEN vte_type1=1;*DVT only;
+RUN;
+
+DATA study;
+	SET id_list;
+	IF SCD_Status=1;
+DATA control;
+	SET id_list;
+	IF SCD_Status=0;
+RUN;
+
+ *Matching on range of values;
+data control2;
+set control;
+ index_date_low=index_date-30;
+ index_date_high=index_date+30;
+ run;
+
+ proc sql;
+ create table controls_id as
+ select
+ a.enrolid as study_id,
+ b.enrolid as control_id,
+ a.age as study_age,
+ b.age as control_age,
+ a.sex as study_sex,
+ b.sex as control_sex,
+ a.rand_num as rand_num
+ from study a, control2 b
+ where ((a.index_date between b.index_date_low and b.index_date_high)
+ and a.sex=b.sex and a.agecate=b.agecate and a.vte_type1=b.vte_type1 and a.case_type_final=b.case_type_final);
+
+ * count the number of control subjects for each case subject;
+proc sort data=controls_id;
+ by study_id;
+ run;
+data controls_id2(keep=study_id num_controls);
+set controls_id;
+ by study_id;
+ retain num_controls;
+ if first.study_id then num_controls=1;
+ else num_controls=num_controls+1;
+ if last.study_id then output;
+ run;
+
+ * now merge the counts back into the dataset;
+data controls_id3;
+merge controls_id
+ controls_id2;
+ by study_id;
+ run;
+* now order the rows to select the first matching control;
+proc sort data=controls_id3;
+ by control_id num_controls rand_num;
+ run;
+data controls_id4;
+set controls_id3;
+ by control_id;
+ if first.control_id;
+ run;
+ proc sort data=controls_id4;
+ by study_id;
+ run;
+
+ proc sort data=controls_id4 ;
+ by study_id rand_num;
+ run;
+data controls_id5 not_enough;
+set controls_id4;
+ by study_id ;
+ retain num;
+ if first.study_id then num=1;
+ if num le 5 then do;
+ output controls_id5;
+ num=num+1;
+ end;
+ if last.study_id then do;
+ if num le 5 then output not_enough;
+ end;
+ run;
+proc print data=controls_id5(obs=40);
+ title2 'matched patients';
+ run;
+
+  * Remove the insufficient cases;
+ data controls_id3;
+merge controls_id5
+ not_enough(in=b_);
+ by study_id;
+ if b_ then delete;
+ run;
+
+ PROC SQL;
+ create table temp_control as
+ select
+min(control_id) as enrolid,
+0 as case_control
+ from controls_id3
+GROUP BY control_id;
+QUIT;
+
+ PROC SQL;
+ create table temp_case as
+ select
+min(study_id) as enrolid,
+1 as case_control
+ from controls_id3
+GROUP BY study_id;
+QUIT;
+DATA case_control_id_list;
+	SET Temp_control Temp_case;
+RUN;
+
+DATA case_control_id_list;
+	SET workingD.case_control_id_list;
+RUN;
+
+*Create master table with all recurrent VTE dates;
+DATA id_list;
+	SET workingD.id_list_recur_16_may;
+	DROP VTE_recur_date VTE_recur_ER_date VTE_recur_ADM VTE_recur_ER VTE_recur_status VTE_recur_date_earliest time VTE_recur_ADM_7day
+		VTE_recur_date_7day VTE_recur_ER_date_7day VTE_recur_ER_7day VTE_recur_7day_status VTE_recur_7day_earliest time_7day;
+RUN;
+
+
+PROC sql;
+	CREATE table id_list1 as
+	SELECT a.*,
+		b.*
+	FROM id_list a
+	LEFT JOIN case_control_id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*add sensitivity analysis results;
+LIBNAME SENFILE "C:\Users\jzhou86\Documents\SCD Project\SCD and DVT\SCD DVT working directory\Sensitivity analysis on lagging time for VTE recurrence";
+PROC sql;
+	CREATE table DVT_recur_0 as
+	SELECT min(enrolid) as enrolid,
+		min(DVT_recur_ER_date_0) as DVT_recur_ER_date_0,
+		min(DVT_recur_ADM_date_0) as DVT_recur_ADM_date_0
+	FROM SENFILE.id_list_dvt_0
+	GROUP BY enrolid;
+QUIT;
+DATA DVT_recur_0;
+	SET DVT_recur_0;
+	DVT_recur_date_0=min(DVT_recur_ER_date_0,DVT_recur_ADM_date_0);
+RUN;
+PROC sql;
+	CREATE table PE_recur_0 as
+	SELECT min(enrolid) as enrolid,
+		min(PE_recur_ER_date_0) as PE_recur_ER_date_0,
+		min(PE_recur_ADM_date_0) as PE_recur_ADM_date_0
+	FROM SENFILE.id_list_pe_0
+	GROUP BY enrolid;
+QUIT;
+DATA PE_recur_0;
+	SET PE_recur_0;
+	PE_recur_date_0=min(PE_recur_ER_date_0,PE_recur_ADM_date_0);
+RUN;
+
+PROC sql;
+	CREATE table id_list2 as
+	SELECT a.*,
+		b.DVT_recur_date_0 as DVT_recur_date_0
+	FROM id_list1 a
+	LEFT JOIN DVT_recur_0 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list3 as
+	SELECT a.*,
+		b.PE_recur_date_0 as PE_recur_date_0
+	FROM id_list2 a
+	LEFT JOIN PE_recur_0 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*7 days sensitivity data;
+PROC sql;
+	CREATE table DVT_recur_7 as
+	SELECT min(enrolid) as enrolid,
+		min(DVT_recur_ER_date_7) as DVT_recur_ER_date_7,
+		min(DVT_recur_ADM_date_7) as DVT_recur_ADM_date_7
+	FROM SENFILE.id_list_dvt_7
+	GROUP BY enrolid;
+QUIT;
+DATA DVT_recur_7;
+	SET DVT_recur_7;
+	DVT_recur_date_7=min(DVT_recur_ER_date_7,DVT_recur_ADM_date_7);
+RUN;
+PROC sql;
+	CREATE table PE_recur_7 as
+	SELECT min(enrolid) as enrolid,
+		min(PE_recur_ER_date_7) as PE_recur_ER_date_7,
+		min(PE_recur_ADM_date_7) as PE_recur_ADM_date_7
+	FROM SENFILE.id_list_pe_7
+	GROUP BY enrolid;
+QUIT;
+DATA PE_recur_7;
+	SET PE_recur_7;
+	PE_recur_date_7=min(PE_recur_ER_date_7,PE_recur_ADM_date_7);
+RUN; 
+
+PROC sql;
+	CREATE table id_list4 as
+	SELECT a.*,
+		b.DVT_recur_date_7 as DVT_recur_date_7
+	FROM id_list3 a
+	LEFT JOIN DVT_recur_7 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list5 as
+	SELECT a.*,
+		b.PE_recur_date_7 as PE_recur_date_7
+	FROM id_list4 a
+	LEFT JOIN PE_recur_7 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*14 days lagging time;
+PROC sql;
+	CREATE table DVT_recur_14 as
+	SELECT min(enrolid) as enrolid,
+		min(DVT_recur_ER_date_14) as DVT_recur_ER_date_14,
+		min(DVT_recur_ADM_date_14) as DVT_recur_ADM_date_14
+	FROM SENFILE.id_list_dvt_14
+	GROUP BY enrolid;
+QUIT;
+DATA DVT_recur_14;
+	SET DVT_recur_14;
+	DVT_recur_date_14=min(DVT_recur_ER_date_14,DVT_recur_ADM_date_14);
+RUN;
+PROC sql;
+	CREATE table PE_recur_14 as
+	SELECT min(enrolid) as enrolid,
+		min(PE_recur_ER_date_14) as PE_recur_ER_date_14,
+		min(PE_recur_ADM_date_14) as PE_recur_ADM_date_14
+	FROM SENFILE.id_list_pe_14
+	GROUP BY enrolid;
+QUIT;
+DATA PE_recur_14;
+	SET PE_recur_14;
+	PE_recur_date_14=min(PE_recur_ER_date_14,PE_recur_ADM_date_14);
+RUN; 
+
+PROC sql;
+	CREATE table id_list6 as
+	SELECT a.*,
+		b.DVT_recur_date_14 as DVT_recur_date_14
+	FROM id_list5 a
+	LEFT JOIN DVT_recur_14 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list7 as
+	SELECT a.*,
+		b.PE_recur_date_14 as PE_recur_date_14
+	FROM id_list6 a
+	LEFT JOIN PE_recur_14 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*30 days lagging time;
+PROC sql;
+	CREATE table DVT_recur_30 as
+	SELECT min(enrolid) as enrolid,
+		min(DVT_recur_ER_date_30) as DVT_recur_ER_date_30,
+		min(DVT_recur_ADM_date_30) as DVT_recur_ADM_date_30
+	FROM SENFILE.id_list_dvt_30
+	GROUP BY enrolid;
+QUIT;
+DATA DVT_recur_30;
+	SET DVT_recur_30;
+	DVT_recur_date_30=min(DVT_recur_ER_date_30,DVT_recur_ADM_date_30);
+RUN;
+PROC sql;
+	CREATE table PE_recur_30 as
+	SELECT min(enrolid) as enrolid,
+		min(PE_recur_ER_date_30) as PE_recur_ER_date_30,
+		min(PE_recur_ADM_date_30) as PE_recur_ADM_date_30
+	FROM SENFILE.id_list_pe_30
+	GROUP BY enrolid;
+QUIT;
+DATA PE_recur_30;
+	SET PE_recur_30;
+	PE_recur_date_30=min(PE_recur_ER_date_30,PE_recur_ADM_date_30);
+RUN; 
+PROC sql;
+	CREATE table id_list8 as
+	SELECT a.*,
+		b.DVT_recur_date_30 as DVT_recur_date_30
+	FROM id_list7 a
+	LEFT JOIN DVT_recur_30 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list9 as
+	SELECT a.*,
+		b.PE_recur_date_30 as PE_recur_date_30
+	FROM id_list8 a
+	LEFT JOIN PE_recur_30 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA workingD.analytical_cohort_17_May;
+	SET id_list9;
+RUN;
+
+
+
