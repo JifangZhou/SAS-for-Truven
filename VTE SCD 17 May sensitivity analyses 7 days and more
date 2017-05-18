@@ -1,0 +1,470 @@
+*Assessing all recurrence using 7 day from the index dates;
+DATA inpatient_eligible_records;
+	SET inpt_eligible_vte_pre inpt_eligible_vte_post;
+	IF DISDATE<=index_date+7 THEN DELETE;
+	IF ADMDATE<=index_date+7 THEN DELETE;
+	case_type=0;
+	IF dx1 in: ('6732',
+				'41511','41519',
+				'4532','4538','45389','45111','45119','45181',
+				'4534','45341','45342',
+				'67133','67144',
+				'45183','45189',
+				'45382','48383','45384','45385','45386','45387',
+				'I26','O882',
+				'I80','I81',
+				'I820','I821','I822','I823','I828','I829',
+				'O082','O223','O229','O871','O882') THEN case_type= 1;/*hospitalized mainly for other than VTE*/
+	IF dx2 in: ('6732',
+				'41511','41519',
+				'4532','4538','45389','45111','45119','45181',
+				'4534','45341','45342',
+				'67133','67144',
+				'45183','45189',
+				'45382','48383','45384','45385','45386','45387',
+				'I26','O882',
+				'I80','I81',
+				'I820','I821','I822','I823','I828','I829',
+				'O082','O223','O229','O871','O882') THEN case_type = 2; /*hospitalized for other than VTE*/
+	IF case_type=0 THEN DELETE;
+RUN;
+
+PROC SQL;
+	CREATE TABLE id_list_recurrence_primary_adm as
+	SELECT min(enrolid) as enrolid,
+		min(ADMDATE) as VTE_recur_ADM_date_7,
+		1 as VTE_recur_ADM_7,
+		min(case_type) as case_type_7
+	FROM inpatient_eligible_records
+	GROUP BY enrolid, case_type;
+QUIT;
+*Assess the VTE recurrence from ER visits from the outpaient settings;
+DATA outpatient_eligible_records;
+	SET opt_eligible_vte_pre opt_eligible_vte_post;
+	IF SVCDATE<=index_date+7 THEN DELETE;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0637','0981') THEN ER=1;
+	ELSE IF STDPROV in ('220','428') THEN ER=1;
+	ELSE IF STDPLAC in ('23') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120','10220','10320','10420','10520',
+						'12220','20120','20220','21120','21220','22120','22320',
+						'30120','30220','30320','30420','30520','30620',
+						'31120','31220','31320','31420','31520','31620') THEN ER=1;
+	IF ER=1;
+	case_type=1;
+	array icd {*} dx1-dx2;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('6732',
+				'41511','41519',
+				'4532','4538','45389','45111','45119','45181',
+				'4534','45341','45342',
+				'67133','67144',
+				'45183','45189',
+				'45382','48383','45384','45385','45386','45387',
+				'I26','O882',
+				'I80','I81',
+				'I820','I821','I822','I823','I828','I829',
+				'O082','O223','O229','O871','O882') then case_type=0;
+		end;
+	if case_type=0;
+	RUN;
+PROC SQL;
+	CREATE TABLE id_list_recurrence_ER as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) as VTE_recur_ER_date_7,
+		1 as VTE_recur_ER_7,
+		3 as case_type_7
+	FROM outpatient_eligible_records
+	GROUP BY enrolid;
+QUIT;
+*Output lists of dates fr 0 day;
+DATA myfile.id_list_recurrence_ER_7;
+	SET id_list_recurrence_ER;
+DATA myfile.id_list_recurrence_primary_adm_7;
+	SET id_list_recurrence_primary_adm;
+RUN;
+* Assessment of recurrent VTE types as PE or DVT using 7 days;
+*identify the occuring date of recerrent DVT and PE;
+DATA outpatient_eligible_records;
+	SET opt_eligible_vte_pre opt_eligible_vte_post;
+	IF SVCDATE<=index_date+7 THEN DELETE;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0637','0981') THEN ER=1;
+	ELSE IF STDPROV in ('220','428') THEN ER=1;
+	ELSE IF STDPLAC in ('23') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120','10220','10320','10420','10520',
+						'12220','20120','20220','21120','21220','22120','22320',
+						'30120','30220','30320','30420','30520','30620',
+						'31120','31220','31320','31420','31520','31620') THEN ER=1;
+	IF ER=1;
+RUN;
+DATA inpatient_eligible_records;
+	SET inpt_eligible_vte_pre inpt_eligible_vte_post;
+	IF DISDATE<=index_date+7 THEN DELETE;
+	IF ADMDATE<=index_date+7 THEN DELETE;
+RUN;
+
+DATA VTE_dx_DVT;
+	SET outpatient_eligible_records inpatient_eligible_records;
+	case=0;
+	array icd {*} dx1-dx2;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('4532','4538','45389','45111','45119','45181',
+				'4534','45341','45342',
+				'67133','67144',
+				'45183','45189',
+				'45382','48383','45384','45385','45386','45387',
+				'I80','I81',
+				'I820','I821','I822','I823','I828','I829',
+				'O082','O223','O229','O871') then case=1;/*index event as having DVT*/
+		end;
+	If case=0 THEN DELETE;
+RUN;
+
+DATA VTE_dx_PE;
+	SET outpatient_eligible_records inpatient_eligible_records;
+	case=0;
+	array icd {*} dx1-dx2;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('6732','41511','41519','I26','O882') then case=2;/*index event as having PE*/
+		end;	
+	If case=0 THEN DELETE;
+RUN;
+*Output DVT and PE list using 7 day as laging time;
+PROC SQL;
+	CREATE TABLE myfile.id_list_DVT_7 as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) as DVT_recur_ER_date_7,
+		min(ADMDATE) as DVT_recur_ADM_date_7,
+		1 as DVT_recur_7
+	FROM VTE_dx_DVT
+	GROUP BY enrolid,SVCDATE,ADMDATE;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE myfile.id_list_PE_7 as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) as PE_recur_ER_date_7,
+		min(ADMDATE) as PE_recur_ADM_date_7,
+		1 as PE_recur_7
+	FROM VTE_dx_PE
+	GROUP BY enrolid,SVCDATE,ADMDATE;
+QUIT;
+
+
+
+*Assessing all recurrence using 14 day from the index dates;
+DATA inpatient_eligible_records;
+	SET inpt_eligible_vte_pre inpt_eligible_vte_post;
+	IF DISDATE<=index_date+14 THEN DELETE;
+	IF ADMDATE<=index_date+14 THEN DELETE;
+	case_type=0;
+	IF dx1 in: ('6732',
+				'41511','41519',
+				'4532','4538','45389','45111','45119','45181',
+				'4534','45341','45342',
+				'67133','67144',
+				'45183','45189',
+				'45382','48383','45384','45385','45386','45387',
+				'I26','O882',
+				'I80','I81',
+				'I820','I821','I822','I823','I828','I829',
+				'O082','O223','O229','O871','O882') THEN case_type= 1;/*hospitalized mainly for other than VTE*/
+	IF dx2 in: ('6732',
+				'41511','41519',
+				'4532','4538','45389','45111','45119','45181',
+				'4534','45341','45342',
+				'67133','67144',
+				'45183','45189',
+				'45382','48383','45384','45385','45386','45387',
+				'I26','O882',
+				'I80','I81',
+				'I820','I821','I822','I823','I828','I829',
+				'O082','O223','O229','O871','O882') THEN case_type = 2; /*hospitalized for other than VTE*/
+	IF case_type=0 THEN DELETE;
+RUN;
+
+PROC SQL;
+	CREATE TABLE id_list_recurrence_primary_adm as
+	SELECT min(enrolid) as enrolid,
+		min(ADMDATE) as VTE_recur_ADM_date_14,
+		1 as VTE_recur_ADM_14,
+		min(case_type) as case_type_14
+	FROM inpatient_eligible_records
+	GROUP BY enrolid, case_type;
+QUIT;
+*Assess the VTE recurrence from ER visits from the outpaient settings;
+DATA outpatient_eligible_records;
+	SET opt_eligible_vte_pre opt_eligible_vte_post;
+	IF SVCDATE<=index_date+14 THEN DELETE;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0637','0981') THEN ER=1;
+	ELSE IF STDPROV in ('220','428') THEN ER=1;
+	ELSE IF STDPLAC in ('23') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120','10220','10320','10420','10520',
+						'12220','20120','20220','21120','21220','22120','22320',
+						'30120','30220','30320','30420','30520','30620',
+						'31120','31220','31320','31420','31520','31620') THEN ER=1;
+	IF ER=1;
+	case_type=1;
+	array icd {*} dx1-dx2;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('6732',
+				'41511','41519',
+				'4532','4538','45389','45111','45119','45181',
+				'4534','45341','45342',
+				'67133','67144',
+				'45183','45189',
+				'45382','48383','45384','45385','45386','45387',
+				'I26','O882',
+				'I80','I81',
+				'I820','I821','I822','I823','I828','I829',
+				'O082','O223','O229','O871','O882') then case_type=0;
+		end;
+	if case_type=0;
+	RUN;
+PROC SQL;
+	CREATE TABLE id_list_recurrence_ER as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) as VTE_recur_ER_date_14,
+		1 as VTE_recur_ER_14,
+		3 as case_type_14
+	FROM outpatient_eligible_records
+	GROUP BY enrolid;
+QUIT;
+*Output lists of dates fr 14 day;
+DATA myfile.id_list_recurrence_ER_14;
+	SET id_list_recurrence_ER;
+DATA myfile.id_list_recurrence_adm_14;
+	SET id_list_recurrence_primary_adm;
+RUN;
+* Assessment of recurrent VTE types as PE or DVT using 14 days;
+*identify the occuring date of recerrent DVT and PE;
+DATA outpatient_eligible_records;
+	SET opt_eligible_vte_pre opt_eligible_vte_post;
+	IF SVCDATE<=index_date+14 THEN DELETE;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0637','0981') THEN ER=1;
+	ELSE IF STDPROV in ('220','428') THEN ER=1;
+	ELSE IF STDPLAC in ('23') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120','10220','10320','10420','10520',
+						'12220','20120','20220','21120','21220','22120','22320',
+						'30120','30220','30320','30420','30520','30620',
+						'31120','31220','31320','31420','31520','31620') THEN ER=1;
+	IF ER=1;
+RUN;
+DATA inpatient_eligible_records;
+	SET inpt_eligible_vte_pre inpt_eligible_vte_post;
+	IF DISDATE<=index_date+14 THEN DELETE;
+	IF ADMDATE<=index_date+14 THEN DELETE;
+RUN;
+
+DATA VTE_dx_DVT;
+	SET outpatient_eligible_records inpatient_eligible_records;
+	case=0;
+	array icd {*} dx1-dx2;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('4532','4538','45389','45111','45119','45181',
+				'4534','45341','45342',
+				'67133','67144',
+				'45183','45189',
+				'45382','48383','45384','45385','45386','45387',
+				'I80','I81',
+				'I820','I821','I822','I823','I828','I829',
+				'O082','O223','O229','O871') then case=1;/*index event as having DVT*/
+		end;
+	If case=0 THEN DELETE;
+RUN;
+
+DATA VTE_dx_PE;
+	SET outpatient_eligible_records inpatient_eligible_records;
+	case=0;
+	array icd {*} dx1-dx2;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('6732','41511','41519','I26','O882') then case=2;/*index event as having PE*/
+		end;	
+	If case=0 THEN DELETE;
+RUN;
+*Output DVT and PE list using 14 day as laging time;
+PROC SQL;
+	CREATE TABLE myfile.id_list_DVT_14 as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) as DVT_recur_ER_date_14,
+		min(ADMDATE) as DVT_recur_ADM_date_14,
+		1 as DVT_recur_14
+	FROM VTE_dx_DVT
+	GROUP BY enrolid,SVCDATE,ADMDATE;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE myfile.id_list_PE_14 as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) as PE_recur_ER_date_14,
+		min(ADMDATE) as PE_recur_ADM_date_14,
+		1 as PE_recur_14
+	FROM VTE_dx_PE
+	GROUP BY enrolid,SVCDATE,ADMDATE;
+QUIT;
+
+
+
+
+*Assessing all recurrence using 30 day from the index dates;
+DATA inpatient_eligible_records;
+	SET inpt_eligible_vte_pre inpt_eligible_vte_post;
+	IF DISDATE<=index_date+30 THEN DELETE;
+	IF ADMDATE<=index_date+30 THEN DELETE;
+	case_type=0;
+	IF dx1 in: ('6732',
+				'41511','41519',
+				'4532','4538','45389','45111','45119','45181',
+				'4534','45341','45342',
+				'67133','67144',
+				'45183','45189',
+				'45382','48383','45384','45385','45386','45387',
+				'I26','O882',
+				'I80','I81',
+				'I820','I821','I822','I823','I828','I829',
+				'O082','O223','O229','O871','O882') THEN case_type= 1;/*hospitalized mainly for other than VTE*/
+	IF dx2 in: ('6732',
+				'41511','41519',
+				'4532','4538','45389','45111','45119','45181',
+				'4534','45341','45342',
+				'67133','67144',
+				'45183','45189',
+				'45382','48383','45384','45385','45386','45387',
+				'I26','O882',
+				'I80','I81',
+				'I820','I821','I822','I823','I828','I829',
+				'O082','O223','O229','O871','O882') THEN case_type = 2; /*hospitalized for other than VTE*/
+	IF case_type=0 THEN DELETE;
+RUN;
+
+PROC SQL;
+	CREATE TABLE id_list_recurrence_primary_adm as
+	SELECT min(enrolid) as enrolid,
+		min(ADMDATE) as VTE_recur_ADM_date_30,
+		1 as VTE_recur_ADM_30,
+		min(case_type) as case_type_30
+	FROM inpatient_eligible_records
+	GROUP BY enrolid, case_type;
+QUIT;
+*Assess the VTE recurrence from ER visits from the outpaient settings;
+DATA outpatient_eligible_records;
+	SET opt_eligible_vte_pre opt_eligible_vte_post;
+	IF SVCDATE<=index_date+30 THEN DELETE;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0637','0981') THEN ER=1;
+	ELSE IF STDPROV in ('220','428') THEN ER=1;
+	ELSE IF STDPLAC in ('23') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120','10220','10320','10420','10520',
+						'12220','20120','20220','21120','21220','22120','22320',
+						'30120','30220','30320','30420','30520','30620',
+						'31120','31220','31320','31420','31520','31620') THEN ER=1;
+	IF ER=1;
+	case_type=1;
+	array icd {*} dx1-dx2;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('6732',
+				'41511','41519',
+				'4532','4538','45389','45111','45119','45181',
+				'4534','45341','45342',
+				'67133','67144',
+				'45183','45189',
+				'45382','48383','45384','45385','45386','45387',
+				'I26','O882',
+				'I80','I81',
+				'I820','I821','I822','I823','I828','I829',
+				'O082','O223','O229','O871','O882') then case_type=0;
+		end;
+	if case_type=0;
+	RUN;
+PROC SQL;
+	CREATE TABLE id_list_recurrence_ER as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) as VTE_recur_ER_date_30,
+		1 as VTE_recur_ER_30,
+		3 as case_type_30
+	FROM outpatient_eligible_records
+	GROUP BY enrolid;
+QUIT;
+*Output lists of dates for 30 day;
+DATA myfile.id_list_recurrence_ER_30;
+	SET id_list_recurrence_ER;
+DATA myfile.id_list_recurrence_adm_30;
+	SET id_list_recurrence_primary_adm;
+RUN;
+* Assessment of recurrent VTE types as PE or DVT using 30 days;
+*identify the occuring date of recerrent DVT and PE;
+DATA outpatient_eligible_records;
+	SET opt_eligible_vte_pre opt_eligible_vte_post;
+	IF SVCDATE<=index_date+30 THEN DELETE;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0637','0981') THEN ER=1;
+	ELSE IF STDPROV in ('220','428') THEN ER=1;
+	ELSE IF STDPLAC in ('23') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120','10220','10320','10420','10520',
+						'12220','20120','20220','21120','21220','22120','22320',
+						'30120','30220','30320','30420','30520','30620',
+						'31120','31220','31320','31420','31520','31620') THEN ER=1;
+	IF ER=1;
+RUN;
+DATA inpatient_eligible_records;
+	SET inpt_eligible_vte_pre inpt_eligible_vte_post;
+	IF DISDATE<=index_date+30 THEN DELETE;
+	IF ADMDATE<=index_date+30 THEN DELETE;
+RUN;
+
+DATA VTE_dx_DVT;
+	SET outpatient_eligible_records inpatient_eligible_records;
+	case=0;
+	array icd {*} dx1-dx2;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('4532','4538','45389','45111','45119','45181',
+				'4534','45341','45342',
+				'67133','67144',
+				'45183','45189',
+				'45382','48383','45384','45385','45386','45387',
+				'I80','I81',
+				'I820','I821','I822','I823','I828','I829',
+				'O082','O223','O229','O871') then case=1;/*index event as having DVT*/
+		end;
+	If case=0 THEN DELETE;
+RUN;
+
+DATA VTE_dx_PE;
+	SET outpatient_eligible_records inpatient_eligible_records;
+	case=0;
+	array icd {*} dx1-dx2;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('6732','41511','41519','I26','O882') then case=2;/*index event as having PE*/
+		end;	
+	If case=0 THEN DELETE;
+RUN;
+*Output DVT and PE list using 30 day as laging time;
+PROC SQL;
+	CREATE TABLE myfile.id_list_DVT_30 as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) as DVT_recur_ER_date_30,
+		min(ADMDATE) as DVT_recur_ADM_date_30,
+		1 as DVT_recur_30
+	FROM VTE_dx_DVT
+	GROUP BY enrolid,SVCDATE,ADMDATE;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE myfile.id_list_PE_30 as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) as PE_recur_ER_date_30,
+		min(ADMDATE) as PE_recur_ADM_date_30,
+		1 as PE_recur_30
+	FROM VTE_dx_PE
+	GROUP BY enrolid,SVCDATE,ADMDATE;
+QUIT;
+
