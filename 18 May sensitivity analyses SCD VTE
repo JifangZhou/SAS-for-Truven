@@ -1,0 +1,147 @@
+LIBNAME WorkingD "C:\Users\jzhou86\Documents\SCD Project\SCD and DVT\SCD DVT working directory";
+DATA id_list;
+	SET workingD.analytical_cohort_17_May;
+	VTE_recur_0=0;
+	IF (DVT_recur_date_0^=. OR PE_recur_date_0^=.) THEN VTE_recur_0=1;
+	IF (DVT_recur_date_0^=. OR PE_recur_date_0^=.) THEN VTE_recur_date_0=min(DVT_recur_date_0, PE_recur_date_0);
+	lenfol=min(last_enroll_date, VTE_recur_date_0)-index_date;
+	VTE_recur_7=0;
+	IF (DVT_recur_date_7^=. OR PE_recur_date_7^=.) THEN VTE_recur_7=1;
+	IF (DVT_recur_date_7^=. OR PE_recur_date_7^=.) THEN VTE_recur_date_7=min(DVT_recur_date_7, PE_recur_date_7);
+	lenfol=min(last_enroll_date, VTE_recur_date_7)-index_date;
+	VTE_recur_14=0;
+	IF (DVT_recur_date_14^=. OR PE_recur_date_14^=.) THEN VTE_recur_14=1;
+	IF (DVT_recur_date_14^=. OR PE_recur_date_14^=.) THEN VTE_recur_date_14=min(DVT_recur_date_14, PE_recur_date_14);
+	lenfol=min(last_enroll_date, VTE_recur_date_14)-index_date;
+	VTE_recur_30=0;
+	IF (DVT_recur_date_30^=. OR PE_recur_date_30^=.) THEN VTE_recur_30=1;
+	IF (DVT_recur_date_30^=. OR PE_recur_date_30^=.) THEN VTE_recur_date_30=min(DVT_recur_date_30, PE_recur_date_30);
+	lenfol=min(last_enroll_date, VTE_recur_date_7)-index_date;
+	fstat=0;
+	IF VTE_recur_date_7^=. THEN fstat=1;
+RUN;
+* Assess the VTE recurrence events among the whole unmatched cohorts;
+ PROC FREQ DATA=id_list;
+ TABLE SCD_status*VTE_recur_30/nocol norow nopct;
+ RUN;
+DATA WorkingD.analytical cohort_18_May;
+	SET id_list;
+RUN;
+DATA workingfile;
+	SET id_list;
+	lenfol_year=lenfol/365.25;
+	IF case_control^=.;
+RUN;
+ PROC FREQ DATA=workingfile;
+ TABLE SCD_status*VTE_recur_14/nocol norow nopct;
+ RUN;
+
+ods graphics on;
+proc lifetest data=workingfile method=km notable plots=(survival(atrisk) logsurv lls) outsurv=out1 ;
+time lenfol_year*fstat(0);
+strata SCD_status;
+run;
+ods graphics off;
+
+DATA out1;
+	SET out1;
+	if lenfol_year <= 1/12						then do; dum=1; duration='1 Mo'; end;
+	if lenfol_year > 1/12 and lenfol_year <= 2/12		then do; dum=2; duration='2 Mos'; end;
+	if lenfol_year > 2/12 and lenfol_year <= 3/12		then do; dum=3; duration='3 Mos'; end;
+	if lenfol_year > 3/12 and lenfol_year <= 4/12		then do; dum=4; duration='4 Mos'; end;
+	if lenfol_year > 4/12 and lenfol_year <= 5/12		then do; dum=5; duration='5 Mos'; end;
+	if lenfol_year > 5/12 and lenfol_year <= 6/12		then do; dum=6; duration='6 Mos'; end;
+	if lenfol_year > 6/12 and lenfol_year <= 7/12		then do; dum=7; duration='7 Mos'; end;
+	if lenfol_year > 7/12 and lenfol_year <= 8/12		then do; dum=8; duration='8 Mos'; end;
+	if lenfol_year > 8/12 and lenfol_year <= 9/12		then do; dum=9; duration='9 Mos'; end;
+	if lenfol_year > 9/12 and lenfol_year <= 10/12		then do; dum=10; duration='10 Mos'; end;
+	if lenfol_year > 10/12 and lenfol_year <= 11/12		then do; dum=11; duration='11 Mos'; end;
+	if lenfol_year > 11/12 and lenfol_year <= 12/12		then do; dum=12; duration='12 Mos'; end;
+	if sdf_lcl=. then delete;
+	cumrisk = 	round(100*(1-survival),.1);
+	lcl		= 	round(100*(1-sdf_ucl),.1);
+	ucl		=	round(100*(1-sdf_lcl),.1);
+RUN;
+
+PROC SORT DATA=out1; BY SCD_status dum lenfol_year;RUN;
+
+DATA out2;
+	SET out1;
+	BY SCD_status dum;
+	IF last.dum;
+RUN;
+ PROC PRINT DATA=out2 noobs;
+ VAR duration lenfol_year cumrisk lcl ucl;
+ BY SCD_status;
+ RUN;
+
+
+
+ods graphics on;
+proc lifetest data=workingfile notable plots=(survival(atrisk) logsurv lls);
+time lenfol_year*fstat(0);
+strata SCD_status;
+run;
+ods graphics off;
+
+*****SECTION1************;
+%macro section1(name, time, event, group);
+title1 'Events &Censored Observations';
+title2   '';
+data &name;
+	set &name;
+	fumonths =&time/30;
+
+	if &event=0 then do; d=0; endpoint='b Censor' ; end;
+	if &event=1 then do; d=1; endpoint='a Event' ; end;
+
+	if fumonths <= 12						then grpt = 'a.  1yr';
+	if fumonths > 12 and fumonths <= 24		then grpt = 'b.  2yrs';
+	if fumonths > 24 and fumonths <= 36		then grpt = 'b.  3yrs';
+	if fumonths > 36 and fumonths <= 48		then grpt = 'b.  4yrs';
+	if fumonths > 48 and fumonths <= 60		then grpt = 'b.  5yrs';
+	if fumonths > 60 and fumonths <= 72		then grpt = 'b.  6yrs';
+	if fumonths > 72 and fumonths <= 84		then grpt = 'b.  7yrs';
+	if fumonths > 84 and fumonths <= 96		then grpt = 'b.  8yrs';
+run;
+
+proc freq data=&name;
+tables &group*grpt*endpoint /nopct norow nocol;
+title2 'By Group';
+run;
+%mend section1;
+
+%section1 (workingfile, lenfol, fstat, SCD_status);
+
+%macro section2(numgrps, name, group, grpnum1, grpnum2);
+
+title1 'Number at Risk';
+title2 '';
+%do i=1 %to &numgrps;
+proc sort data=&name; by &group; run;
+
+ods listing close;
+ods output Freq.ByGroup&i..Table1. OneWayFreqs = Table&i(keep = grpt CumFrequency);
+proc freq data=&name;
+tables grpt /nopct list;
+by &group;
+run;
+ods output close;
+ods listing;
+
+data Table&i;
+	set Table&i;
+	NumberAtRisk=(&grpnum&i-CumFrequency);
+	proc print data=Table&i noobs; title2 "'Group&i'";run;
+%end;
+%mend section2;
+
+%section2 (2, workingfile, SCD_status, 2170, 434);
+
+
+
+proc phreg DATA=workingfile plots(overlay)=survival; 
+model lenfol_year*fstat(0)=;
+strata SCD_status; 
+baseline out=temp survival=survival;
+RUN;
