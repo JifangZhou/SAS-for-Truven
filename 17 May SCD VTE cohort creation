@@ -1,0 +1,631 @@
+LIBNAME Myfile 'F:\User Folders\jzhou86\VTE working Directory';
+LIBNAME Rawdata 'F:\User Folders\jzhou86\VTE genral cases';
+LIBNAME Redbook 'E:\Truven Data';
+
+*Test case run on inpatient files only file;
+DATA inpt_sum;
+SET Rawdata.scd_ccaei_09 Rawdata.scd_ccaei_10 Rawdata.scd_ccaei_11 Rawdata.scd_ccaei_12 Rawdata.scd_ccaei_13
+	Rawdata.scd_mdcri_09 Rawdata.scd_mdcri_10 Rawdata.scd_mdcri_11 Rawdata.scd_mdcri_12 Rawdata.scd_mdcri_13
+	Rawdata.scd_ccaei_142 Rawdata.scd_ccaei_151  
+	Rawdata.scd_mdcri_142 Rawdata.scd_mdcri_151;
+	case_type=0;
+	IF dx1 in: ('6732',
+				'41511','41519',
+				'4532','4538','45389','45111','45119','45181',
+				'4534','45341','45342',
+				'67133','67144',
+				'45183','45189',
+				'45382','48383','45384','45385','45386','45387',
+				'I26','O882',
+				'I80','I81',
+				'I820','I821','I822','I823','I828','I829',
+				'O082','O223','O229','O871','O882') THEN case_type= 1;/*hospitalized mainly for other than VTE*/
+	IF dx2 in: ('6732',
+				'41511','41519',
+				'4532','4538','45389','45111','45119','45181',
+				'4534','45341','45342',
+				'67133','67144',
+				'45183','45189',
+				'45382','48383','45384','45385','45386','45387',
+				'I26','O882',
+				'I80','I81',
+				'I820','I821','I822','I823','I828','I829',
+				'O082','O223','O229','O871','O882') THEN case_type = 2; /*hospitalized for other than VTE*/
+	IF case_type=0 THEN DELETE;
+RUN;
+
+*Assessment of the incident dates and combine ID with the incident dates;
+DATA inpt_sum_primary;
+	SET inpt_sum;
+	IF case_type =1;
+RUN;
+
+DATA inpt_sum_secondary;
+	SET inpt_sum;
+	IF case_type =2;
+RUN;
+
+PROC SQL;
+	CREATE TABLE id_list_from_primary_adm as
+	SELECT min(enrolid) as enrolid,
+		count(case_type) as dx_num,
+		min(ADMDATE) as index_date
+	FROM inpt_sum_primary
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list_from_secondary_adm as
+	SELECT min(enrolid) as enrolid,
+		count(case_type) as dx_num,
+		min(ADMDATE) as index_date
+	FROM inpt_sum_secondary
+	GROUP BY enrolid;
+QUIT;
+
+*Stacking all outpatient data and select for ER visit records;
+DATA outpatient_records;
+SET Rawdata.scd_ccaeo_09 Rawdata.scd_ccaeo_10 Rawdata.scd_ccaeo_11 Rawdata.scd_ccaeo_12 Rawdata.scd_ccaeo_13
+	Rawdata.scd_mdcro_09 Rawdata.scd_mdcro_10 Rawdata.scd_mdcro_11 Rawdata.scd_mdcro_12 Rawdata.scd_mdcro_13
+	Rawdata.scd_ccaeo_142 Rawdata.scd_ccaeo_151  
+	Rawdata.scd_mdcro_142 Rawdata.scd_mdcro_151;
+RUN;
+
+DATA outpatient_ER_records;
+	SET outpatient_records;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0637','0981') THEN ER=1;
+	ELSE IF STDPROV in ('220','428') THEN ER=1;
+	ELSE IF STDPLAC in ('23') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120','10220','10320','10420','10520',
+						'12220','20120','20220','21120','21220','22120','22320',
+						'30120','30220','30320','30420','30520','30620',
+						'31120','31220','31320','31420','31520','31620') THEN ER=1;
+	IF ER=1;
+RUN;
+
+DATA all_VTE_ER_records;
+	SET outpatient_ER_records;
+	case=0;
+	array icd {*} dx1-dx2;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('6732',
+				'41511','41519',
+				'4532','4538','45389','45111','45119','45181',
+				'4534','45341','45342',
+				'67133','67144',
+				'45183','45189',
+				'45382','48383','45384','45385','45386','45387',
+				'I26','O882',
+				'I80','I81',
+				'I820','I821','I822','I823','I828','I829',
+				'O082','O223','O229','O871','O882') then case=1;
+		end;
+	if case=1;
+RUN;
+
+PROC SQL;
+	CREATE TABLE id_list_from_ER as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) 	as index_date,
+		min(DOBYR) 		as DOBYR,
+		min(sex) 		as sex,
+		min(region)		as region,
+		'VTE_ER' 		as case_type
+	FROM all_VTE_ER_records
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list_from_primary_adm as
+	SELECT min(enrolid) as enrolid,
+		min(DISDATE) 	as index_date,
+		min(DOBYR) 		as DOBYR,
+		min(sex) 		as sex,
+		min(region)		as region,
+		'VTE_ADM_primary' as case_type
+	FROM inpt_sum_primary
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list_from_secondary_adm as
+	SELECT min(enrolid) as enrolid,
+		min(DISDATE) as index_date,
+		min(DOBYR) 		as DOBYR,
+		min(sex) 		as sex,
+		min(region)		as region,
+		'VTE_ADM_secondary' as case_type
+	FROM inpt_sum_secondary
+	GROUP BY enrolid;
+QUIT;
+
+*Combine admission id list from hospitalization and from ER visits;
+DATA id_list_all;
+ SET id_list_from_ER id_list_from_primary_adm id_list_from_secondary_adm;
+ RUN;
+
+PROC SQL;
+	CREATE TABLE id_list_unique as
+	SELECT min(enrolid) as enrolid,
+		min(index_date) as index_date,
+		min(DOBYR) 		as DOBYR,
+		min(sex) 		as sex,
+		min(region)		as region
+	FROM id_list_all
+	GROUP BY enrolid;
+QUIT;
+
+* Assessment of continuous enrollment, of >=180 days continuous enrollment before the index date;
+* Stack all insurance records;
+
+DATA insurance_all;
+SET	Rawdata.scd_ccaet_09 Rawdata.scd_ccaet_10 Rawdata.scd_ccaet_11 Rawdata.scd_ccaet_12 Rawdata.scd_ccaet_13
+	Rawdata.scd_mdcrt_09 Rawdata.scd_mdcrt_10 Rawdata.scd_mdcrt_11 Rawdata.scd_mdcrt_12 Rawdata.scd_mdcrt_13
+	Rawdata.scd_ccaet_142 Rawdata.scd_ccaet_151  
+	Rawdata.scd_mdcrt_142 Rawdata.scd_mdcrt_151;
+RUN; 
+
+PROC SORT DATA=insurance_all;
+	by enrolid DTSTART ;
+RUN;
+
+PROC SORT DATA=id_list_unique;
+	by enrolid;
+RUN;
+
+DATA VTE_insurance_record;
+MERGE id_list_unique (in=a keep=enrolid index_date) insurance_all(in=b keep=enrolid DTSTART DTEND MEMDAYS );
+by enrolid;
+if a=1 and b=1;
+run;
+
+data enroll_prior;
+set  VTE_insurance_record;
+if index_date-210 <= DTSTART <= index_date;
+run;
+
+proc summary nway data= enroll_prior;
+var MEMDAYS;
+by enrolid;
+output out=enroll_prior_sum sum=enroll_day;
+run;
+proc univariate data=enroll_prior_sum; var enroll_day; histogram; run;
+DATA enroll_prior_sum;
+	SET enroll_prior_sum;
+	IF enroll_day>=180;
+RUN;
+
+PROC SQL;
+	CREATE TABLE uniqID_6mprior as
+	SELECT a.*
+	FROM id_list_unique a
+	INNER JOIN enroll_prior_sum b
+	on a.enrolid=b.enrolid;
+QUIT;
+DATA Myfile.uniqID_6mprior;
+	SET uniqID_6mprior;
+RUN;
+
+
+data enroll_prior;
+set  VTE_insurance_record;
+if index_date-390 <= DTSTART <= index_date;
+run;
+
+proc summary nway data= enroll_prior;
+var MEMDAYS;
+by enrolid;
+output out=enroll_prior_sum sum=enroll_day;
+run;
+proc univariate data=enroll_prior_sum; var enroll_day; histogram; run;
+DATA enroll_prior_sum;
+	SET enroll_prior_sum;
+	IF enroll_day>=360;
+RUN;
+
+PROC SQL;
+	CREATE TABLE uniqID_12mprior as
+	SELECT a.*
+	FROM id_list_unique a
+	INNER JOIN enroll_prior_sum b
+	on a.enrolid=b.enrolid;
+QUIT;
+
+DATA Myfile.uniqID_12mprior;
+	SET uniqID_12mprior;
+RUN;
+
+DATA Myfile.id_list_from_ER;
+	SET id_list_from_ER;
+RUN;
+DATA Myfile.id_list_from_primary_adm;
+	SET id_list_from_primary_adm;
+RUN;
+DATA Myfile.id_list_from_secondary_adm;
+	SET id_list_from_secondary_adm;
+RUN;
+
+* extract all inpatient and outpatient records of the eligible patients;
+PROC SQL;
+	CREATE TABLE inpt_eligible_VTE as
+	SELECT a.*
+	FROM inpt_sum a
+	INNER JOIN uniqID_12mprior b
+	on a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE opt_eligible_VTE as
+	SELECT a.*
+	FROM outpatient_records a
+	INNER JOIN uniqID_12mprior b
+	on a.enrolid=b.enrolid;
+QUIT;
+
+data SCD_ipt_eligible;
+set inpt_eligible_VTE;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: (	'2826','28241','28242',
+				'D570','D571','D572','D574','D578') then scd = 1;
+end;
+if scd = 1;
+run;
+
+PROC SQL;
+	CREATE TABLE SCD_ipt_eligible_list as
+	SELECT min(enrolid) as enrolid
+	FROM SCD_ipt_eligible
+	GROUP BY enrolid;
+QUIT; 
+
+data  SCD_opt_eligible;
+set opt_eligible_VTE;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2826','28241','28242',
+				'D570','D571','D572','D574','D578') then scd = 1;
+end;
+if scd = 1;
+run; 
+
+PROC SQL;
+	CREATE TABLE SCD_opt_eligible_list as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) as index_date,
+		max(SVCDATE) as last_date
+	FROM SCD_opt_eligible
+	GROUP BY enrolid;
+QUIT;
+
+DATA SCD_opt_eligible_list;
+	SET scd_opt_eligible_list;
+	date_diff=last_date-index_date;
+	IF date_diff>=30;
+RUN;
+
+DATA SCD_all_list;
+	SET SCD_opt_eligible_list SCD_ipt_eligible_list;
+RUN;
+
+PROC SQL;
+	CREATE TABLE SCD_all_list as
+	SELECT min(enrolid) as enrolid,
+	1 as SCD_status
+	FROM SCD_all_list
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list_12mprior_SCD_status as
+	SELECT a.*,
+			b.SCD_status as SCD_status
+	FROM uniqID_12mprior a
+	LEFT JOIN SCD_all_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+ DATA id_list_12mprior_SCD_status;
+ 	SET id_list_12mprior_SCD_status;
+	IF SCD_status=. THEN SCD_status=0;
+	index_year = YEAR(index_date);
+RUN;
+
+PROC FREQ DATA=id_list_12mprior_SCD_status;
+	TABLE SCD_status*index_year /nopercent nocol norow chisq;
+RUN;
+
+DATA myfile.inpt_eligible_VTE;
+	SET inpt_eligible_VTE;
+DATA myfile.opt_eligible_VTE;
+	SET opt_eligible_VTE;
+RUN;
+
+* Obtain all medication history of the cases;
+DATA drugs_all;
+SET	Rawdata.scd_ccaed_09 Rawdata.scd_ccaed_10 Rawdata.scd_ccaed_11 Rawdata.scd_ccaed_12 Rawdata.scd_ccaed_13
+	Rawdata.scd_mdcrd_09 Rawdata.scd_mdcrd_10 Rawdata.scd_mdcrd_11 Rawdata.scd_mdcrd_12 Rawdata.scd_mdcrd_13
+	Rawdata.scd_ccaed_142 Rawdata.scd_ccaed_151  
+	Rawdata.scd_mdcrd_142 Rawdata.scd_mdcrd_151;
+RUN; 
+
+PROC SQL;
+	CREATE TABLE drug_eligible_vte as
+	SELECT a.*,
+			b.index_date as index_date
+	FROM drugs_all a
+	INNER JOIN id_list_12mprior_SCD_status b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA drug_eligible_vte_pre;
+	SET drug_eligible_vte;
+	IF index_date>SVCDATE>=index_date-365;
+RUN;
+DATA drug_eligible_vte_post;
+	SET drug_eligible_vte;
+	IF SVCDATE>=index_date;
+RUN;
+DATA VTE_dx_ADM;
+	SET inpt_sum;
+	SVCDATE=DISDATE;
+RUN;
+
+DATA VTE_dx_all;
+	SET VTE_dx_ADM all_VTE_ER_records;
+RUN;
+
+*identify the index date of DVT and index date of PE as index events;
+DATA VTE_dx_all;
+	SET VTE_dx_all;
+	case=0;
+	array icd {*} dx1-dx2;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('4532','4538','45389','45111','45119','45181',
+				'4534','45341','45342',
+				'67133','67144',
+				'45183','45189',
+				'45382','48383','45384','45385','45386','45387',
+				'I80','I81',
+				'I820','I821','I822','I823','I828','I829',
+				'O082','O223','O229','O871') then case=1;/*index event as having DVT*/
+		end;
+	array icd_PE {*} dx1-dx2;
+		do i = 1 to dim(icd_PE);
+		if icd_PE{i} in: ('6732','41511','41519','I26','O882') then case=2;/*index event as having PE*/
+		end;	
+	If case=0 THEN DELETE;
+RUN;
+
+DATA DVT_list_all;
+	SET VTE_dx_all;
+	IF case=1;
+RUN;
+
+PROC SQL;
+	CREATE TABLE id_list_DVT as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) as incident_DVT_date
+	FROM DVT_list_all
+	GROUP BY enrolid;
+QUIT;
+
+DATA PE_list_all;
+	SET VTE_dx_all;
+	IF case=2;
+RUN;
+
+PROC SQL;
+	CREATE TABLE id_list_PE as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) as incident_PE_date
+	FROM PE_list_all
+	GROUP BY enrolid;
+QUIT;
+
+DATA myfile.id_list_PE;
+SET id_list_PE;
+DATA myfile.id_list_DVT;
+SET id_list_DVT;
+RUN;
+
+*Assess the medications exposure and utilization of anticoagulant drugs after the index date;
+DATA redbook;
+	SET redbook.redbook;
+RUN;
+drug_eligible_vte_pre;
+drug_eligible_vte_post;
+*Warfarin;
+DATA case_NDC;
+	SET redbook;
+	WHERE GENNME contains 'Warfarin'; 
+RUN;
+PROC sql;
+		CREATE TABLE Warfarin_file_pre as
+		SELECT a.*
+ 		FROM drug_eligible_vte_pre a
+		INNER JOIN case_NDC b
+		ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+		CREATE TABLE Warfarin_file_post as
+		SELECT a.*
+ 		FROM drug_eligible_vte_post a
+		INNER JOIN case_NDC b
+		ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC SQL;
+	CREATE table Myfile.Warfarin_id_pre as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as Warfarin_ini_date
+	FROM Warfarin_file_pre
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table Myfile.Warfarin_id_post as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as Warfarin_ini_date
+	FROM Warfarin_file_post
+	GROUP BY enrolid;
+QUIT;
+
+*Dabigatran (Pradaxa);
+DATA case_NDC;
+	SET redbook;
+	WHERE GENNME contains 'Dabigatran'; 
+RUN;
+PROC sql;
+		CREATE TABLE Dabigatran_file_pre as
+		SELECT a.*
+ 		FROM drug_eligible_vte_pre a
+		INNER JOIN case_NDC b
+		ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+		CREATE TABLE Dabigatran_file_post as
+		SELECT a.*
+ 		FROM drug_eligible_vte_post a
+		INNER JOIN case_NDC b
+		ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC SQL;
+	CREATE table Myfile.Dabigatran_id_pre as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as Warfarin_ini_date
+	FROM Dabigatran_file_pre
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table Myfile.Dabigatran_id_post as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as Warfarin_ini_date
+	FROM Dabigatran_file_post
+	GROUP BY enrolid;
+QUIT;
+*Rivaroxaban (Xarelto);
+DATA case_NDC;
+	SET redbook;
+	WHERE GENNME contains 'Rivaroxaban'; 
+RUN;
+PROC sql;
+		CREATE TABLE Rivaroxaban_file_pre as
+		SELECT a.*
+ 		FROM drug_eligible_vte_pre a
+		INNER JOIN case_NDC b
+		ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+		CREATE TABLE Rivaroxaban_file_post as
+		SELECT a.*
+ 		FROM drug_eligible_vte_post a
+		INNER JOIN case_NDC b
+		ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC SQL;
+	CREATE table Myfile.Rivaroxaban_id_pre as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as Warfarin_ini_date
+	FROM Rivaroxaban_file_pre
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table Myfile.Rivaroxaban_id_post as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as Warfarin_ini_date
+	FROM Rivaroxaban_file_post
+	GROUP BY enrolid;
+QUIT;
+
+*Apixaban;
+DATA case_NDC;
+	SET redbook;
+	WHERE GENNME contains 'Apixaban'; 
+RUN;
+PROC sql;
+		CREATE TABLE Apixaban_file_pre as
+		SELECT a.*
+ 		FROM drug_eligible_vte_pre a
+		INNER JOIN case_NDC b
+		ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+		CREATE TABLE Apixaban_file_post as
+		SELECT a.*
+ 		FROM drug_eligible_vte_post a
+		INNER JOIN case_NDC b
+		ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC SQL;
+	CREATE table Myfile.Apixaban_id_pre as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as Warfarin_ini_date
+	FROM Apixaban_file_pre
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table Myfile.Apixaban_id_post as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as Warfarin_ini_date
+	FROM Apixaban_file_post
+	GROUP BY enrolid;
+QUIT;
+*Edoxaban;
+
+DATA case_NDC;
+	SET redbook;
+	WHERE GENNME contains 'Edoxaban'; 
+RUN;
+PROC sql;
+		CREATE TABLE Edoxaban_file_pre as
+		SELECT a.*
+ 		FROM drug_eligible_vte_pre a
+		INNER JOIN case_NDC b
+		ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+		CREATE TABLE Edoxaban_file_post as
+		SELECT a.*
+ 		FROM drug_eligible_vte_post a
+		INNER JOIN case_NDC b
+		ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC SQL;
+	CREATE table Myfile.Edoxaban_id_pre as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as Warfarin_ini_date
+	FROM Edoxaban_file_pre
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table Myfile.Edoxaban_id_post as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as Warfarin_ini_date
+	FROM Edoxaban_file_post
+	GROUP BY enrolid;
+QUIT;
+
+
+
+
+
+
+
+
+
+
+
+
+
+DATA case_NDC;
+	SET redbook;
+	WHERE THERCLS =39; 
+RUN;
+
+PROC CONTENTS DATA=case_NDC;RUN;
+
+PROC FREQ DATA=case_NDC;
+TABLE GENNME;RUN;
