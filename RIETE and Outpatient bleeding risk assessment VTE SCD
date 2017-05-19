@@ -1,0 +1,219 @@
+LIBNAME Myfile 'F:\User Folders\jzhou86\VTE working Directory';
+LIBNAME Rawdata 'F:\User Folders\jzhou86\VTE genral cases';
+LIBNAME Redbook 'E:\Truven Data';
+
+DATA drug_eligible_vte_pre;
+	SET myfile.drug_eligible_vte_pre;
+DATA drug_eligible_vte_post;
+	SET myfile.drug_eligible_vte_post;
+DATA ipt_svc_eligible_vte_pre;
+	SET myfile.ipt_svc_eligible_vte_pre;
+DATA ipt_svc_eligible_vte_post;
+	SET myfile.ipt_svc_eligible_vte_post;
+DATA opt_eligible_vte_pre;
+	SET myfile.opt_eligible_VTE_pre;
+DATA opt_eligible_vte_post;
+	SET myfile.opt_eligible_VTE_post;
+DATA inpt_eligible_vte_pre;
+	SET myfile.inpt_eligible_VTE_pre;
+DATA inpt_eligible_vte_post;
+	SET myfile.inpt_eligible_VTE_post;
+DATA redbook;
+	SET redbook.redbook;
+DATA id_list;
+	SET myfile.analytical_cohort_18_may;
+DATA enroll_post_1mo;
+	SET myfile.enroll_post_1mo;
+RUN;
+
+* select 3 and 6 months pre ipt and opt;
+DATA ipt_summary_6m_pre;
+	SET inpt_eligible_vte_pre inpt_eligible_vte_post;
+	IF index_date-180<=ADMDATE<=index_date;
+RUN;
+DATA ipt_summary_3m_pre;
+	SET inpt_eligible_vte_pre inpt_eligible_vte_post;
+	IF index_date-90<=ADMDATE<=index_date;
+RUN;
+DATA opt_6m_pre;
+	SET opt_eligible_vte_pre opt_eligible_vte_post;
+	IF index_date-180<=SVCDATE<=index_date;
+RUN;
+DATA opt_3m_pre;
+	SET opt_eligible_vte_pre opt_eligible_vte_post;
+	IF index_date-90<=SVCDATE<=index_date;
+RUN;
+* select 3 and 6 months pre ipt services data;
+DATA ipt_service_6m_pre;
+	SET ipt_svc_eligible_vte_pre ipt_svc_eligible_vte_post;
+	IF index_date-180<=SVCDATE<=index_date;
+RUN;
+DATA ipt_service_3m_pre;
+	SET ipt_svc_eligible_vte_pre ipt_svc_eligible_vte_post;
+	IF index_date-90<=SVCDATE<=index_date;
+RUN;
+* select 3 and 6 months pre drug prescription data;
+DATA drug_6m_pre;
+	SET drug_eligible_vte_pre drug_eligible_vte_post;
+	IF index_date-180<=SVCDATE<=index_date;
+RUN;
+DATA drug_3m_pre;
+	SET drug_eligible_vte_pre drug_eligible_vte_post;
+	IF index_date-90<=SVCDATE<=index_date;
+RUN;
+
+*Assessment of RIETE Bleeding risks;
+DATA RIETE_score_itm1_2_3_4;
+	SET ipt_summary_6m_pre opt_6m_pre ipt_service_6m_pre;
+	RIETE_itm1=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('585', '586', '403') 
+		then RIETE_itm1=1.5;
+		end;
+	RIETE_itm2=0;
+	array icd1 {*} dx1-dx15;
+		do i = 1 to dim(icd1);
+		if icd1{i} in: ('280', '281', '282','283','284','285') 
+		then RIETE_itm2=1.5;
+		end;
+	RIETE_itm3=0;
+	array icd2 {*} dx1-dx15;
+		do i = 1 to dim(icd2);
+		if icd2{i} in: ('14','15','16','17','18','19','200','201','202','203','204','205','206','207','208') 
+		then RIETE_itm3=1;
+		end;
+	RIETE_itm4=0;
+	array icd3 {*} dx1-dx15;
+		do i = 1 to dim(icd3);
+		if icd3{i} in: ('4151') 
+		then RIETE_itm4=1;
+		end;
+RUN;
+DATA RIETE_score_itm6;
+	SET ipt_summary_3m_pre opt_3m_pre ipt_service_3m_pre;
+	RIETE_itm6=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('36043','36281','36361','36362','37632','37272','37923','53783','56881','56985','430',
+						'431','432','5310', '5312','5314', '5316','5340','5342','5344','5346','578','5967',
+						'7191','7863','852') then RIETE_itm6=2;
+		end;
+RUN;
+
+PROC SQL;
+	CREATE TABLE RIETE_score_itm1_2_3_4 as
+	SELECT 	min(enrolid) as enrolid,
+			max(RIETE_itm1) as RIETE_itm1,
+			max(RIETE_itm2) as RIETE_itm2,
+			max(RIETE_itm3) as RIETE_itm3,
+			max(RIETE_itm4) as RIETE_itm4
+	FROM RIETE_score_itm1_2_3_4
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE RIETE_score_itm6 as
+	SELECT 	min(enrolid) as enrolid,
+			max(RIETE_itm6) as RIETE_itm6
+	FROM RIETE_score_itm6
+	GROUP BY enrolid;
+QUIT;
+
+*Join the full cohorts of id list;
+PROC SQL;
+	CREATE TABLE id_list_RIETE1_2_3_4 as
+	SELECT a.*,
+			b.*
+	FROM id_list a
+	LEFT JOIN RIETE_score_itm1_2_3_4 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+* Add RIETE item 5 age;
+DATA id_list_RIETE1_2_3_4_5;
+	SET id_list_RIETE1_2_3_4;
+	RIETE_itm5=0;
+	IF age>75 THEN RIETE_itm5=1;
+RUN;
+*Add RIETE item 6;
+PROC SQL;
+	CREATE TABLE id_list_RIETE_all as
+	SELECT a.*,
+			b.*
+	FROM id_list_RIETE1_2_3_4_5 a
+	LEFT JOIN RIETE_score_itm6 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list_RIETE_all;
+	SET id_list_RIETE_all;
+	RIETE_Score=sum(RIETE_itm1,RIETE_itm2,RIETE_itm3,RIETE_itm4,RIETE_itm5,RIETE_itm6);
+	IF RIETE_Score>4 THEN RIETE_cat=3;
+	ELSE IF 4>=RIETE_Score>=1 THEN RIETE_cat=2;
+	ELSE IF RIETE_Score=0 THEN RIETE_cat=1;
+RUN;
+DATA Myfile.id_list_RIETE_all;
+	SET id_list_RIETE_all;
+RUN;
+PROC FREQ DATA=id_list_RIETE_all;
+TABLE RIETE_cat;
+RUN;
+
+* Assessment of Outpatient bleeding risk scores;
+DATA OBRI_score_itm2_3_4;
+	SET ipt_summary_6m_pre opt_6m_pre ipt_service_6m_pre;
+	OBRI_itm2=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: (	'4560', '45620','53021','5307','53082','5310', '5312', '5314', '5316','5320', '5322', '5324', '5326',
+						'5330', '5332', '5334', '5336','5340', '5342', '5344', '5346','53501', '53511', '53521', 
+						'53531','53541','53551','53561','53571','53783','56202', '56203','56212', '56213','5693','56985',
+						'56986','578') 
+		then OBRI_itm2=1;
+		end;
+	OBRI_itm3=0;
+	array icd1 {*} dx1-dx15;
+		do i = 1 to dim(icd1);
+		if icd1{i} in: ('430', '431', '432','433','434','435','436') 
+		then RIETE_itm3=1;
+		end;
+	OBRI_itm4=0;
+	array icd2 {*} dx1-dx15;
+		do i = 1 to dim(icd2);
+		if icd2{i} in: ('413','414','585','586','403','280', '281', '282','283','284','285','250') 
+		then OBRI_itm4=1;
+		end;
+RUN;
+
+PROC SQL;
+	CREATE TABLE OBRI_score_itm2_3_4 as
+	SELECT 	min(enrolid) as enrolid,
+			max(OBRI_itm2) as OBRI_itm2,
+			max(OBRI_itm3) as OBRI_itm3,
+			max(OBRI_itm4) as OBRI_itm4
+	FROM OBRI_score_itm2_3_4
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list_RIETE_OBRI as
+	SELECT a.*,
+			b.*
+	FROM id_list_RIETE_all a
+	LEFT JOIN OBRI_score_itm2_3_4 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list_RIETE_OBRI;
+	SET id_list_RIETE_OBRI;
+	OBRI_itm5=0;
+	IF age>=65 THEN OBRI_itm1=1;
+	OBRI_Score=sum(OBRI_itm1,OBRI_itm2,OBRI_itm3,OBRI_itm4);
+	IF OBRI_Score>=3 THEN OBRI_cat=3;
+	ELSE IF 2>=OBRI_Score>=1 THEN OBRI_cat=2;
+	ELSE IF OBRI_Score=0 THEN OBRI_cat=1;
+RUN;
+
+DATA myfile.id_list_RIETE_OBRI;
+	SET id_list_RIETE_OBRI;
+RUN;
