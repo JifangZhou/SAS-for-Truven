@@ -1,0 +1,98 @@
+*Assessment of CMS GEM validity;
+
+data ten2ninedx(keep=icd9_cm_code icd10_cm_code directo);
+length directo $8;
+infile "C:\Users\jzhou86\Documents\SCD Project\SCD and DVT\SCD DVT working directory\case control file\2017_I10gem.txt" lrecl=19;
+input
+ @001 icd10_cm_code $char7.
+ @009 icd9_cm_code $char5.
+ @016 no_map_flag $char1.
+ ;
+if no_map_flag not ='1';
+directo='Backward';
+run;
+proc sort data=ten2ninedx nodupkey;
+ by icd9_cm_code
+ icd10_cm_code;
+run; 
+* Now extract all information for the selected case-controls only;
+* And assess feasibility of using GEM to convert ICD-10 to ICD-9 for the 2015 data;
+
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\SCD and DVT\SCD DVT working directory';
+LIBNAME Rawdata 'C:\Users\jzhou86\Documents\SCD Project\SCD and DVT\SCD DVT working directory\case control file';
+LIBNAME Redbook 'C:\Users\jzhou86\Documents';
+DATA drug_all;
+	SET Rawdata.dx_pre Rawdata.dx_post;
+DATA opt_all;
+	SET Rawdata.opt_pre Rawdata.opt_post;
+DATA redbook;
+	SET redbook.redbook;
+DATA id_list;
+	SET Rawdata.id_list_25_may;
+	IF case_control ^=.;
+RUN;
+DATA opt_0914;
+	SET opt_all;
+	IF YEAR(SVCDATE)=2015 THEN DELETE;
+DATA opt_15_dx1;
+	SET opt_all;
+	IF YEAR(SVCDATE)=2015;
+	KEEP enrolid Dx1;
+RUN;
+DATA opt_15_dx2;
+	SET opt_all;
+	IF YEAR(SVCDATE)=2015;	
+	KEEP enrolid Dx2;
+	RENAME Dx2=Dx1;
+RUN;
+DATA opt_15_dx3;
+	SET opt_all;
+	IF YEAR(SVCDATE)=2015;	
+	KEEP enrolid Dx3;
+	RENAME Dx3=Dx1;
+RUN;
+DATA opt_15_dx4;
+	SET opt_all;
+	IF YEAR(SVCDATE)=2015;	
+	KEEP enrolid Dx4;
+	RENAME Dx4=Dx1;
+RUN;
+DATA opt_15_all;
+	SET opt_15_dx1 opt_15_dx2 opt_15_dx3 opt_15_dx4;
+	IF Dx1 ="" THEN DELETE;
+RUN;
+*Select unique ICD codes for individual id;
+PROC sql;
+	CREATE table opt_15_uniqye as
+	SELECT min(enrolid) as enrolid,
+		min(Dx1) as Dx1
+	FROM opt_15_all
+	GROUP BY enrolid,dx1;
+QUIT;
+
+PROC sql;
+	CREATE table temp_dx_icd10 as
+	SELECT a.*,
+		b.icd9_cm_code as icd9_Dx1_converted
+	FROM opt_15_uniqye a
+	LEFT JOIN ten2ninedx b
+	ON a.Dx1 = b.icd10_cm_code;
+QUIT;
+
+DATA temp_dx_icd10;
+	SET temp_dx_icd10;
+	len=lengthn(Dx1);
+    newval=compress(Dx1,".",'d');
+    len2=lengthn(newval);
+    if len2 ne 0  then flag=0;
+       else flag=1;
+RUN;
+DATA temp_dx_icd10;
+	SET temp_dx_icd10;
+	len2=0;
+	IF icd9_Dx1_converted=. THEN len2=1;
+RUN;
+PROC FREQ DATA=temp_dx_icd10;
+	TABLE len2*flag /nopercent nocol norow;
+RUN;
+
