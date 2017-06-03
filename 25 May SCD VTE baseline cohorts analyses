@@ -1,0 +1,403 @@
+* Now use information from the case-controls only;
+
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\SCD and DVT\SCD DVT working directory';
+LIBNAME Rawdata 'C:\Users\jzhou86\Documents\SCD Project\SCD and DVT\SCD DVT working directory\case control file';
+LIBNAME Redbook 'C:\Users\jzhou86\Documents';
+
+DATA Dx_pre;
+	SET Rawdata.Dx_pre;
+DATA Dx_post;
+	SET Rawdata.Dx_post;
+DATA Ipt_pre;
+	SET Rawdata.Ipt_pre;
+DATA Ipt_post;
+	SET Rawdata.Ipt_post;
+DATA ipt_svc_pre;
+	SET Rawdata.ipt_svc_pre;
+DATA ipt_svc_post;
+	SET Rawdata.ipt_svc_post;
+DATA opt_pre;
+	SET Rawdata.opt_pre;
+DATA opt_post;
+	SET Rawdata.opt_post;
+DATA id_list;
+	SET Rawdata.id_list_25_may;
+	DROP cancer_status;
+DATA redbook;
+	SET redbook.redbook;
+RUN;
+
+* Add malignancies (140-208, including ICD-10, C00-C96);
+DATA all_dx_list;
+	SET Ipt_pre opt_pre ipt_svc_pre;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ( '14', '15', '16', '17', '18', '19', '200', '201' ,'202', '203', 
+						'204','205','206','207','208', 
+						'C0','C1','C2','C3','C4','C5','C6','C7','C8','C91','C92','C93',
+						'C94','C95','C96') then case=1;
+		end;
+		if case=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE uniqID as
+SELECT min (enrolid) as enrolid,
+	1 as malignancy_status
+FROM all_dx_list
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE id_list1 as
+SELECT a.*,
+	b.malignancy_status
+FROM id_list a
+LEFT JOIN uniqID b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA id_list1;
+	SET id_list1;
+	IF malignancy_status=. THEN malignancy_status=0;
+RUN;
+
+PROC FREQ DATA=id_list1;
+	TABLE SCD_Status*malignancy_status /nopercent nocol norow chisq;
+RUN;
+* extract all 3 months data for the VTE-risk factors occured within 90 days;
+DATA Month_3_events;
+	SET Ipt_pre ipt_svc_pre opt_pre;
+	IF (index_date-90<=SVCDATE<index_date) OR (index_date-90<=DISDATE<index_date);
+RUN;
+* Add hip_fracture_ID;
+
+DATA all_dx_list;
+	SET Month_3_events;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('73314', '73315', '820','821', 'M84453', 'M84459', 'M84750', 'S72') then case=1;
+		end;
+		if case=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE Myfile.hip_fracture_ID as
+SELECT min (enrolid) as enrolid,
+	1 as hip_fracture_status
+FROM all_dx_list
+GROUP BY enrolid;
+QUIT;
+* Add Trauma_ID;
+
+DATA all_dx_list;
+	SET Month_3_events;
+	case=0;
+	array proc {*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('62000', '62005','62010') then case = 1;
+	end;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('80','81','82','860','861','862','863','864','865','866','867','868',
+						'900','901','902','903','904',
+						'925','926','927','928','929','958', '959',
+						'E805', 'E870', 'E881', 'E882', 'E883', 'E922',
+						'E923', 'E955', 'E960', 'E965', 'E970', 'E985',
+						'S', 'T07', 'T14', 'V81', 'W10','W11','W12','W13','W14','W15', 
+						'W32','W33','W34','W35','W36','W37','W38','W39',
+						'X93','X94','X95','X96',
+						'Y22','Y23','Y24','Y25') then case=1;
+	end;
+		if case=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE Myfile.Trauma_ID as
+SELECT min (enrolid) as enrolid,
+	1 as Trauma_status
+FROM all_dx_list
+GROUP BY enrolid;
+QUIT;
+* Add Central_catheter_ID;
+DATA all_dx_list;
+	SET Month_3_events;
+	case=0;
+	array proc {*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('3891', '3893', '3895', '3897', '8607',
+						'36000', '36010', '36011', '36012', '36481','36488', '36489', '36490', '36491', '36533') then case = 1;
+	end;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('99931','99932','99933','T80211','T80212','T80219') then case=1;
+	end;
+		if case=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE Myfile.Central_catheter_ID as
+SELECT min (enrolid) as enrolid,
+	1 as Central_catheter_status
+FROM all_dx_list
+GROUP BY enrolid;
+QUIT;
+*Add back the id-lists;
+PROC SQL;
+CREATE TABLE id_list2 as
+SELECT a.*,
+	b.Central_catheter_status
+FROM id_list1 a
+LEFT JOIN Myfile.Central_catheter_ID b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE id_list3 as
+SELECT a.*,
+	b.Trauma_status
+FROM id_list2 a
+LEFT JOIN Myfile.Trauma_ID b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE id_list4 as
+SELECT a.*,
+	b.hip_fracture_status
+FROM id_list3 a
+LEFT JOIN Myfile.hip_fracture_ID b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+
+DATA id_list4;
+	SET id_list4;
+	IF hip_fracture_status=. 		THEN hip_fracture_status=0;
+	IF Trauma_status=. 				THEN Trauma_status=0;
+	IF Central_catheter_status=. 	THEN Central_catheter_status=0;
+RUN;
+
+PROC FREQ DATA=id_list4;
+	TABLE SCD_Status*hip_fracture_status SCD_Status*Trauma_status SCD_Status*Central_catheter_status /nopercent nocol norow chisq;
+RUN;
+****add more baseline characteristics;
+*Pregnancy;
+DATA all_dx_list;
+	SET Ipt_pre ipt_svc_pre opt_pre;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('63','64','65','66','67', 'V22', 'V23', 'V24', 'V27',
+						'O', 'Z33','Z34','Z35','Z36','Z37','Z38','Z39') then case=1;
+		end;
+		if case=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE Myfile.Pregnancy_ID as
+SELECT min (enrolid) as enrolid,
+	1 as Pregnancy_status
+FROM all_dx_list
+GROUP BY enrolid;
+QUIT;
+*Hypertension;
+DATA all_dx_list;
+	SET Ipt_pre ipt_svc_pre opt_pre;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('401','402','403','404','405','I10','I11','I12','I13','I15') then case=1;
+		end;
+		if case=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE Myfile.Hypertension_ID as
+SELECT min (enrolid) as enrolid,
+	1 as Hypertension_status
+FROM all_dx_list
+GROUP BY enrolid;
+QUIT;
+*COPD;
+DATA all_dx_list;
+	SET Ipt_pre ipt_svc_pre opt_pre;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('49','501','502','503','504','505','5064','1278','1279',
+						'J40','J41','J42','J43','J44','J45','J46','J47',
+						'J60','J61','J62','J63','J64','J65','J66','J67','J684', 'J701', 'J703') then case=1;
+		end;
+		if case=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE Myfile.COPD_ID as
+SELECT min (enrolid) as enrolid,
+	1 as COPD_status
+FROM all_dx_list
+GROUP BY enrolid;
+QUIT;
+
+*DM2;
+DATA all_dx_list;
+	SET Ipt_pre ipt_svc_pre opt_pre;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('250','E10','E11','E12','E13','E14') then case=1;
+		end;
+		if case=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE Myfile.DM2_ID as
+SELECT min (enrolid) as enrolid,
+	1 as DM2_status
+FROM all_dx_list
+GROUP BY enrolid;
+QUIT;
+*Chronic heart failure;
+DATA all_dx_list;
+	SET Ipt_pre ipt_svc_pre opt_pre;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('39891', '40211', '40291', '40411', '40413',
+ 						'40491', '40493', '428',
+						'I099', 'I110', 'I130', 'I132', 'I255', 'I420', 'I425','I426','I427','I428','I429',
+						'I43', 'I50', 'P290') then case=1;
+		end;
+		if case=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE Myfile.CHF_ID as
+SELECT min (enrolid) as enrolid,
+	1 as CHF_status
+FROM all_dx_list
+GROUP BY enrolid;
+QUIT;
+*Chronic liver disease;
+DATA all_dx_list;
+	SET Ipt_pre ipt_svc_pre opt_pre;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('5712', '5714', '5715', '5716',
+						'5722','5723','5724', '5728','4560','4561','45620','45621',
+						'K703','K732','K738', 'K739','K730',
+						'K740','K743','K744','K745','K7460','K7469','K754',
+						'K7210','K7290', 'K7291','K766','K767','I8501', 'I8500','I8510','I8511') then case=1;
+		end;
+		if case=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE Myfile.Chronic_liver_disease_ID as
+SELECT min (enrolid) as enrolid,
+	1 as Chronic_liver_disease_status
+FROM all_dx_list
+GROUP BY enrolid;
+QUIT;
+*Chronic kidney disease;
+DATA all_dx_list;
+	SET Ipt_pre ipt_svc_pre opt_pre;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('585', '586', '403',	'N18', 'N19', 'I120', 'I129') then case=1;
+		end;
+		if case=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE Myfile.Chronic_kidney_disease_ID as
+SELECT min (enrolid) as enrolid,
+	1 as chronic_kidney_disease_status
+FROM all_dx_list
+GROUP BY enrolid;
+QUIT;
+*Adding back the chronic condition lists;
+PROC SQL;
+CREATE TABLE id_list5 as
+SELECT a.*,
+	b.Pregnancy_status
+FROM id_list4 a
+LEFT JOIN Myfile.Pregnancy_ID b
+ON a.enrolid=b.enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list6 as
+SELECT a.*,
+	b.hypertension_status
+FROM id_list5 a
+LEFT JOIN Myfile.hypertension_id b
+ON a.enrolid=b.enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list7 as
+SELECT a.*,
+	b.copd_status
+FROM id_list6 a
+LEFT JOIN Myfile.copd_id b
+ON a.enrolid=b.enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list8 as
+SELECT a.*,
+	b.dm2_status
+FROM id_list7 a
+LEFT JOIN Myfile.dm2_id b
+ON a.enrolid=b.enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list9 as
+SELECT a.*,
+	b.chf_status
+FROM id_list8 a
+LEFT JOIN Myfile.chf_id b
+ON a.enrolid=b.enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list10 as
+SELECT a.*,
+	b.chronic_liver_disease_status
+FROM id_list9 a
+LEFT JOIN Myfile.chronic_liver_disease_id b
+ON a.enrolid=b.enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list11 as
+SELECT a.*,
+	b.chronic_kidney_disease_status
+FROM id_list10 a
+LEFT JOIN Myfile.chronic_kidney_disease_id b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA id_list11;
+	SET id_list11;
+	IF chronic_kidney_disease_status=. 				THEN chronic_kidney_disease_status=0;
+	IF chronic_liver_disease_status=. 				THEN chronic_liver_disease_status=0;
+	IF chf_status=. 								THEN chf_status=0;
+	IF dm2_status=. 								THEN dm2_status=0;
+	IF copd_status=. 								THEN copd_status=0;
+	IF hypertension_status=. 						THEN hypertension_status=0;
+	IF Pregnancy_status=. 							THEN Pregnancy_status=0;
+RUN;
+
+PROC FREQ DATA=id_list11;
+	TABLE SCD_Status*chronic_kidney_disease_status SCD_Status*chronic_liver_disease_status SCD_Status*chf_status /nopercent nocol norow chisq;
+RUN;
+
+PROC FREQ DATA=id_list11;
+	TABLE SCD_Status*dm2_status SCD_Status*copd_status SCD_Status*hypertension_status SCD_Status*Pregnancy_status /nopercent nocol norow chisq;
+RUN;
+
+DATA myfile.May_30_Analytical_cohort;
+	SET id_list11;
+RUN;
