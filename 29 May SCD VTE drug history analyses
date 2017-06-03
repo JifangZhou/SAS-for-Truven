@@ -1,0 +1,1186 @@
+* Now use information from the case-controls only;
+
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\SCD and DVT\SCD DVT working directory';
+LIBNAME Rawdata 'C:\Users\jzhou86\Documents\SCD Project\SCD and DVT\SCD DVT working directory\case control file';
+LIBNAME Redbook 'C:\Users\jzhou86\Documents';
+
+* select 6 months pre ipt and opt;
+DATA ipt_summary_6m_pre;
+	SET Rawdata.ipt_pre Rawdata.ipt_post;
+	IF index_date-180<=DISDATE<index_date;
+RUN;
+DATA opt_6m_pre;
+	SET Rawdata.opt_pre Rawdata.opt_post;
+	IF index_date-180<=SVCDATE<index_date;
+RUN;
+* select 6 months pre ipt services data;
+DATA ipt_service_6m_pre;
+	SET Rawdata.ipt_svc_pre Rawdata.ipt_svc_post;
+	IF index_date-180<=SVCDATE<index_date;
+RUN;
+* select 6 months pre drug prescription data;
+DATA drug_6m_pre;
+	SET Rawdata.dx_pre Rawdata.dx_post;
+	IF index_date-180<=SVCDATE<index_date;
+RUN;
+DATA id_list;
+	SET id_list_RIETE_OBRI;
+RUN;
+DATA redbook;
+	SET redbook.redbook;
+RUN;
+
+* Prepare the NDC files for medications;
+*Antiplatelet;
+DATA Myfile.Antiplatelet_asa_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Aspirin' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Aspirin';
+RUN;
+
+DATA Myfile.Antiplatelet_all_NDC;
+	SET redbook;
+	WHERE 	((GENNME contains 'Aspirin') OR 
+			(GENNME contains 'Dipyridamole') OR 
+			(GENNME contains 'Ticlopidine') OR 
+			(GENNME contains 'Clopidogrel'))AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+RUN;
+*Oral contraceptive or hormone replacement therapy;
+DATA Myfile.contraceptiv_HRT_all_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Estradiol') OR (GENNME contains 'estradiol') OR (THRCLDS contains 'Estrogens & Comb, NEC');
+	IF ROACD='PO';
+RUN;
+*hydroxyurea;
+DATA Myfile.hydroxyurea_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Hydroxyurea');
+RUN;
+*NSAIDs:;
+DATA Myfile.NSAIDs_all_NDC;
+	SET redbook;
+	WHERE 	((GENNME contains 'Diclofenac') OR 
+			(GENNME contains 'Bromfenac') OR 
+			(GENNME contains 'Diflunisal') OR 
+			(GENNME contains 'Etodolac') OR 
+			(GENNME contains 'Fenoprofen') OR 
+			(GENNME contains 'Flurbiprofen') OR 
+			(GENNME contains 'Ibuprofen') OR
+			(GENNME contains 'Indomethacin') OR 
+			(GENNME contains 'Ketoprofen') OR 
+			(GENNME contains 'Ketorolac') OR 
+			(GENNME contains 'Meclofenamate') OR 
+			(GENNME contains 'Mefenamic') OR 
+			(GENNME contains 'Meloxicam') OR 
+			(GENNME contains 'Nabumetone') OR 
+			(GENNME contains 'Naproxen') OR 
+			(GENNME contains 'Oxaprozin') OR 
+			(GENNME contains 'Phenylbutazone') OR 
+			(GENNME contains 'Piroxicam') OR 
+			(GENNME contains 'Sulindac') OR 
+			(GENNME contains 'Tolmetin'))AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	IF ROACD='PO';
+RUN;
+*Opiate analgesics:;
+DATA Myfile.Opiate_all_NDC;
+	SET redbook;
+	WHERE 	((GENNME contains 'Buprenorphine') OR 
+			(GENNME contains 'Butorphanol') OR 
+			(GENNME contains 'Codeine') OR 
+			(GENNME contains 'Hydrocodone') OR 
+			(GENNME contains 'Hydromorphone') OR 
+			(GENNME contains 'Levorphanol') OR 
+			(GENNME contains 'Meperidine') OR
+			(GENNME contains 'Methadone') OR 
+			(GENNME contains 'Morphine') OR 
+			(GENNME contains 'Nalbuphine') OR 
+			(GENNME contains 'Oxycodone') OR 
+			(GENNME contains 'Oxymorphone') OR 
+			(GENNME contains 'Pentazocine') OR 
+			(GENNME contains 'Propoxyphene') OR 
+			(GENNME contains 'Tapentadol') OR 
+			(GENNME contains 'Tramadol'))AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	IF ROACD='PO';
+RUN;
+
+PROC sql;
+	CREATE table temp as
+	SELECT a.*
+	FROM drug_6m_pre a
+	INNER JOIN Myfile.Opiate_all_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as prior_opioid
+	FROM temp;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list1 as
+SELECT a.*,
+	b.prior_opioid
+FROM id_list a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+*NSAIDs;
+PROC sql;
+	CREATE table temp as
+	SELECT a.*
+	FROM drug_6m_pre a
+	INNER JOIN Myfile.NSAIDs_all_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as prior_nsaids
+	FROM temp;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list2 as
+SELECT a.*,
+	b.prior_nsaids
+FROM id_list1 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+*hydroxyurea;
+PROC sql;
+	CREATE table temp as
+	SELECT a.*
+	FROM drug_6m_pre a
+	INNER JOIN Myfile.hydroxyurea_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as prior_hydroxyurea
+	FROM temp;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list3 as
+SELECT a.*,
+	b.prior_hydroxyurea
+FROM id_list2 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+*contraceptiv_HRT;
+PROC sql;
+	CREATE table temp as
+	SELECT a.*
+	FROM drug_6m_pre a
+	INNER JOIN Myfile.contraceptiv_HRT_all_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as prior_contraceptiv_HRT
+	FROM temp;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list4 as
+SELECT a.*,
+	b.prior_contraceptiv_HRT
+FROM id_list3 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+*Antiplatelet;
+PROC sql;
+	CREATE table temp as
+	SELECT a.*
+	FROM drug_6m_pre a
+	INNER JOIN Myfile.Antiplatelet_all_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as prior_Antiplatelet
+	FROM temp;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list5 as
+SELECT a.*,
+	b.prior_Antiplatelet
+FROM id_list4 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA myfile.May_31_add_drugs_cohort;
+	SET id_list5;
+RUN;
+PROC FREQ DATA=Myfile.contraceptiv_HRT_all_NDC;
+TABLE THRCLDS;
+RUN;
+*Add oral anticoagulant utilization to the id list file;
+*Warfarin;
+DATA Myfile.Warfarin_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Warfarin');
+RUN;
+*Dabigatran;
+DATA Myfile.Dabigatran_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Dabigatran');
+RUN;
+*Rivaroxaban;
+DATA Myfile.Rivaroxaban_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Rivaroxaban');
+RUN;
+*Apixaban;
+DATA Myfile.Apixaban_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Apixaban');
+RUN;
+*Edoxaban;
+DATA Myfile.Edoxaban_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Edoxaban');
+RUN;
+*search for records of oral anticoagulant;
+PROC sql;
+	CREATE table temp as
+	SELECT a.*
+	FROM drug_6m_pre a
+	INNER JOIN Myfile.Warfarin_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as prior_Warfarin
+	FROM temp;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list6 as
+SELECT a.*,
+	b.prior_Warfarin
+FROM id_list5 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table temp as
+	SELECT a.*
+	FROM drug_6m_pre a
+	INNER JOIN Myfile.Dabigatran_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as prior_Dabigatran
+	FROM temp;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list7 as
+SELECT a.*,
+	b.prior_Dabigatran
+FROM id_list6 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table temp as
+	SELECT a.*
+	FROM drug_6m_pre a
+	INNER JOIN Myfile.Rivaroxaban_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as prior_Rivaroxaban
+	FROM temp;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list8 as
+SELECT a.*,
+	b.prior_Rivaroxaban
+FROM id_list7 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table temp as
+	SELECT a.*
+	FROM drug_6m_pre a
+	INNER JOIN Myfile.Apixaban_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as prior_Apixaban
+	FROM temp;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list9 as
+SELECT a.*,
+	b.prior_Apixaban
+FROM id_list8 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table temp as
+	SELECT a.*
+	FROM drug_6m_pre a
+	INNER JOIN Myfile.Edoxaban_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as prior_Edoxaban
+	FROM temp;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list10 as
+SELECT a.*,
+	b.prior_Edoxaban
+FROM id_list9 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA myfile.May_31_id_list_oraldx;
+	SET id_list10;
+	IF prior_opioid=. THEN prior_opioid=0;
+	IF prior_nsaids=. THEN prior_nsaids=0;
+	IF prior_hydroxyurea=. THEN prior_hydroxyurea=0;
+	IF prior_contraceptiv_HRT=. THEN prior_contraceptiv_HRT=0;
+	IF prior_Antiplatelet=. THEN prior_Antiplatelet=0;
+	IF prior_Warfarin=. THEN prior_Warfarin=0;
+	IF prior_Dabigatran=. THEN prior_Dabigatran=0;
+	IF prior_Rivaroxaban=. THEN prior_Rivaroxaban=0;
+	IF prior_Apixaban=. THEN prior_Apixaban=0;
+	IF prior_Edoxaban=. THEN prior_Edoxaban=0;
+RUN;
+DATA temp;
+	SET id_list11;
+	prior_oral_AC=0;
+	IF 	(prior_Warfarin=1 OR 
+		prior_Dabigatran=1 OR
+		prior_Rivaroxaban=1 OR 
+		prior_Apixaban=1 OR
+		prior_Edoxaban=1 )THEN prior_oral_AC=1;
+RUN;
+PROC FREQ DATA=temp;
+TABLE SCD_Status*prior_oral_AC/nopercent nocol norow chisq;;
+RUN;
+
+* searching for injectable medication administration records;
+DATA injectable_AC_pre_temp;
+SET ipt_summary_6m_pre ipt_service_6m_pre opt_6m_pre;
+	case=0;
+	array proc{*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J1644') then case=1;*case='UFH';
+	end;
+	array proca{*} proc1-proc15;
+		do i = 1 to dim(proca);
+		if proc{i} in: ('J1652') then case=2;*case='Fondaparinux';
+	end;
+	array procb{*} proc1-proc15;
+		do i = 1 to dim(procb);
+		if proc{i} in: ('J1645','J1650','J1655') then case=3;*case='LMWH';
+	end;
+	array procc{*} proc1-proc15;
+		do i = 1 to dim(procc);
+		if proc{i} in: ('C9121','J0883','J0884','J0583','J1945') then case=4;*case='DTI_inject';
+	end;
+	if case^=0;
+RUN;
+
+PROC FREQ DATA=injectable_AC_pre_temp;
+TABLE case;RUN;
+
+DATA temp;
+	SET injectable_AC_pre_temp;
+	IF case=1;
+RUN;
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as prior_UFH
+	FROM temp;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list12 as
+SELECT a.*,
+	b.prior_UFH
+FROM id_list11 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+DATA temp;
+	SET injectable_AC_pre_temp;
+	IF case=2;
+RUN;
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as prior_Fondaparinux
+	FROM temp;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list13 as
+SELECT a.*,
+	b.prior_Fondaparinux
+FROM id_list12 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+DATA temp;
+	SET injectable_AC_pre_temp;
+	IF case=3;
+RUN;
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as prior_LMWH
+	FROM temp;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list14 as
+SELECT a.*,
+	b.prior_LMWH
+FROM id_list13 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA temp;
+	SET injectable_AC_pre_temp;
+	IF case=4;
+RUN;
+PROC sql;
+	CREATE table temp_list as
+	SELECT distinct enrolid,
+		1 as prior_DTI_inject
+	FROM temp;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list15 as
+SELECT a.*,
+	b.prior_DTI_inject
+FROM id_list14 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA id_list16;
+	SET id_list15;
+	prior_inject_AC=0;
+	IF prior_UFH=. THEN prior_UFH=0;
+	IF prior_Fondaparinux=. THEN prior_Fondaparinux=0;
+	IF prior_LMWH=. THEN prior_LMWH=0;
+	IF prior_DTI_inject=. THEN prior_DTI_inject=0;
+	IF (prior_DTI_inject=1 OR prior_LMWH=1 OR prior_Fondaparinux=1 OR prior_UFH=1) THEN prior_inject_AC=1;
+RUN;
+
+PROC FREQ DATA=id_list16;
+TABLE SCD_Status*prior_DTI_inject/nopercent nocol norow chisq;;
+RUN;
+* Assessment of anticoagulation initiation, account first dispensing or administration events in claims;
+DATA ipt_summary_post;
+	SET Rawdata.ipt_pre Rawdata.ipt_post;
+	IF DISDATE>=index_date;
+RUN;
+DATA opt_post;
+	SET Rawdata.opt_pre Rawdata.opt_post;
+	IF SVCDATE>=index_date;
+RUN;
+* select all after index date ipt services data;
+DATA ipt_service_post;
+	SET Rawdata.ipt_svc_pre Rawdata.ipt_svc_post;
+	IF SVCDATE>=index_date;
+RUN;
+* select all after index date drug prescription data;
+DATA drug_post;
+	SET Rawdata.dx_pre Rawdata.dx_post;
+	IF SVCDATE>=index_date;
+RUN;	
+* select the first date of oral medication initiation;
+*search for records of oral anticoagulant;
+PROC sql;
+	CREATE table temp as
+	SELECT a.*
+	FROM drug_post a
+	INNER JOIN Myfile.Warfarin_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT min(enrolid) as enrolid,
+		1 as post_Warfarin,
+		min(SVCDATE) as post_Warfarin_date
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list1 as
+SELECT a.*,
+	b.*
+FROM id_list16 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table temp as
+	SELECT a.*
+	FROM drug_post a
+	INNER JOIN Myfile.Dabigatran_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT min(enrolid) as enrolid,
+		1 as post_Dabigatran,
+		min(SVCDATE) as post_Dabigatran_date
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list2 as
+SELECT a.*,
+	b.*
+FROM id_list1 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table temp as
+	SELECT a.*
+	FROM drug_post a
+	INNER JOIN Myfile.Rivaroxaban_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT min(enrolid) as enrolid,
+		1 as post_Rivaroxaban,
+		min(SVCDATE) as post_Rivaroxaban_date
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list3 as
+SELECT a.*,
+	b.*
+FROM id_list2 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table temp as
+	SELECT a.*
+	FROM drug_post a
+	INNER JOIN Myfile.Apixaban_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT min(enrolid) as enrolid,
+		1 as post_Apixaban,
+		min(SVCDATE) as post_Apixaban_date
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list4 as
+SELECT a.*,
+	b.*
+FROM id_list3 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table temp as
+	SELECT a.*
+	FROM drug_post a
+	INNER JOIN Myfile.Edoxaban_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT min(enrolid) as enrolid,
+		1 as post_Edoxaban,
+		min(SVCDATE) as post_Edoxaban_date
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list5 as
+SELECT a.*,
+	b.*
+FROM id_list4 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA id_list6;
+	SET id_list5;
+	IF post_Warfarin=. THEN post_Warfarin=0;
+	IF post_Dabigatran=. THEN post_Dabigatran=0;
+	IF post_Rivaroxaban=. THEN post_Rivaroxaban=0;
+	IF post_Apixaban=. THEN post_Apixaban=0;
+	IF post_Edoxaban=. THEN post_Edoxaban=0;
+RUN;
+* Select injectable medications;
+DATA injectable_AC_post_temp;
+SET opt_post ipt_service_post ipt_summary_post;
+	case=0;
+	array proc{*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J1644') then case=1;*case='UFH';
+	end;
+	array proca{*} proc1-proc15;
+		do i = 1 to dim(proca);
+		if proc{i} in: ('J1652') then case=2;*case='Fondaparinux';
+	end;
+	array procb{*} proc1-proc15;
+		do i = 1 to dim(procb);
+		if proc{i} in: ('J1645','J1650','J1655') then case=3;*case='LMWH';
+	end;
+	array procc{*} proc1-proc15;
+		do i = 1 to dim(procc);
+		if proc{i} in: ('C9121','J0883','J0884','J0583','J1945') then case=4;*case='DTI_inject';
+	end;
+	if case^=0;
+RUN;
+
+DATA DATA temp;
+	SET injectable_AC_post_temp;
+	IF case=1;
+RUN;
+PROC sql;
+	CREATE table temp_list as
+	SELECT min(enrolid) as enrolid,
+		1 as post_UFH,
+		min(min(SVCDATE),min(DISDATE)) as post_UFH_date
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list7 as
+SELECT a.*,
+	b.*
+FROM id_list6 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA DATA temp;
+	SET injectable_AC_post_temp;
+	IF case=2;
+RUN;
+PROC sql;
+	CREATE table temp_list as
+	SELECT min(enrolid) as enrolid,
+		1 as post_Fondaparinux,
+		min(min(SVCDATE),min(DISDATE)) as post_Fondaparinux_date
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list8 as
+SELECT a.*,
+	b.*
+FROM id_list7 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA DATA temp;
+	SET injectable_AC_post_temp;
+	IF case=3;
+RUN;
+PROC sql;
+	CREATE table temp_list as
+	SELECT min(enrolid) as enrolid,
+		1 as post_LMWH,
+		min(min(SVCDATE),min(DISDATE)) as post_LMWH_date
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list9 as
+SELECT a.*,
+	b.*
+FROM id_list8 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA DATA temp;
+	SET injectable_AC_post_temp;
+	IF case=4;
+RUN;
+PROC sql;
+	CREATE table temp_list as
+	SELECT min(enrolid) as enrolid,
+		1 as post_DTI_inject,
+		min(min(SVCDATE),min(DISDATE)) as post_DTI_inject_date
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list10 as
+SELECT a.*,
+	b.*
+FROM id_list9 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+*Sensitivity analyses 1: Include all injectables administered during the 7 days preceding index day);
+DATA ipt_summary_post_ses1;
+	SET Rawdata.ipt_pre Rawdata.ipt_post;
+	IF DISDATE>=index_date-7;
+RUN;
+DATA opt_post_ses1;
+	SET Rawdata.opt_pre Rawdata.opt_post;
+	IF SVCDATE>=index_date-7;
+RUN;
+* select all after index date ipt services data;
+DATA ipt_service_post_ses1;
+	SET Rawdata.ipt_svc_pre Rawdata.ipt_svc_post;
+	IF SVCDATE>=index_date-7;
+RUN;
+
+* Select injectable medications;
+DATA injectable_AC_post_temp;
+SET opt_post_ses1 ipt_service_post_ses1 ipt_summary_post_ses1;
+	case=0;
+	array proc{*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J1644') then case=1;*case='UFH';
+	end;
+	array proca{*} proc1-proc15;
+		do i = 1 to dim(proca);
+		if proc{i} in: ('J1652') then case=2;*case='Fondaparinux';
+	end;
+	array procb{*} proc1-proc15;
+		do i = 1 to dim(procb);
+		if proc{i} in: ('J1645','J1650','J1655') then case=3;*case='LMWH';
+	end;
+	array procc{*} proc1-proc15;
+		do i = 1 to dim(procc);
+		if proc{i} in: ('C9121','J0883','J0884','J0583','J1945') then case=4;*case='DTI_inject';
+	end;
+	if case^=0;
+RUN;
+* NOTE: The data set WORK.INJECTABLE_AC_POST_TEMP has 2869 observations and 116 variables.from 2771 in the main analysis;
+
+DATA DATA temp;
+	SET injectable_AC_post_temp;
+	IF case=1;
+RUN;
+PROC sql;
+	CREATE table temp_list as
+	SELECT min(enrolid) as enrolid,
+		1 as post_UFH_ses1,
+		min(min(SVCDATE),min(DISDATE)) as post_UFH_date_ses1
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list11 as
+SELECT a.*,
+	b.*
+FROM id_list10 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA DATA temp;
+	SET injectable_AC_post_temp;
+	IF case=2;
+RUN;
+PROC sql;
+	CREATE table temp_list as
+	SELECT min(enrolid) as enrolid,
+		1 as post_Fondaparinux_ses1,
+		min(min(SVCDATE),min(DISDATE)) as post_Fondaparinux_date_ses1
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list12 as
+SELECT a.*,
+	b.*
+FROM id_list11 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA DATA temp;
+	SET injectable_AC_post_temp;
+	IF case=3;
+RUN;
+PROC sql;
+	CREATE table temp_list as
+	SELECT min(enrolid) as enrolid,
+		1 as post_LMWH_ses1,
+		min(min(SVCDATE),min(DISDATE)) as post_LMWH_date_ses1
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list13 as
+SELECT a.*,
+	b.*
+FROM id_list12 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA DATA temp;
+	SET injectable_AC_post_temp;
+	IF case=4;
+RUN;
+PROC sql;
+	CREATE table temp_list as
+	SELECT min(enrolid) as enrolid,
+		1 as post_DTI_inject_ses1,
+		min(min(SVCDATE),min(DISDATE)) as post_DTI_inject_date_ses1
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list14 as
+SELECT a.*,
+	b.*
+FROM id_list13 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+*Sensitivity analyses 2: Include all injectables administered during the index events);
+DATA SVC_all_post_ses2;
+	SET Rawdata.opt_pre Rawdata.opt_post Rawdata.ipt_svc_pre Rawdata.ipt_svc_post;
+RUN;
+* select all after index date ipt services data;
+PROC SQL;
+CREATE TABLE SVC_post_ses2_temp as
+SELECT a.*,
+	b.LOS_index_VTE_event as LOS_index_VTE_event
+FROM SVC_all_post_ses2 a
+LEFT JOIN id_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA SVC_all_post_ses2;
+	SET SVC_post_ses2_temp;
+	IF SVCDATE>=index_date-LOS_index_VTE_event;
+RUN;
+
+DATA injectable_AC_post_temp;
+SET SVC_all_post_ses2;
+	case=0;
+	array proc{*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J1644') then case=1;*case='UFH';
+	end;
+	array proca{*} proc1-proc15;
+		do i = 1 to dim(proca);
+		if proc{i} in: ('J1652') then case=2;*case='Fondaparinux';
+	end;
+	array procb{*} proc1-proc15;
+		do i = 1 to dim(procb);
+		if proc{i} in: ('J1645','J1650','J1655') then case=3;*case='LMWH';
+	end;
+	array procc{*} proc1-proc15;
+		do i = 1 to dim(procc);
+		if proc{i} in: ('C9121','J0883','J0884','J0583','J1945') then case=4;*case='DTI_inject';
+	end;
+	if case^=0;
+RUN;
+*NOTE: The data set WORK.INJECTABLE_AC_POST_TEMP has 2826 observations and 93 variables.; 
+*From 2771 in main analysis and 2869 in sensitivity analysis 1;
+DATA DATA temp;
+	SET injectable_AC_post_temp;
+	IF case=1;
+RUN;
+PROC sql;
+	CREATE table temp_list as
+	SELECT min(enrolid) as enrolid,
+		1 as post_UFH_ses2,
+		min(min(SVCDATE),min(DISDATE)) as post_UFH_date_ses2
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list15 as
+SELECT a.*,
+	b.*
+FROM id_list14 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA DATA temp;
+	SET injectable_AC_post_temp;
+	IF case=2;
+RUN;
+PROC sql;
+	CREATE table temp_list as
+	SELECT min(enrolid) as enrolid,
+		1 as post_Fondaparinux_ses2,
+		min(min(SVCDATE),min(DISDATE)) as post_Fondaparinux_date_ses2
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list16 as
+SELECT a.*,
+	b.*
+FROM id_list15 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA DATA temp;
+	SET injectable_AC_post_temp;
+	IF case=3;
+RUN;
+PROC sql;
+	CREATE table temp_list as
+	SELECT min(enrolid) as enrolid,
+		1 as post_LMWH_ses2,
+		min(min(SVCDATE),min(DISDATE)) as post_LMWH_date_ses2
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list17 as
+SELECT a.*,
+	b.*
+FROM id_list16 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA DATA temp;
+	SET injectable_AC_post_temp;
+	IF case=4;
+RUN;
+PROC sql;
+	CREATE table temp_list as
+	SELECT min(enrolid) as enrolid,
+		1 as post_DTI_inject_ses2,
+		min(min(SVCDATE),min(DISDATE)) as post_DTI_inject_date_ses2
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list18 as
+SELECT a.*,
+	b.*
+FROM id_list17 a
+LEFT JOIN temp_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA myfile.id_list19;
+	SET id_list18;
+	initiation_AC=0;
+	IF max(post_Warfarin, post_Dabigatran, post_Rivaroxaban, post_Apixaban, post_Edoxaban, 
+			post_UFH, post_Fondaparinux, post_LMWH, post_DTI_inject)=1 THEN initiation_AC=1;
+	IF max(post_Warfarin, post_Dabigatran, post_Rivaroxaban, post_Apixaban, post_Edoxaban, 
+			post_UFH, post_Fondaparinux, post_LMWH, post_DTI_inject)=1 THEN 
+	initiation_AC_date=min(post_Warfarin_date, post_Dabigatran_date, post_Rivaroxaban_date, post_Apixaban_date, post_Edoxaban_date, 
+			post_UFH_date, post_Fondaparinux_date, post_LMWH_date, post_DTI_inject_date);
+	IF max(post_Warfarin, post_Dabigatran, post_Rivaroxaban, post_Apixaban, post_Edoxaban, 
+			post_UFH, post_Fondaparinux, post_LMWH, post_DTI_inject)=1 THEN 
+	initiation_AC_lagging=initiation_AC_date-index_date;
+RUN;
+DATA id_list21;
+	SET id_list19;
+	Day3_initiated=0;
+	Day7_initiated=0;
+	Day1_initiated=0;
+	Day2_initiated=0;
+	IF initiation_AC_lagging^=. AND initiation_AC_lagging<=7 THEN Day7_initiated=1;
+	IF initiation_AC_lagging^=. AND initiation_AC_lagging<=3 THEN Day3_initiated=1;
+	IF initiation_AC_lagging^=. AND initiation_AC_lagging<=1 THEN Day1_initiated=1;
+	IF initiation_AC_lagging^=. AND initiation_AC_lagging<=2 THEN Day2_initiated=1;
+RUN;
+
+PROC FREQ DATA=id_list21;
+TABLES SCD_Status*initiation_AC SCD_Status*Day2_initiated SCD_Status*Day1_initiated/nopercent nocol norow chisq;;
+RUN;
+
+
+	IF (post_Fondaparinux=1 AND post_Fondaparinux_date-index_date<=3) THEN case=1;
+
+
+DATA temp;
+	SET id_list21;
+	IF post_Warfarin_date-index_date>1 THEN post_Warfarin=0;
+	IF post_Dabigatran_date-index_date>1 THEN post_Dabigatran=0;
+	IF post_Rivaroxaban_date-index_date>1 THEN post_Rivaroxaban=0;
+	IF post_Apixaban_date-index_date>1 THEN post_Apixaban=0;
+	IF post_Edoxaban_date-index_date>1 THEN post_Edoxaban=0; 
+	IF post_UFH_date-index_date>1 THEN post_UFH=0; 
+	IF post_Fondaparinux_date-index_date>1 THEN post_Fondaparinux=0; 
+	IF post_LMWH_date-index_date>1 THEN post_LMWH=0; 
+	IF post_DTI_inject_date-index_date>1 THEN post_DTI_inject=0; 
+	case=0;
+	IF (max(post_Dabigatran, post_Rivaroxaban, post_Apixaban, post_Edoxaban)=1 AND post_Warfarin=1 AND max(post_LMWH, post_UFH)=0
+		) THEN case=1;
+RUN;
+PROC FREQ DATA=temp;
+TABLE SCD_Status*case/nopercent nocol norow chisq;;
+RUN;
+
+	IF post_Fondaparinux=1 THEN case=1;
+	IF post_DTI_inject=1 THEN case=1;
+
+	IF (post_LMWH=1 AND max(post_Warfarin, post_Dabigatran, post_Rivaroxaban, post_Apixaban, post_Edoxaban, 
+			post_UFH)=0) THEN case=1;
+	IF (post_LMWH=1 AND post_Warfarin=1 AND max(post_Dabigatran, post_Rivaroxaban, post_Apixaban, post_Edoxaban, 
+			post_UFH)=0) THEN case=1;
+	IF (post_LMWH=1 AND post_Warfarin=0 AND max(post_Dabigatran, post_Rivaroxaban, post_Apixaban, post_Edoxaban)=1 AND 
+			post_UFH=0) THEN case=1;
+
+	IF (post_UFH=1 AND max(post_Warfarin, post_Dabigatran, post_Rivaroxaban, post_Apixaban, post_Edoxaban, 
+			post_LMWH)=0) THEN case=1;
+	IF (post_UFH=1 AND post_Warfarin=1 AND max(post_Dabigatran, post_Rivaroxaban, post_Apixaban, post_Edoxaban, 
+			post_LMWH)=0) THEN case=1;
+	IF (post_UFH=1 AND post_Warfarin=0 AND max(post_Dabigatran, post_Rivaroxaban, post_Apixaban, post_Edoxaban)=1 AND 
+			post_LMWH=0) THEN case=1;
+
+	IF (post_LMWH=1 AND post_UFH=1 AND max(post_Warfarin, post_Dabigatran, post_Rivaroxaban, post_Apixaban, post_Edoxaban 
+		)=0) THEN case=1;
+	IF (post_LMWH=1 AND post_UFH=1 AND post_Warfarin=1 AND max(post_Dabigatran, post_Rivaroxaban, post_Apixaban, post_Edoxaban 
+		)=0) THEN case=1;
+	IF (post_LMWH=1 AND post_UFH=1 AND post_Warfarin=0 AND max(post_Dabigatran, post_Rivaroxaban, post_Apixaban, post_Edoxaban)=1
+		) THEN case=1;
+
+	IF (post_Warfarin=1 AND max(post_LMWH, post_UFH, post_Dabigatran, post_Rivaroxaban, post_Apixaban, post_Edoxaban)=0
+		) THEN case=1;
+	IF (max(post_Dabigatran, post_Rivaroxaban, post_Apixaban, post_Edoxaban)=1 AND max(post_Warfarin, post_LMWH, post_UFH)=0
+		) THEN case=1;
+	IF (max(post_Dabigatran, post_Rivaroxaban, post_Apixaban, post_Edoxaban)=1 AND post_Warfarin=1 AND max(post_LMWH, post_UFH)=0
+		) THEN case=1;
+
+DATA ipt_summary_6m_pre;
+	SET Rawdata.ipt_pre Rawdata.ipt_post;
+	IF index_date-30<=ADMDATE<index_date;
+RUN;
+
+PROC sql;
+	CREATE table id_list_adm_30 as
+	SELECT min(enrolid) as enrolid,
+		1 as admitted_within_30d
+	FROM ipt_summary_6m_pre a
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE id_list22 as
+SELECT a.*,
+	b.admitted_within_30d
+FROM id_list21 a
+LEFT JOIN id_list_adm_30 b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA analytical_cohort_1_June;
+	SET id_list22;
+	case=0;
+	IF max(prior_Warfarin, prior_Dabigatran, prior_Rivaroxaban, prior_Apixaban, prior_Edoxaban)=1 THEN case=1;
+RUN;
+
+PROC FREQ DATA=analytical_cohort_1_June;
+TABLES 	prior_Antiplatelet*Day3_initiated prior_Antiplatelet*Day1_initiated
+		prior_nsaids*Day3_initiated prior_nsaids*Day1_initiated
+		prior_hydroxyurea*Day3_initiated prior_hydroxyurea*Day1_initiated
+		prior_inject_AC*Day3_initiated prior_inject_AC*Day1_initiated
+		prior_contraceptiv_HRT*Day3_initiated prior_contraceptiv_HRT*Day1_initiated
+		case*Day3_initiated case*Day1_initiated/nopercent nocol norow chisq;;
+RUN;
+
+DATA analytical_cohort_2_June;
+	SET id_list22;
+	IF admitted_within_30d=. THEN admitted_within_30d=0;
+	IF VTE_type='BOT' THEN VTE_type='PE';
+	prior_oral_AC=0;
+	IF max(prior_Warfarin, prior_Dabigatran, prior_Rivaroxaban, prior_Apixaban, prior_Edoxaban)=1 THEN prior_oral_AC=1;
+	IF RIETE_cat=3 THEN RIETE_cat=2;
+	IF index_year=2009 THEN index_year_cat=0;
+	IF index_year=2010 THEN index_year_cat=0;
+	IF index_year=2011 THEN index_year_cat=0;
+	IF index_year=2012 THEN index_year_cat=0;
+	IF index_year=2013 THEN index_year_cat=1;
+	IF index_year=2014 THEN index_year_cat=1;
+	IF index_year=2015 THEN index_year_cat=1;
+RUN;
+
+PROC FREQ DATA=analytical_cohort_2_June;
+TABLE index_year_cat;
+RUN;
+
+PROC LOGISTIC DATA=analytical_cohort_2_June descending;
+	CLASS sex case_type_final VTE_type number_adm_prior_cate number_ER_prior_cate  
+	CCI_cat RIETE_cat;
+	MODEL Day1_initiated = 	sex index_year_cat age 
+							SCD_status 
+							case_type_final VTE_type
+							number_adm_prior_cate number_ER_prior_cate transfusion_status
+							hip_fracture_status Trauma_status Central_catheter_status admitted_within_30d 
+							AF_status malignancy_status Pregnancy_status 
+							Hypertension_status DM2_status CHF_status Chronic_liver_disease_status chronic_kidney_disease_status 
+							CCI_cat RIETE_cat prior_nsaids prior_opioid prior_contraceptiv_HRT prior_Antiplatelet prior_hydroxyurea prior_inject_AC prior_oral_AC/covb clodds =both;
+	OUTPUT 	OUT = Results
+			PREDICTED = Pred1;
+RUN;
+
+*Survival analyses on VTE recurrence;
+DATA survival_data;
+	SET analytical_cohort_2_June;
+	IF (DVT_recur_date_7^=. OR PE_recur_date_7^=.) THEN VTE_recur_7=1;
+	IF (DVT_recur_date_7^=. OR PE_recur_date_7^=.) THEN VTE_recur_date_7=min(DVT_recur_date_7, PE_recur_date_7);
+	lenfol=min(last_enroll_date, VTE_recur_date_7)-index_date;
+	fstat=0;
+	IF VTE_recur_date_7^=. THEN fstat=1;
+RUN;
