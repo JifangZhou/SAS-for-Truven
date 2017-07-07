@@ -1,0 +1,419 @@
+* Now use information from the case-controls only;
+
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\SCD and DVT\SCD DVT working directory';
+LIBNAME Rawdata 'C:\Users\jzhou86\Documents\SCD Project\SCD and DVT\SCD DVT working directory\case control file';
+LIBNAME Redbook 'C:\Users\jzhou86\Documents';
+
+* select  post ipt and opt;
+DATA ipt_summary_post;
+	SET Rawdata.ipt_pre Rawdata.ipt_post;
+	IF index_date<=DISDATE;
+RUN;
+
+DATA opt_post;
+	SET Rawdata.opt_pre Rawdata.opt_post;
+	IF index_date<=SVCDATE;
+RUN;
+
+* select post ipt services data;
+DATA ipt_service_post;
+	SET Rawdata.ipt_svc_pre Rawdata.ipt_svc_post;
+	IF index_date<=SVCDATE;
+RUN;
+
+DATA id_list;
+	SET Myfile.analytical_cohort_4_june;
+RUN;
+* now stack all inpatient and outpatient diagnosis;
+DATA all_claims_post;
+	SET ipt_summary_post opt_post ipt_service_post;
+RUN;
+*identify cerebral bleeding events;
+DATA Cerebral_bleeding;
+	SET all_claims_post;
+	Cerebral_bleeding=0;
+	array icd {*} dx1-dx2;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('430', '431', '4320', '4321', '4329', 'I60','I61','I62', 'S064','S065','S066') then Cerebral_bleeding=1;
+		end;
+		if Cerebral_bleeding=1;
+RUN;
+
+PROC SQL;
+	CREATE TABLE Cerebral_bleeding_id as
+	SELECT 	min(enrolid) as enrolid,
+			min(SVCDATE) as bleeding_event_date1,
+			min(DISDATE) as bleeding_event_date2
+	FROM Cerebral_bleeding
+	GROUP BY enrolid;
+QUIT;
+
+DATA Cerebral_bleeding_id;
+	SET Cerebral_bleeding_id;
+	Cerebral_bleeding_date=min(bleeding_event_date1, bleeding_event_date2);
+RUN;
+
+PROC SQL;
+	CREATE TABLE Cerebral_bleeding_id as
+	SELECT 	min(enrolid) as enrolid,
+			min(Cerebral_bleeding_date) as Cerebral_bleeding_date,
+			1 as Cerebral_bleeding
+	FROM Cerebral_bleeding_id
+	GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table id_list1 as
+	SELECT a.*,
+		b.Cerebral_bleeding_date as Cerebral_bleeding_date,
+		b.Cerebral_bleeding as Cerebral_bleeding
+	FROM id_list a
+	LEFT JOIN Cerebral_bleeding_id b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*identify Bleeding from the respiratory tract;
+DATA Respiratory_bleeding;
+	SET all_claims_post;
+	Respiratory_bleeding=0;
+	array icd {*} dx1-dx2;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('7191', '7847', '7848', '7863', 'M250', 'J942', 'R04') then Respiratory_bleeding=1;
+		end;
+		if Respiratory_bleeding=1;
+RUN;
+
+PROC SQL;
+	CREATE TABLE Respiratory_bleeding_id as
+	SELECT 	min(enrolid) as enrolid,
+			min(SVCDATE) as bleeding_event_date1,
+			min(DISDATE) as bleeding_event_date2
+	FROM Respiratory_bleeding
+	GROUP BY enrolid;
+QUIT;
+
+DATA Respiratory_bleeding_id;
+	SET Respiratory_bleeding_id;
+	Respiratory_bleeding_date=min(bleeding_event_date1, bleeding_event_date2);
+RUN;
+
+PROC SQL;
+	CREATE TABLE Respiratory_bleeding_id as
+	SELECT 	min(enrolid) as enrolid,
+			min(Respiratory_bleeding_date) as Respiratory_bleeding_date,
+			1 as Respiratory_bleeding
+	FROM Respiratory_bleeding_id
+	GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table id_list2 as
+	SELECT a.*,
+		b.Respiratory_bleeding_date as Respiratory_bleeding_date,
+		b.Respiratory_bleeding as Respiratory_bleeding
+	FROM id_list1 a
+	LEFT JOIN Respiratory_bleeding_id b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*identify Gastrointestinal bleeding;
+DATA Gastrointestinal_bleeding;
+	SET all_claims_post;
+	Gastrointestinal_bleeding=0;
+	array icd {*} dx1-dx2;
+		do i = 1 to dim(icd);
+		if icd{i} in: (	'4552', '4555', '4558', '4560', '45620', 
+						'53021', '5307', '53080', '53082', 
+						'53100', '53101', '53120', '53121', '53140', '53141', '53160', '53161', 
+						'53200', '53201', '53220', '53221', '53240', '53241', '53260', '53261', 
+						'53300', '53301', '53320', '53321', '53340', '53341', '53360', '53361', 
+						'53400', '53401', '53420', '53421', '53440', '53441', '53460', '53461', 
+						'53501', '53511', '53521', '53531', '53541', '53551', '53561', '53780', 
+						'56202', '56203', '56212', '56213', '56881', '56930', '56985', '57800', '57810', '57890',
+						'I8501', 'I8511', 'K2211', 'K226', 'K228', 'K250', 'K252', 'K254', 'K256', 
+						'K260', 'K262', 'K264', 'K266', 'K270', 'K272', 'K274', 'K276', 
+						'K280', 'K282', 'K284', 'K286', 
+						'K2901', 'K2921', 'K2931', 'K2941', 'K2951', 'K2961', 'K2971', 'K2981', 'K2991', 
+						'K31811', 'K5711', 'K5713', 'K5731', 'K5733', 'K625', 'K5521', 'K6381', 'K920','K921','K922') then Gastrointestinal_bleeding=1;
+		end;
+		if Gastrointestinal_bleeding=1;
+RUN;
+
+PROC SQL;
+	CREATE TABLE Gastrointestinal_bleeding_id as
+	SELECT 	min(enrolid) as enrolid,
+			min(SVCDATE) as bleeding_event_date1,
+			min(DISDATE) as bleeding_event_date2
+	FROM Gastrointestinal_bleeding
+	GROUP BY enrolid;
+QUIT;
+
+DATA Gastrointestinal_bleeding_id;
+	SET Gastrointestinal_bleeding_id;
+	Gastrointestinal_bleeding_date=min(bleeding_event_date1, bleeding_event_date2);
+RUN;
+
+PROC SQL;
+	CREATE TABLE Gastrointestinal_bleeding_id as
+	SELECT 	min(enrolid) as enrolid,
+			min(Gastrointestinal_bleeding_date) as Gastrointestinal_bleeding_date,
+			1 as Gastrointestinal_bleeding
+	FROM Gastrointestinal_bleeding_id
+	GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table id_list3 as
+	SELECT a.*,
+		b.Gastrointestinal_bleeding_date as Gastrointestinal_bleeding_date,
+		b.Gastrointestinal_bleeding as Gastrointestinal_bleeding
+	FROM id_list2 a
+	LEFT JOIN Gastrointestinal_bleeding_id b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*identify Bleeding from the Genitourinary tract;
+DATA Genitourinary_bleeding;
+	SET all_claims_post;
+	Genitourinary_bleeding=0;
+	array icd {*} dx1-dx2;
+		do i = 1 to dim(icd);
+		if icd{i} in: (	'59381', '5967', '59970', '6262', '6266','R31', 'N3289', 'N920', 'N921') then Genitourinary_bleeding=1;
+		end;
+		if Genitourinary_bleeding=1;
+RUN;
+
+PROC SQL;
+	CREATE TABLE Genitourinary_bleeding_id as
+	SELECT 	min(enrolid) as enrolid,
+			min(SVCDATE) as bleeding_event_date1,
+			min(DISDATE) as bleeding_event_date2
+	FROM Genitourinary_bleeding
+	GROUP BY enrolid;
+QUIT;
+
+DATA Genitourinary_bleeding_id;
+	SET Genitourinary_bleeding_id;
+	Genitourinary_bleeding_date=min(bleeding_event_date1, bleeding_event_date2);
+RUN;
+
+PROC SQL;
+	CREATE TABLE Genitourinary_bleeding_id as
+	SELECT 	min(enrolid) as enrolid,
+			min(Genitourinary_bleeding_date) as Genitourinary_bleeding_date,
+			1 as Genitourinary_bleeding
+	FROM Genitourinary_bleeding_id
+	GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table id_list4 as
+	SELECT a.*,
+		b.Genitourinary_bleeding_date as Genitourinary_bleeding_date,
+		b.Genitourinary_bleeding as Genitourinary_bleeding
+	FROM id_list3 a
+	LEFT JOIN Genitourinary_bleeding_id b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*identify Intraocular bleeding;
+DATA Intraocular_bleeding;
+	SET all_claims_post;
+	Intraocular_bleeding=0;
+	array icd {*} dx1-dx2;
+		do i = 1 to dim(icd);
+		if icd{i} in: (	'36043', '36281', '36361', '36362', '37632', '37272', '37923',
+						'H44819', 'H3560', 'H31309', 'H31319', 'H05239', 'H1133', 'H4313') then Intraocular_bleeding=1;
+		end;
+		if Intraocular_bleeding=1;
+RUN;
+
+PROC SQL;
+	CREATE TABLE Intraocular_bleeding_id as
+	SELECT 	min(enrolid) as enrolid,
+			min(SVCDATE) as bleeding_event_date1,
+			min(DISDATE) as bleeding_event_date2
+	FROM Intraocular_bleeding
+	GROUP BY enrolid;
+QUIT;
+
+DATA Intraocular_bleeding_id;
+	SET Intraocular_bleeding_id;
+	Intraocular_bleeding_date=min(bleeding_event_date1, bleeding_event_date2);
+RUN;
+
+PROC SQL;
+	CREATE TABLE Intraocular_bleeding_id as
+	SELECT 	min(enrolid) as enrolid,
+			min(Intraocular_bleeding_date) as Intraocular_bleeding_date,
+			1 as Intraocular_bleeding
+	FROM Intraocular_bleeding_id
+	GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table id_list5 as
+	SELECT a.*,
+		b.Intraocular_bleeding_date as Intraocular_bleeding_date,
+		b.Intraocular_bleeding as Intraocular_bleeding
+	FROM id_list4 a
+	LEFT JOIN Intraocular_bleeding_id b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*identify Other bleeding;
+DATA Other_bleeding;
+	SET all_claims_post;
+	Other_bleeding=0;
+	array icd {*} dx1-dx2;
+		do i = 1 to dim(icd);
+		if icd{i} in: (	'4230', '4590', '71910', '71911', '71912', '71913', '71914', '71915', '71916', 
+						'71917', '71918', '2851', '2800', 'I312', 'R58', 'M250', 'D62', 'D50') then Other_bleeding=1;
+		end;
+		if Other_bleeding=1;
+RUN;
+
+PROC SQL;
+	CREATE TABLE Other_bleeding_id as
+	SELECT 	min(enrolid) as enrolid,
+			min(SVCDATE) as bleeding_event_date1,
+			min(DISDATE) as bleeding_event_date2
+	FROM Other_bleeding
+	GROUP BY enrolid;
+QUIT;
+
+DATA Other_bleeding_id;
+	SET Other_bleeding_id;
+	Other_bleeding_date=min(bleeding_event_date1, bleeding_event_date2);
+RUN;
+
+PROC SQL;
+	CREATE TABLE Other_bleeding_id as
+	SELECT 	min(enrolid) as enrolid,
+			min(Other_bleeding_date) as Other_bleeding_date,
+			1 as Other_bleeding
+	FROM Other_bleeding_id
+	GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table id_list6 as
+	SELECT a.*,
+		b.Other_bleeding_date as Other_bleeding_date,
+		b.Other_bleeding as Other_bleeding
+	FROM id_list5 a
+	LEFT JOIN Other_bleeding_id b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA analytical_cohort_6_july;
+	SET id_list6;
+	IF Cerebral_bleeding=. 			THEN Cerebral_bleeding=0;
+	IF Respiratory_bleeding=. 		THEN Respiratory_bleeding=0;
+	IF Gastrointestinal_bleeding=. 	THEN Gastrointestinal_bleeding=0;
+	IF Genitourinary_bleeding=. 	THEN Genitourinary_bleeding=0;
+	IF Intraocular_bleeding=. 		THEN Intraocular_bleeding=0;
+	IF Other_bleeding=. 			THEN Other_bleeding=0;
+	Ever_bleeding=0;
+	IF max(Cerebral_bleeding,Respiratory_bleeding,Gastrointestinal_bleeding,Genitourinary_bleeding,Intraocular_bleeding,Other_bleeding)=1
+	THEN Ever_bleeding=min(Cerebral_bleeding_date,Respiratory_bleeding_date,Gastrointestinal_bleeding_date,Genitourinary_bleeding_date,Intraocular_bleeding_date,Other_bleeding_date);
+RUN;
+
+DATA temp;
+SET myfile.analytical_cohort_6_july;
+	case=0;
+	fstat=0;
+	lenfol=min(last_enroll_date, VTE_recur_date_7)-index_date;
+	IF (VTE_recur_date_7 ^=. AND lenfol<=365) THEN case=1;
+	IF (VTE_recur_date_7 ^=. AND lenfol<=365) THEN fstat=1;
+	IF lenfol>365 THEN lenfol=365;
+	IF lenfol>365 THEN fstat=0;
+RUN;
+ PROC FREQ DATA=temp;
+ TABLE case*Day1_initiated/nocol norow nopercent chisq;
+ RUN;
+
+PROC LIFETEST DATA=temp NOTABLE plots=(lls);
+TIME lenfol*fstat(0); 
+STRATA Day1_initiated;RUN;
+
+	DATA cohort_cif;
+	SET temp;
+	IF VTE_recur_date_7 ^=. 	THEN time=VTE_recur_date_7-index_date;
+	IF VTE_recur_date_7 ^=. 	THEN Status=1;
+	IF VTE_recur_date_7 =. 	THEN time=last_enroll_date-index_date;
+	IF VTE_recur_date_7 =. 	THEN Status=0;
+	IF time>=365 THEN time=365;
+	IF time>=365 THEN status=0;
+RUN;
+
+%CIF(DATA=cohort_cif,TIME=time,STATUS=Status,EVENT=1,CENSORED=0,GROUP=Day1_initiated,OPTIONS=NOTEST);
+
+ods graphics on;
+proc phreg data=cohort_cif  plots(overlay=stratum)=cif;
+class SCD_status;
+model time*Status(0)=SCD_status /eventcode=1;
+run;
+ods graphics off;
+
+proc phreg data=temp; 
+CLASS sex (ref='1') VTE_type (ref='DVT') case_type_final(ref='1');
+model lenfol*fstat(0)=Day1_initiated SCD_status age sex VTE_type case_type_final;
+BASELINE out=temp4 survival=survival;
+SYMBOL l=1 i=join v=dot;
+PROC GPLOT DATA=temp4; PLOT lenfol*survival=LOS_index_VTE_event age sex number_adm_prior number_er_prior transfusion_status cancer_status AF_status Aflutter_status injectable_AC_prior_7_days;; 
+RUN;
+
+	DATA cohort_cif;
+	SET temp;
+	IF Cerebral_bleeding_date ^=. 	THEN time=Cerebral_bleeding_date-index_date;
+	IF Cerebral_bleeding_date ^=. 	THEN Status=1;
+	IF Cerebral_bleeding_date =. 	THEN time=last_enroll_date-index_date;
+	IF Cerebral_bleeding_date =. 	THEN Status=0;
+	IF time>=365 THEN time=365;
+	IF time>=365 THEN status=0;
+RUN;
+PROC LIFETEST DATA=cohort_cif NOTABLE plots=(lls);
+TIME time*Status(0); 
+STRATA SCD_status;RUN;
+%CIF(DATA=cohort_cif,TIME=time,STATUS=Status,EVENT=1,CENSORED=0,GROUP=SCD_status,OPTIONS=NOTEST);
+
+
+	DATA temp;
+	SET myfile.analytical_cohort_6_july;
+	IF Other_bleeding_date ^=. 	THEN time=Other_bleeding_date-index_date;
+	IF Other_bleeding_date ^=. 	THEN Status=1;
+	IF Other_bleeding_date =. 	THEN time=last_enroll_date-index_date;
+	IF Other_bleeding_date =. 	THEN Status=0;
+	IF time>=365 THEN time=365;
+	IF time>=365 THEN status=0;
+RUN;
+PROC LIFETEST DATA=temp NOTABLE plots=(lls);
+TIME time*Status(0); 
+STRATA SCD_status;RUN;
+%CIF(DATA=cohort_cif,TIME=time,STATUS=Status,EVENT=1,CENSORED=0,GROUP=SCD_status,OPTIONS=NOTEST);
+
+PROC LIFETEST DATA=temp NOTABLE plots=(lls);
+TIME time*Status(0); 
+STRATA Day1_initiated;RUN;
+%CIF(DATA=cohort_cif,TIME=time,STATUS=Status,EVENT=1,CENSORED=0,GROUP=Day1_initiated,OPTIONS=NOTEST);
+
+
+proc phreg data=temp; 
+CLASS sex (ref='1') VTE_type (ref='DVT') case_type_final(ref='1') OBRI_cat (ref='1');
+model time*Status(0)=Day1_initiated SCD_status age sex VTE_type case_type_final OBRI_cat;
+BASELINE out=temp4 survival=survival;
+SYMBOL l=1 i=join v=dot;
+RUN;
+PROC FREQ DATA=temp;
+ TABLE Status*SCD_status/nocol norow nopercent chisq;
+ RUN;
+  PROC LIFETEST DATA=temp NOTABLE plots=(lls);
+TIME time*Status(0); 
+STRATA SCD_status;RUN;
+ PROC FREQ DATA=temp;
+ TABLE Status*Day1_initiated/nocol norow nopercent chisq;
+ RUN;
+ PROC LIFETEST DATA=temp NOTABLE plots=(lls);
+TIME time*Status(0); 
+STRATA Day1_initiated;RUN;
