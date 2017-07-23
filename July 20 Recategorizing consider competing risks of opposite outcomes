@@ -1,0 +1,202 @@
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\SCD and DVT\SCD DVT working directory';
+DATA analytical_cohort_20_july;
+	SET Myfile.analytical_cohort_11_july;
+	Ever_bleeding=0;
+	Ever_bleeding_date=.;
+	IF max(Cerebral_bleeding, Respiratory_bleeding,Gastrointestinal_bleeding,Genitourinary_bleeding,Intraocular_bleeding,Other_bleeding)=1
+	THEN Ever_bleeding=1;
+	IF max(Cerebral_bleeding, Respiratory_bleeding,Gastrointestinal_bleeding,Genitourinary_bleeding,Intraocular_bleeding,Other_bleeding)=1
+	THEN Ever_bleeding_date=min(Cerebral_bleeding_date, Respiratory_bleeding_date,Gastrointestinal_bleeding_date,Genitourinary_bleeding_date,Intraocular_bleeding_date,Other_bleeding_date);
+RUN;
+
+DATA analytical_cohort_20_july;
+	SET analytical_cohort_20_july;
+	end_of_study_date=365+index_date;
+	VTE_censor_date=min(Ever_bleeding_date,last_enroll_date,end_of_study_date);
+	case_VTE_365=0;
+	fstat_VTE_365=0;
+	lenfol_VTE_365=VTE_censor_date-index_date;
+	IF (VTE_recur_7=1 AND VTE_recur_date_7<=VTE_censor_date) THEN DO 
+		case_VTE_365=1;
+		fstat_VTE_365=1;
+		lenfol_VTE_365=VTE_recur_date_7-index_date;END;
+
+	end_of_study_date=180+index_date;
+	VTE_censor_date=min(Ever_bleeding_date,last_enroll_date,end_of_study_date);
+	case_VTE_180=0;
+	fstat_VTE_180=0;
+	lenfol_VTE_180=VTE_censor_date-index_date;
+	IF (VTE_recur_7=1 AND VTE_recur_date_7<=VTE_censor_date) THEN DO 
+		case_VTE_180=1;
+		fstat_VTE_180=1;
+		lenfol_VTE_180=VTE_recur_date_7-index_date;END;
+
+	end_of_study_date=90+index_date;
+	VTE_censor_date=min(Ever_bleeding_date,last_enroll_date,end_of_study_date);
+	case_VTE_90=0;
+	fstat_VTE_90=0;
+	lenfol_VTE_90=VTE_censor_date-index_date;
+	IF (VTE_recur_7=1 AND VTE_recur_date_7<=VTE_censor_date) THEN DO 
+		case_VTE_90=1;
+		fstat_VTE_90=1;
+		lenfol_VTE_90=VTE_recur_date_7-index_date;END;
+
+		end_of_study_date=30+index_date;
+	VTE_censor_date=min(Ever_bleeding_date,last_enroll_date,end_of_study_date);
+	case_VTE_30=0;
+	fstat_VTE_30=0;
+	lenfol_VTE_30=VTE_censor_date-index_date;
+	IF (VTE_recur_7=1 AND VTE_recur_date_7<=VTE_censor_date) THEN DO 
+		case_VTE_30=1;
+		fstat_VTE_30=1;
+		lenfol_VTE_30=VTE_recur_date_7-index_date;END;
+
+	end_of_study_date=365+index_date;
+	Bleeding_censor_date=min(VTE_recur_date_7,last_enroll_date,end_of_study_date);
+	case_bleeding_365=0;
+	fstat_bleeding_365=0;
+	lenfol_bleeding_365=Bleeding_censor_date-index_date;
+	IF (Ever_bleeding=1 AND Ever_bleeding_date<=Bleeding_censor_date) THEN DO 
+		case_bleeding_365=1;
+		fstat_bleeding_365=1;
+		lenfol_bleeding_365=Ever_bleeding_date-index_date;END;
+
+	end_of_study_date=180+index_date;
+	Bleeding_censor_date=min(VTE_recur_date_7,last_enroll_date,end_of_study_date);
+	case_bleeding_180=0;
+	fstat_bleeding_180=0;
+	lenfol_bleeding_180=Bleeding_censor_date-index_date;
+	IF (Ever_bleeding=1 AND Ever_bleeding_date<=Bleeding_censor_date) THEN DO 
+		case_bleeding_180=1;
+		fstat_bleeding_180=1;
+		lenfol_bleeding_180=Ever_bleeding_date-index_date;END;
+
+	end_of_study_date=90+index_date;
+	Bleeding_censor_date=min(VTE_recur_date_7,last_enroll_date,end_of_study_date);
+	case_bleeding_90=0;
+	fstat_bleeding_90=0;
+	lenfol_bleeding_90=Bleeding_censor_date-index_date;
+	IF (Ever_bleeding=1 AND Ever_bleeding_date<=Bleeding_censor_date) THEN DO 
+		case_bleeding_90=1;
+		fstat_bleeding_90=1;
+		lenfol_bleeding_90=Ever_bleeding_date-index_date;END;
+
+	end_of_study_date=30+index_date;
+	Bleeding_censor_date=min(VTE_recur_date_7,last_enroll_date,end_of_study_date);
+	case_bleeding_30=0;
+	fstat_bleeding_30=0;
+	lenfol_bleeding_30=Bleeding_censor_date-index_date;
+	IF (Ever_bleeding=1 AND Ever_bleeding_date<=Bleeding_censor_date) THEN DO 
+		case_bleeding_30=1;
+		fstat_bleeding_30=1;
+		lenfol_bleeding_30=Ever_bleeding_date-index_date;END;
+	RUN;
+
+DATA myfile.analytical_cohort_20_july;
+	SET analytical_cohort_20_july;
+RUN;
+
+
+PROC FREQ DATA=analytical_cohort_20_july;
+TABLE lenfol_bleeding_30;RUN;
+
+PROC MEANS DATA=analytical_cohort_20_july;
+VAR age;RUN;
+
+Proc Lifetest data=analytical_cohort_20_july
+plots =survival(atrisk=0 to 2000 by 50) ;
+time lenfol_bleeding_365 * fstat_bleeding_365(0) ;
+strata SCD_status;
+RUN;
+
+Proc Lifetest data=analytical_cohort_20_july
+plots=(SURVIVAL LOGSURV LOGLOGS);
+time lenfol_bleeding_180 * fstat_bleeding_180(0) ;
+strata SCD_status;
+RUN;
+
+Proc PHreg data = analytical_cohort_20_july;
+class SCD_status;
+model lenfol_bleeding_365 * fstat_bleeding_365(0) = SCD_status
+/ risklimits ties=efron;
+RUN;
+
+Proc PHreg data = analytical_cohort_20_july;
+class SCD_status;
+model lenfol_bleeding_365 * fstat_bleeding_365(0) = SCD_status PS_time
+/ risklimits ties=efron;
+PS_time = SCD_status * lenfol_bleeding_365;
+RUN;
+
+DATA analytical_cohort_22_july;
+	SET analytical_cohort_20_july;
+	end_of_study_date=365+index_date;
+	compo_censor_date=min(last_enroll_date,end_of_study_date);
+	case_compo_365=0;
+	fstat_compo_365=0;
+	lenfol_compo_365=compo_censor_date-index_date;
+	compo_date=min(Ever_bleeding_date, VTE_recur_date_7);
+	IF (compo_date ^=.  AND compo_date<=compo_censor_date) THEN DO 
+		case_compo_365=1;
+		fstat_compo_365=1;
+		lenfol_compo_365=compo_date-index_date;END;
+	end_of_study_date=180+index_date;
+	compo_censor_date=min(last_enroll_date,end_of_study_date);
+	case_compo_180=0;
+	fstat_compo_180=0;
+	lenfol_compo_180=compo_censor_date-index_date;
+	compo_date=min(Ever_bleeding_date, VTE_recur_date_7);
+	IF (compo_date ^=.  AND compo_date<=compo_censor_date) THEN DO 
+		case_compo_180=1;
+		fstat_compo_180=1;
+		lenfol_compo_180=compo_date-index_date;END;
+	end_of_study_date=90+index_date;
+	compo_censor_date=min(last_enroll_date,end_of_study_date);
+	case_compo_90=0;
+	fstat_compo_90=0;
+	lenfol_compo_90=compo_censor_date-index_date;
+	compo_date=min(Ever_bleeding_date, VTE_recur_date_7);
+	IF (compo_date ^=.  AND compo_date<=compo_censor_date) THEN DO 
+		case_compo_90=1;
+		fstat_compo_90=1;
+		lenfol_compo_90=compo_date-index_date;END;
+	end_of_study_date=30+index_date;
+	compo_censor_date=min(last_enroll_date,end_of_study_date);
+	case_compo_30=0;
+	fstat_compo_30=0;
+	lenfol_compo_30=compo_censor_date-index_date;
+	compo_date=min(Ever_bleeding_date, VTE_recur_date_7);
+	IF (compo_date ^=.  AND compo_date<=compo_censor_date) THEN DO 
+		case_compo_30=1;
+		fstat_compo_30=1;
+		lenfol_compo_30=compo_date-index_date;END;
+	RUN;
+DATA analytical_cohort_23_july;
+	SET analytical_cohort_22_july;
+	end_of_study=365+index_date;
+	fol=min(end_of_study, last_enroll_date)-index_date;
+RUN;
+
+proc sql;
+create table sum as
+ select
+ sum(fol) as branch_profit
+ from analytical_cohort_23_july
+quit;
+
+
+case_bleeding_365
+fstat_bleeding_365
+lenfol_bleeding_365
+
+case_VTE_90
+fstat_VTE_90
+lenfol_VTE_90
+
+VTE_recur_7
+VTE_recur_date_7
+
+last_enroll_date
+
+Ever_bleeding
+Ever_bleeding_date
