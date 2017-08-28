@@ -1,0 +1,212 @@
+LIBNAME Myfile 'F:\User Folders\jzhou86\HSCT general cases';
+DATA myfile.diabetes_list;
+	SET Diabetes;
+RUN;
+
+PROC FREQ DATA=Diabetes;
+TABLE ROUTE;
+RUN;
+
+DATA myfile.oral_diabetes_list;
+	SET Diabetes;
+	IF ROUTE="oral";
+RUN;
+
+DATA myfile.insulin_list;
+	SET Diabetes;
+	IF ROUTE="subcutaneous" or ROUTE="injectable";
+RUN;
+LIBNAME Redbook 'E:\Truven Data';
+LIBNAME WorkingD 'F:\User Folders\jzhou86\HSCT working directory';
+DATA redbook;
+	SET Redbook.redbook;
+RUN;
+
+DATA myfile.redbook_insulin_list;
+	SET redbook;
+	IF THERCLS=172 or THERCLS=173 or THERCLS=174;
+	IF ROADS="Injection" or ROADS="Subcutaneous";
+RUN;
+
+PROC FREQ DATA=redbook_insulin_list;
+TABLE ROADS;
+RUN;
+
+DATA myfile.redbook_oral_dm2_list;
+	SET redbook;
+	IF THERCLS=173 or THERCLS=174;
+	IF ROADS="Oral";
+RUN;
+
+DATA redbook_oral_lipid_list;
+	SET redbook;
+	IF THERCLS=53;
+	IF ROADS="Oral";
+RUN;
+
+DATA redbook_oral_hpn_list;
+	SET redbook;
+	IF THERCLS=120 OR 
+THERCLS=121 OR 
+THERCLS=122 OR 
+THERCLS=123 OR 
+THERCLS=124 OR 
+THERCLS=125 OR 
+THERCLS=52 OR 
+THERCLS=47 OR 
+THERCLS=50 OR 
+THERCLS=51 OR 
+THERCLS=54;
+	IF ROADS="Oral";
+RUN;
+* extract 6 months pre-diagnosis medication lists;
+DATA id_list;
+	SET myfile.all_eligible_list3;
+RUN;
+
+DATA drug_pre_dx;
+SET WorkingD.drug_pres;
+IF SVCDATE>=index_date-180 AND SVCDATE <index_date;
+RUN;
+
+PROC sql;
+	CREATE table dm2_pres as
+	SELECT a.*
+	FROM drug_pre_dx a
+	INNER JOIN redbook_oral_dm2_list b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table dm2_pres as
+	SELECT min(enrolid) as enrolid,
+		count(SVCDATE) as dm2_pres_count
+	FROM dm2_pres
+	GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table id_list1 as
+	SELECT a.*,
+		b.dm2_pres_count as dm2_pres_count
+	FROM id_list a
+	LEFT JOIN dm2_pres b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list2;
+	SET id_list1;
+	IF prior_dm2=1;
+	IF dm2_pres_count>=1;
+RUN;
+PROC FREQ DATA=id_list2;
+TABLE group*type_dx/missing norow nocol nopercent;
+RUN;
+
+PROC sql;
+	CREATE table lipid_pres as
+	SELECT a.*
+	FROM drug_pre_dx a
+	INNER JOIN redbook_oral_lipid_list b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table lipid_pres as
+	SELECT min(enrolid) as enrolid,
+		count(SVCDATE) as lipid_pres_count
+	FROM lipid_pres
+	GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table id_list1 as
+	SELECT a.*,
+		b.lipid_pres_count as lipid_pres_count
+	FROM id_list1 a
+	LEFT JOIN lipid_pres b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list3;
+	SET id_list1;
+	IF prior_lipid=1;
+	IF lipid_pres_count>=1;
+RUN;
+PROC FREQ DATA=id_list3;
+TABLE group*type_dx/missing norow nocol nopercent;
+RUN;
+
+PROC sql;
+	CREATE table hpn_pres as
+	SELECT a.*
+	FROM drug_pre_dx a
+	INNER JOIN redbook_oral_hpn_list b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table hpn_pres as
+	SELECT min(enrolid) as enrolid,
+		count(SVCDATE) as hpn_pres_count
+	FROM hpn_pres
+	GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table id_list1 as
+	SELECT a.*,
+		b.hpn_pres_count as hpn_pres_count
+	FROM id_list1 a
+	LEFT JOIN hpn_pres b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list4;
+	SET id_list1;
+	IF prior_hpn=1;
+	IF hpn_pres_count>=2;
+RUN;
+PROC FREQ DATA=id_list4;
+TABLE group*type_dx/missing norow nocol nopercent;
+RUN;
+DATA workingD.analytical_cohort_23_august;
+	SET id_list1;
+RUN;
+
+*calculate hpn pdc at baseline;
+PROC sql;
+	CREATE table hpn_pres as
+	SELECT a.*
+	FROM drug_pre_dx a
+	INNER JOIN redbook_oral_hpn_list b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table hpn_pres1 as
+	SELECT a.*
+	FROM hpn_pres a
+	INNER JOIN id_list4 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+DATA inpt_sum;
+SET WorkingD.inpt_sum;
+IF ADMDATE>=index_date-180 AND ADMDATE <index_date;
+RUN;
+PROC sql;
+	CREATE table ipt_record as
+	SELECT a.enrolid as enrolid,
+			a.admdate as admdate,
+			a.disdate as disdate
+	FROM inpt_sum a
+	INNER JOIN id_list4 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA hpn_pres2;
+	SET hpn_pres1;
+	KEEP enrolid SVCDATE DAYSUPP Medication_name index_date;
+Medication_name="hpn";
+RUN;
+
