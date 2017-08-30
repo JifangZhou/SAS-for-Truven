@@ -1,0 +1,108 @@
+proc sort data=hpn_pres2;
+by enrolid SVCDATE;
+run;
+proc transpose data = hpn_pres2 out=fill_dates (drop=_name_) prefix = SVCDATE;
+by enrolid;
+var SVCDATE;
+run;
+proc transpose data = hpn_pres2 out=days_supply (drop=_name_) prefix = DAYSUPP;
+by enrolid;
+var DAYSUPP;
+run;
+data both;
+merge fill_dates days_supply;
+by enrolid;
+run; 
+
+
+PROC sql;
+	CREATE table both as
+	SELECT a.*,
+			b.dx_date-360 as start_dt,
+			b.dx_date as end_dt
+	FROM both a
+	INNER JOIN workingD.analytical_cohort_27_august b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+data pdc;
+set both;
+array daydummy(360) day1-day360;
+array filldates(*) SVCDATE1 - SVCDATE880;
+array days_supply(*) DAYSUPP1-DAYSUPP880;
+ do ii=1 to 360; daydummy(ii)=0;end;
+ do ii=1 to 360;
+ do i = 1 to dim(filldates) while (filldates(i) ne .);
+ if filldates(i)<= start_dt + ii -1 <= filldates(i)+days_supply(i)-1
+ then daydummy(ii)=1;
+ end;
+ end;
+drop i ii;
+dayscovered=sum(of day181 - day360);label dayscovered='Total Days Covered';
+p_dayscovered=dayscovered/180;label p_dayscovered='Proportion of Days Covered';
+run;
+proc univariate data=pdc;
+var p_dayscovered;
+histogram;
+run;
+
+
+
+PROC sql;
+	CREATE table cohort1 as
+	SELECT a.*,
+			b.p_dayscovered as hpn_baseline_pdc
+	FROM workingD.analytical_cohort_27_august a
+	LEFT JOIN pdc b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*calculate diabetes pdc at baseline, with 180 days look-back period;
+PROC sql;
+	CREATE table dm2_pres as
+	SELECT a.*
+	FROM drug_pre_dx a
+	INNER JOIN myfile.redbook_oral_dm2_list b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table dm2_pres1 as
+	SELECT a.*
+	FROM dm2_pres a
+	INNER JOIN id_list4 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+DATA inpt_sum;
+SET WorkingD.inpt_sum;
+IF ADMDATE>=index_date-360 AND ADMDATE <index_date;
+RUN;
+PROC sql;
+	CREATE table ipt_record as
+	SELECT a.enrolid as enrolid,
+			a.admdate as admdate,
+			a.disdate as disdate,
+			a.days as LOS,
+			a.index_date as index_date
+	FROM inpt_sum a
+	INNER JOIN id_list4 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*convert the ipt record into the prescription form;
+PROC sql;
+	CREATE table ipt_record1 as
+	SELECT enrolid as enrolid,
+			admdate as SVCDATE,
+		LOS as DAYSUPP,
+		index_date as index_date
+	FROM ipt_record
+	GROUP BY enrolid;
+QUIT;
+
+*combine the 360 days' hypertension medication records, adjusted by admissions;
+DATA dm2_pres2;
+	SET dm2_pres1 ipt_record1;
+	KEEP enrolid SVCDATE DAYSUPP Medication_name index_date;
+Medication_name="dm2";
+RUN;
