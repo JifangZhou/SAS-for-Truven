@@ -1,0 +1,467 @@
+LIBNAME Myfile 'F:\User Folders\jzhou86\HSCT general cases';
+LIBNAME Redbook 'E:\Truven Data';
+LIBNAME WorkingD 'F:\User Folders\jzhou86\HSCT working directory';
+LIBNAME match 'F:\User Folders\jzhou86\HSCT working directory\hsctmatchingresults';
+
+DATA id_list;
+	SET workingD.analytical_cohort_plantyp_0830;
+RUN;
+*input matching matrix file;
+DATA matched_list;
+	SET match.dm2_auto;/*to be changed for allo_HCT*/
+RUN;
+*To repeat six times;
+
+PROC SORT DATA=matched_list;
+by tx x ;
+RUN;
+* match time interval from diagnosis to transplant;
+* Look for lagging time in autoHCT group;
+DATA auto_list;
+	SET id_list;
+	IF Group_type=1;/*to change for alloHCT*/
+	lagging_time = auto_HSCT_date -dx_date;/*to be changed for allo_HCT*/
+RUN;
+* Match the lagging time to the matched cohort to determine the mock index_date;
+PROC sql;
+	CREATE table id_list1 as
+	SELECT a.*,
+		b.lagging_time as lagging_time
+	FROM matched_list a
+	LEFT JOIN auto_list b
+	ON a.tx = b.enrolid;
+QUIT;
+* add back the dx time for the unexposed groups;
+PROC sql;
+	CREATE table id_list2 as
+	SELECT a.*,
+		b.dx_date as dx_date
+	FROM id_list1 a
+	LEFT JOIN id_list b
+	ON a.x = b.enrolid;
+QUIT;
+* calculate the pseudo_index date and the unexposed group format;
+DATA id_list3;
+	SET id_list2;
+	index_date=dx_date+lagging_time;
+	exposed=0;
+	RENAME X=enrolid;
+	DROP tx lagging_time;
+RUN;
+*construct the exposed group formate;
+PROC sql;
+	CREATE table id_list4 as
+	SELECT min(tx) as enrolid
+	FROM matched_list
+	GROUP BY tx;
+QUIT;
+*add back dx_date and transplant date for the exposed group;
+PROC sql;
+	CREATE table id_list5 as
+	SELECT a.*,
+		b.dx_date as dx_date,
+		b.auto_HSCT_date as index_date,/*to be changed for allo_HCT*/
+		1 as exposed
+	FROM id_list4 a
+	LEFT JOIN id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*combine the exposed and unexposed cohorts;
+DATA id_list6;
+	SET id_list3 id_list5;
+RUN;
+
+* Assess the continuous enrollment eligibility of the cohorts;
+* Check the enrollment status of patients with the insurance records;
+PROC SORT DATA=workingD.insurance_all;
+	by enrolid DTSTART ;
+RUN;
+
+PROC SORT DATA=id_list6;
+	by enrolid;
+RUN;
+
+DATA insur;
+MERGE id_list6 (in=a keep=enrolid index_date) workingD.insurance_all (in=b keep=enrolid DTSTART DTEND MEMDAYS );
+by enrolid;
+if a=1 and b=1;
+run;
+
+**Restrict the enroll records 6 months, 12 months, 18 months,...,36 months after the index date***;
+
+data enroll_post_6m enroll_post_12m enroll_post_18m enroll_post_24m enroll_post_30m enroll_post_36m;
+set  insur;
+if index_date <= DTSTART < index_date+210 then output enroll_post_6m;
+if index_date <= DTSTART <= index_date+390 then output enroll_post_12m;
+if index_date <= DTSTART <= index_date+570 then output enroll_post_18m;
+if index_date <= DTSTART <= index_date+750 then output enroll_post_24m;
+if index_date <= DTSTART <= index_date+930 then output enroll_post_30m;
+if index_date <= DTSTART <= index_date+1110 then output enroll_post_36m;
+run;
+%MACRO enroll (time, n, index);
+**Sum the enrollment days for each id***;
+proc summary nway data= enroll_post_&time.;
+var MEMDAYS;
+by enrolid;
+output out=enroll_&time._sum sum=enroll_day;
+run;
+
+/*Check the number of people who do not have enrollment files in the 12 months &time. to drug initiation*/
+
+data enroll_&time._merge;
+set enroll_&time._sum;
+if 0 <= enroll_day < &n. then &index.=0;
+if enroll_day >= &n. then &index.=1;
+run;
+
+
+%MEND;
+
+%enroll (6m, 180, postenroll_6m);
+%enroll (12m, 360, postenroll_12m);
+%enroll (18m, 540, postenroll_18m);
+%enroll (24m, 720, postenroll_24m);
+%enroll (30m, 900, postenroll_30m);
+%enroll (36m, 1080, postenroll_36m);
+
+* merge back the enrollment status;
+PROC sql;
+	CREATE table id_list7 as
+	SELECT a.*,
+		b.postenroll_6m as postenroll_6m
+	FROM id_list6 a
+	LEFT JOIN Enroll_6m_merge b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list8 as
+	SELECT a.*,
+		b.postenroll_12m as postenroll_12m
+	FROM id_list7 a
+	LEFT JOIN Enroll_12m_merge b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list9 as
+	SELECT a.*,
+		b.postenroll_18m as postenroll_18m
+	FROM id_list8 a
+	LEFT JOIN Enroll_18m_merge b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list10 as
+	SELECT a.*,
+		b.postenroll_24m as postenroll_24m
+	FROM id_list9 a
+	LEFT JOIN Enroll_24m_merge b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list11 as
+	SELECT a.*,
+		b.postenroll_30m as postenroll_30m
+	FROM id_list10 a
+	LEFT JOIN Enroll_30m_merge b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list12 as
+	SELECT a.*,
+		b.postenroll_36m as postenroll_36m
+	FROM id_list11 a
+	LEFT JOIN Enroll_36m_merge b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC FREQ DATA=id_list12;
+TABLE 	exposed*postenroll_6m 
+		exposed*postenroll_12m 
+		exposed*postenroll_18m 
+		exposed*postenroll_24m 
+		exposed*postenroll_30m 
+		exposed*postenroll_36m /nocol norow nopercent chisq;
+RUN;
+
+*assessment of the PDC over the T1-T6 period;
+*Cut the T1-T6 prescription data;
+*ADD new index date back to the files;
+PROC sql;
+	CREATE table all_drug_pres as
+	SELECT a.*,
+		b.index_date as index_date_new
+	FROM WorkingD.drug_pres a
+	LEFT JOIN id_list12 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+ *with 180 days look back period;
+DATA drug_T1;
+SET all_drug_pres;
+IF index_date_new ^=.;
+IF SVCDATE>=index_date_new-180 AND SVCDATE <=index_date_new+180;
+RUN;
+DATA drug_T2;
+SET all_drug_pres;
+IF index_date_new ^=.;
+IF SVCDATE>=index_date_new AND SVCDATE <=index_date_new+360;
+RUN;
+DATA drug_T3;
+SET all_drug_pres;
+IF index_date_new ^=.;
+IF SVCDATE>=index_date_new+180 AND SVCDATE <=index_date_new+540;
+RUN;
+DATA drug_T4;
+SET all_drug_pres;
+IF index_date_new ^=.;
+IF SVCDATE>=index_date_new+360 AND SVCDATE <=index_date_new+720;
+RUN;
+DATA drug_T5;
+SET all_drug_pres;
+IF index_date_new ^=.;
+IF SVCDATE>=index_date_new+540 AND SVCDATE <=index_date_new+900;
+RUN;
+DATA drug_T6;
+SET all_drug_pres;
+IF index_date_new ^=.;
+IF SVCDATE>=index_date_new+720 AND SVCDATE <=index_date_new+1080;
+RUN;
+
+PROC sql;
+	CREATE table drug_T1 as
+	SELECT a.*
+	FROM drug_T1 a
+	INNER JOIN myfile.redbook_oral_dm2_list b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table drug_T1 as
+	SELECT a.*
+	FROM drug_T1 a
+	INNER JOIN myfile.redbook_oral_dm2_list b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;PROC sql;
+	CREATE table drug_T2 as
+	SELECT a.*
+	FROM drug_T2 a
+	INNER JOIN myfile.redbook_oral_dm2_list b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;PROC sql;
+	CREATE table drug_T3 as
+	SELECT a.*
+	FROM drug_T3 a
+	INNER JOIN myfile.redbook_oral_dm2_list b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;PROC sql;
+	CREATE table drug_T4 as
+	SELECT a.*
+	FROM drug_T4 a
+	INNER JOIN myfile.redbook_oral_dm2_list b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;PROC sql;
+	CREATE table drug_T5 as
+	SELECT a.*
+	FROM drug_T5 a
+	INNER JOIN myfile.redbook_oral_dm2_list b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table drug_T6 as
+	SELECT a.*
+	FROM drug_T6 a
+	INNER JOIN myfile.redbook_oral_dm2_list b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+*assessment of the PDC over the T1-T6 period;
+*Cut the T1-T6 hospitalization datas;
+*ADD new index date back to the files;
+PROC sql;
+	CREATE table all_adm as
+	SELECT a.*,
+		b.index_date as index_date_new
+	FROM WorkingD.inpt_sum a
+	LEFT JOIN id_list12 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+ *with 180 days look back period, extract the admission files and convert to pdc file input form;
+%MACRO adm_adj (time,n);
+DATA inpt_sum_&time.;
+SET all_adm;
+IF index_date_new ^=.;
+IF ADMDATE>=index_date_new-360+&n.*180 AND ADMDATE <=index_date_new+&n.*180 AND DISDATE<=index_date_new+&n.*180;
+RUN;
+PROC sql;
+	CREATE table ipt_record as
+	SELECT a.enrolid as enrolid,
+			a.admdate as admdate,
+			a.disdate as disdate
+	FROM inpt_sum_&time. a
+	INNER JOIN id_list12 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA ipt_record;
+	SET ipt_record;
+	DAYSUPP=disdate-admdate+1;
+	RENAME admdate=SVCDATE;
+	KEEP enrolid SVCDATE DAYSUPP index_date_new;
+RUN;
+
+DATA Drug_adj_&time.;
+	SET Drug_&time. ipt_record;
+	KEEP enrolid SVCDATE DAYSUPP index_date_new;
+	RENAME index_date_new=index_date;
+RUN;
+%MEND;
+%adm_adj(t1, 1);
+%adm_adj(t2, 2);
+%adm_adj(t3, 3);
+%adm_adj(t4, 4);
+%adm_adj(t5, 5);
+%adm_adj(t6, 6);
+
+%MACRO pdc_adj (time,n);
+DATA Drug_adj_&time.;
+	SET Drug_adj_&time.;
+	IF SVCDATE =. THEN DELETE;
+RUN;
+proc sort data=Drug_adj_&time.;
+by enrolid SVCDATE;
+run;
+proc transpose data = Drug_adj_&time. out=fill_dates (drop=_name_) prefix = SVCDATE;
+by enrolid;
+var SVCDATE;
+run;
+proc transpose data = Drug_adj_&time. out=days_supply (drop=_name_) prefix = DAYSUPP;
+by enrolid;
+var DAYSUPP;
+run;
+data both;
+merge fill_dates days_supply;
+by enrolid;
+run; 
+
+PROC sql;
+	CREATE table both as
+	SELECT a.*,
+			b.index_date-360+&n.*180 as start_dt,
+			b.index_date+&n.*180 as end_dt
+	FROM both a
+	INNER JOIN id_list12 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+data pdc_&time.;
+set both;
+array daydummy(360) day1-day360;
+array filldates(*) SVCDATE1 - SVCDATE200;
+array days_supply(*) DAYSUPP1-DAYSUPP200;
+ do ii=1 to 360; daydummy(ii)=0;end;
+ do ii=1 to 360;
+ do i = 1 to dim(filldates) while (filldates(i) ne .);
+ if filldates(i)<= start_dt + ii -1 <= filldates(i)+days_supply(i)-1
+ then daydummy(ii)=1;
+ end;
+ end;
+drop i ii;
+dayscovered=sum(of day181 - day360);
+p_dayscovered=dayscovered/180;
+run;
+
+%MEND;
+%pdc_adj(t1, 1);
+%pdc_adj(t2, 2);
+%pdc_adj(t3, 3);
+%pdc_adj(t4, 4);
+%pdc_adj(t5, 5);
+%pdc_adj(t6, 6);
+
+*Merge back the pdc to the id_list (id_list12);
+PROC sql;
+	CREATE table id_list13 as
+	SELECT a.*,
+		b.p_dayscovered as pdc_t1
+	FROM id_list12 a
+	LEFT JOIN Pdc_t1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list14 as
+	SELECT a.*,
+		b.p_dayscovered as pdc_t2
+	FROM id_list13 a
+	LEFT JOIN Pdc_t2 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list15 as
+	SELECT a.*,
+		b.p_dayscovered as pdc_t3
+	FROM id_list14 a
+	LEFT JOIN Pdc_t3 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list16 as
+	SELECT a.*,
+		b.p_dayscovered as pdc_t4
+	FROM id_list15 a
+	LEFT JOIN Pdc_t4 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list17 as
+	SELECT a.*,
+		b.p_dayscovered as pdc_t5
+	FROM id_list16 a
+	LEFT JOIN Pdc_t5 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list18 as
+	SELECT a.*,
+		b.p_dayscovered as pdc_t6
+	FROM id_list17 a
+	LEFT JOIN Pdc_t6 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA workingD.auto_dm2_pdc;
+	SET id_list18;
+RUN;
+
+DATA id_list19;
+	SET id_list18;
+	IF pdc_t1=0 THEN pdc_t1=.;
+	IF pdc_t2=0 THEN pdc_t2=.;
+	IF pdc_t3=0 THEN pdc_t3=.;
+	IF pdc_t4=0 THEN pdc_t4=.;
+	IF pdc_t5=0 THEN pdc_t5=.;
+	IF pdc_t6=0 THEN pdc_t6=.;
+	IF postenroll_6m=0 THEN pdc_t1=.;
+	IF postenroll_12m=0 THEN pdc_t2=.;
+	IF postenroll_18m=0 THEN pdc_t3=.;
+	IF postenroll_24m=0 THEN pdc_t4=.;
+	IF postenroll_30m=0 THEN pdc_t5=.;
+	IF postenroll_36m=0 THEN pdc_t6=.;
+RUN;
+PROC MEANS DATA=id_list19;
+CLASS exposed;
+VAR pdc_t1 pdc_t2 pdc_t3 pdc_t4 pdc_t5 pdc_t6;
+RUN;
+
+PROC MEANS DATA=id_list19 MEDIAN P25 P75;
+CLASS exposed;
+VAR pdc_t1 pdc_t2 pdc_t3 pdc_t4 pdc_t5 pdc_t6;
+RUN;
+PROC SORT DATA=id_list19;
+by exposed pdc_t1 ;
+RUN;
+title 'Box Plot for PDC auto hypertension Output';
+proc boxplot data=id_list19;
+   plot pdc_t1*exposed;
+   inset min mean max stddev /
+      header = 'Overall Statistics'
+      pos    = tm;
+   insetgroup min max /
+      header = 'Extremes by period';
+run;
