@@ -1,0 +1,232 @@
+* assessment of baseline chronic conditions;
+LIBNAME Myfile 'F:\User Folders\jzhou86\HSCT general cases';
+LIBNAME Redbook 'E:\Truven Data';
+LIBNAME WorkingD 'F:\User Folders\jzhou86\HSCT working directory';
+LIBNAME match 'F:\User Folders\jzhou86\HSCT working directory\hsctmatchingresults';
+
+DATA id_list;
+	SET workingD.analytical_cohort_plantyp_0830;
+RUN;
+*select all services record 6 months before diagnosis;
+DATA all_ipt_sum;
+	SET workingD.inpt_sum;
+	DROP index_date;
+DATA all_ipt_svc;
+	SET workingD.inpt_svc;
+	DROP index_date;
+DATA all_opt_svc;
+	SET workingD.outpt_svc;
+	DROP index_date;
+RUN;
+DATA all_svc_record;
+	SET all_ipt_sum all_ipt_svc all_opt_svc;
+RUN;
+
+*Select the 6 months' prior claims records;
+PROC SQL;
+	CREATE table all_svc_record as
+	SELECT a.*,
+			b.dx_date as dx_date
+	FROM all_svc_record a
+	INNER JOIN id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA enroll_prior_6_mo;
+SET all_svc_record;
+IF (SVCDATE>=dx_date-180 AND SVCDATE <dx_date) OR (ADMDATE>=dx_date-180 AND ADMDATE <=dx_date AND DISDATE<=dx_date);
+RUN;
+
+
+DATA dm2_list;
+set enroll_prior_6_mo;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('250') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE myfile.dm2_list as
+SELECT min(enrolid) as enrolid,
+	1 as dm2
+FROM dm2_list
+GROUP BY enrolid;
+QUIT;
+
+DATA HPN_list;
+set enroll_prior_6_mo;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('401','402','403','404','405') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE myfile.HPN_list as
+SELECT min(enrolid) as enrolid,
+	1 as HPN
+FROM HPN_list
+GROUP BY enrolid;
+QUIT;
+
+DATA lipid_list;
+set enroll_prior_6_mo;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2720','2721','2722','2723','2724') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE myfile.lipid_list as
+SELECT min(enrolid) as enrolid,
+	1 as lipid
+FROM lipid_list
+GROUP BY enrolid;
+QUIT;
+*Merge back the files with chronic conditions;
+PROC sql;
+	CREATE table id_list1 as
+	SELECT a.*,
+		b.lipid as baseline_lipid
+	FROM id_list a
+	LEFT JOIN myfile.lipid_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list2 as
+	SELECT a.*,
+		b.HPN as baseline_hpn
+	FROM id_list1 a
+	LEFT JOIN myfile.HPN_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list3 as
+	SELECT a.*,
+		b.dm2 as baseline_dm2
+	FROM id_list2 a
+	LEFT JOIN myfile.dm2_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA workingD.baseline_cohort_0902;
+	SET id_list3;
+	IF baseline_dm2=. THEN baseline_dm2=0;
+	IF baseline_lipid=. THEN baseline_lipid=0;
+	IF baseline_hpn=. THEN baseline_hpn=0;
+RUN;
+*******Persistence assessment, End of baseline assessment;
+*Persistence assessment;
+DATA id_list;
+	SET workingD.allo_lipid_obs;/*to change the id-list names*/
+DATA all_pres;
+	SET workingD.drug_pres;
+	DROP index_date;
+DATA all_ipt_sum;
+	SET workingD.inpt_sum;
+	DROP index_date;
+RUN;
+
+PROC SQL;
+	CREATE table pres_record as
+	SELECT a.*,
+			b.dx_date as dx_date,
+			b.index_date as index_date
+	FROM all_pres a
+	INNER JOIN id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA pres_record;
+	SET pres_record;
+	IF SVCDATE>=index_date;
+RUN;
+PROC sql;
+	CREATE table pres_record as
+	SELECT a.*
+	FROM pres_record a
+	INNER JOIN myfile.redbook_oral_lipid_list b /*to change the medication list names*/
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+DATA pres_record;
+	SET pres_record;
+	KEEP enrolid SVCDATE DAYSUPP index_date;
+RUN;
+
+*convert the inpatient history data as prescription data;
+PROC SQL;
+	CREATE table all_ipt_sum as
+	SELECT a.*,
+			b.dx_date as dx_date,
+			b.index_date as index_date
+	FROM all_ipt_sum a
+	INNER JOIN id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA all_ipt_sum;
+	SET all_ipt_sum;
+	IF ADMDATE>=index_date;
+RUN;
+PROC sql;
+	CREATE table ipt_record as
+	SELECT a.enrolid as enrolid,
+			a.admdate as admdate,
+			a.disdate as disdate,
+			b.index_date as index_date
+	FROM all_ipt_sum a
+	INNER JOIN id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA ipt_record;
+	SET ipt_record;
+	DAYSUPP=disdate-admdate+1;
+	RENAME admdate=SVCDATE;
+	KEEP enrolid SVCDATE DAYSUPP index_date;
+RUN;
+
+DATA Drug_persistence;
+	SET pres_record ipt_record;
+	KEEP enrolid SVCDATE DAYSUPP index_date;
+	IF SVCDATE=. THEN DELETE;
+RUN;
+
+*Assessment of drug persistence;
+
+proc sort data=Drug_persistence;by enrolid SVCDATE;run;
+data pers;
+ set Drug_persistence;
+ by enrolid SVCDATE;
+ lstsply=SVCDATE+DAYSUPP;
+ gap=SVCDATE-lag(lstsply);
+ if first.enrolid=1 then epsd=1;
+ else if gap>=30 then epsd+1;/*to change the gap days allowed*/
+ format lstsply mmddyy10.;
+run;
+proc sql;
+	create table gap as
+	select distinct enrolid, 
+		max(epsd) as epsd
+ 	from pers
+ 	group by enrolid;
+quit;
+proc freq data=gap;tables epsd;run;
+proc sql;
+ create table persis as
+ select distinct enrolid, 
+	max(lstsply) as lstsply format mmddyy10.,
+ 	min((max(lstsply)-index_date), 1080) as days_therapy /*days to discountinuation*/
+ from pers  where epsd=1
+ group by enrolid;
+quit;
+proc freq data=persis;tables days_therapy;run; 
+DATA workingD.allo_lipid_persis_30;
+	SET persis;
+RUN;
