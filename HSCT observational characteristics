@@ -1,0 +1,1115 @@
+LIBNAME Myfile 'F:\User Folders\jzhou86\HSCT general cases';
+LIBNAME Redbook 'E:\Truven Data';
+LIBNAME WorkingD 'F:\User Folders\jzhou86\HSCT working directory';
+LIBNAME match 'F:\User Folders\jzhou86\HSCT working directory\hsctmatchingresults';
+*select drugs of immunosuppresser;
+DATA redbook;
+	SET redbook.redbook;
+RUN;
+
+DATA Immno_drug_NDC;
+	SET redbook;
+	WHERE 	THRGRDS contains 'Immunosuppressants' ;
+RUN;
+DATA Steroid_drug_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Bethamethasone' ) OR 
+			(GENNME contains 'Prednisone' ) OR
+			(GENNME contains 'Prednisolone' ) OR
+			(GENNME contains 'Methylprednisolone' ) OR
+			(GENNME contains 'Dexamethasone' ) OR
+			(GENNME contains 'Hydrocortisone' ) OR
+			(GENNME contains 'Cortisone' ) OR
+			(GENNME contains 'Budesonide' ) OR
+			(GENNME contains 'Beclometasone' );
+RUN;
+
+DATA myfile.immuno_drug_all;
+	SET Immno_drug_NDC Steroid_drug_NDC;
+RUN;
+*Subsetting data for drug utilization, ipt summary, outpatient service and inpatient services;
+*%MACRO subset (filename);
+DATA id_list;
+	SET workingD.auto_lipid_pdc;/*change id_list here*/
+RUN;
+DATA all_pres;
+	SET workingD.drug_pres;
+	DROP index_date;
+DATA all_ipt_sum;
+	SET workingD.inpt_sum;
+	DROP index_date;
+DATA all_ipt_svc;
+	SET workingD.inpt_svc;
+	DROP index_date;
+DATA all_opt_svc;
+	SET workingD.outpt_svc;
+	DROP index_date;
+RUN;
+DATA all_svc_record;
+	SET all_ipt_sum all_ipt_svc all_opt_svc;
+RUN;
+*subset pharmacy data;
+*select all patients with conditions;
+PROC SQL;
+	CREATE table pres_record as
+	SELECT a.*,
+			b.dx_date as dx_date,
+			b.index_date as index_date
+	FROM all_pres a
+	INNER JOIN id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+DATA pres_record_t0;
+SET pres_record;
+IF SVCDATE>=dx_date-180 AND SVCDATE <dx_date;
+RUN;
+DATA pres_record_tx;
+SET pres_record;
+IF SVCDATE>=dx_date AND SVCDATE <index_date;
+RUN;
+DATA pres_record_t1;
+SET pres_record;
+IF SVCDATE>=index_date AND SVCDATE <index_date+180;
+RUN;
+DATA pres_record_t2;
+SET pres_record;
+IF SVCDATE>=index_date+180 AND SVCDATE <index_date+360;
+RUN;
+DATA pres_record_t3;
+SET pres_record;
+IF SVCDATE>=index_date+360 AND SVCDATE <index_date+540;
+RUN;
+DATA pres_record_t4;
+SET pres_record;
+IF SVCDATE>=index_date+540 AND SVCDATE <index_date+720;
+RUN;
+DATA pres_record_t5;
+SET pres_record;
+IF SVCDATE>=index_date+720 AND SVCDATE <index_date+900;
+RUN;
+DATA pres_record_t6;
+SET pres_record;
+IF SVCDATE>=index_date+900 AND SVCDATE <index_date+1080;
+RUN;
+*Check injectable diabetes medication utlization;
+%MACRO pres_record (time);
+PROC SQL;
+	CREATE table pres_record as
+	SELECT a.*
+	FROM pres_record_&time. a
+	INNER JOIN myfile.redbook_insulin_list b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC SQL;
+	CREATE table pres_id_&time. as
+	SELECT min(enrolid) as enrolid,
+			1 as insulin_use
+	FROM pres_record
+	GROUP BY enrolid;
+QUIT;
+%MEND;
+%pres_record(t0);
+%pres_record(tx);
+%pres_record(t1);
+%pres_record(t2);
+%pres_record(t3);
+%pres_record(t4);
+%pres_record(t5);
+%pres_record(t6);
+*Combine insuline utilization to the ide_list;
+PROC sql;
+	CREATE table id_list2 as
+	SELECT a.*,
+		b.insulin_use as insulin_use_t0
+	FROM id_list a
+	LEFT JOIN Pres_id_t0 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list3 as
+	SELECT a.*,
+		b.insulin_use as insulin_use_tx
+	FROM id_list2 a
+	LEFT JOIN Pres_id_tx b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list4 as
+	SELECT a.*,
+		b.insulin_use as insulin_use_t1
+	FROM id_list3 a
+	LEFT JOIN Pres_id_t1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list5 as
+	SELECT a.*,
+		b.insulin_use as insulin_use_t2
+	FROM id_list4 a
+	LEFT JOIN Pres_id_t2 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list6 as
+	SELECT a.*,
+		b.insulin_use as insulin_use_t3
+	FROM id_list5 a
+	LEFT JOIN Pres_id_t3 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list7 as
+	SELECT a.*,
+		b.insulin_use as insulin_use_t4
+	FROM id_list6 a
+	LEFT JOIN Pres_id_t4 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list8 as
+	SELECT a.*,
+		b.insulin_use as insulin_use_t5
+	FROM id_list7 a
+	LEFT JOIN Pres_id_t5 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list9 as
+	SELECT a.*,
+		b.insulin_use as insulin_use_t6
+	FROM id_list8 a
+	LEFT JOIN Pres_id_t6 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*add use of immuno suppressants records;
+%MACRO pres_record (time);
+PROC SQL;
+	CREATE table pres_record as
+	SELECT a.*
+	FROM pres_record_&time. a
+	INNER JOIN myfile.immuno_drug_all b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC SQL;
+	CREATE table pres_id_&time. as
+	SELECT min(enrolid) as enrolid,
+			count(SVCDATE) as immuno_drug_num
+	FROM pres_record
+	GROUP BY enrolid;
+QUIT;
+%MEND;
+%pres_record(t0);
+%pres_record(tx);
+%pres_record(t1);
+%pres_record(t2);
+%pres_record(t3);
+%pres_record(t4);
+%pres_record(t5);
+%pres_record(t6);
+*Combine immunosuppressant utilization to the ide_list;
+PROC sql;
+	CREATE table id_list10 as
+	SELECT a.*,
+		b.immuno_drug_num as immuno_drug_num_t0
+	FROM id_list9 a
+	LEFT JOIN Pres_id_t0 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list12 as
+	SELECT a.*,
+		b.immuno_drug_num as immuno_drug_num_tx
+	FROM id_list10 a
+	LEFT JOIN Pres_id_tx b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list13 as
+	SELECT a.*,
+		b.immuno_drug_num as immuno_drug_num_t1
+	FROM id_list12 a
+	LEFT JOIN Pres_id_t1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list14 as
+	SELECT a.*,
+		b.immuno_drug_num as immuno_drug_num_t2
+	FROM id_list13 a
+	LEFT JOIN Pres_id_t2 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list15 as
+	SELECT a.*,
+		b.immuno_drug_num as immuno_drug_num_t3
+	FROM id_list14 a
+	LEFT JOIN Pres_id_t3 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list16 as
+	SELECT a.*,
+		b.immuno_drug_num as immuno_drug_num_t4
+	FROM id_list15 a
+	LEFT JOIN Pres_id_t4 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list17 as
+	SELECT a.*,
+		b.immuno_drug_num as immuno_drug_num_t5
+	FROM id_list16 a
+	LEFT JOIN Pres_id_t5 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list18 as
+	SELECT a.*,
+		b.immuno_drug_num as immuno_drug_num_t6
+	FROM id_list17 a
+	LEFT JOIN Pres_id_t6 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*add number of PCP visits;
+*PCP as defined as STDPROV as 200 MD, 204 internal medicine, 240 familay practice, 825 Nurse Practitioner, 845 Physician Assistant;
+PROC SQL;
+	CREATE table pres_record as
+	SELECT a.*,
+			b.dx_date as dx_date,
+			b.index_date as index_date
+	FROM all_opt_svc a
+	INNER JOIN id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+DATA pres_record;
+	SET pres_record;
+	IF STDPROV in: ('200',
+				'204','240',
+				'825','845') THEN PCP= 1;/*seen by PCP*/
+	IF PCP=1;
+RUN;
+*Subset PCP data into 8 time periods;
+DATA pres_record_t0;
+SET pres_record;
+IF SVCDATE>=dx_date-180 AND SVCDATE <dx_date;
+RUN;
+DATA pres_record_tx;
+SET pres_record;
+IF SVCDATE>=dx_date AND SVCDATE <index_date;
+RUN;
+DATA pres_record_t1;
+SET pres_record;
+IF SVCDATE>=index_date AND SVCDATE <index_date+180;
+RUN;
+DATA pres_record_t2;
+SET pres_record;
+IF SVCDATE>=index_date+180 AND SVCDATE <index_date+360;
+RUN;
+DATA pres_record_t3;
+SET pres_record;
+IF SVCDATE>=index_date+360 AND SVCDATE <index_date+540;
+RUN;
+DATA pres_record_t4;
+SET pres_record;
+IF SVCDATE>=index_date+540 AND SVCDATE <index_date+720;
+RUN;
+DATA pres_record_t5;
+SET pres_record;
+IF SVCDATE>=index_date+720 AND SVCDATE <index_date+900;
+RUN;
+DATA pres_record_t6;
+SET pres_record;
+IF SVCDATE>=index_date+900 AND SVCDATE <index_date+1080;
+RUN;
+*Check number of outpatient pcp visits in each time period;
+%MACRO pres_record (time);
+PROC SQL;
+	CREATE table svc_record as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as SVCDATE
+	FROM pres_record_&time.
+	GROUP BY enrolid, SVCDATE;
+QUIT;
+PROC SQL;
+	CREATE table pres_id_&time. as
+	SELECT min(enrolid) as enrolid,
+			count(SVCDATE) as PCP_SVC_num
+	FROM svc_record
+	GROUP BY enrolid;
+QUIT;
+%MEND;
+%pres_record(t0);
+%pres_record(tx);
+%pres_record(t1);
+%pres_record(t2);
+%pres_record(t3);
+%pres_record(t4);
+%pres_record(t5);
+%pres_record(t6);
+PROC sql;
+	CREATE table id_list19 as
+	SELECT a.*,
+		b.pcp_svc_num as pcp_svc_num_t0
+	FROM id_list18 a
+	LEFT JOIN Pres_id_t0 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list20 as
+	SELECT a.*,
+		b.pcp_svc_num as pcp_svc_num_tx
+	FROM id_list19 a
+	LEFT JOIN Pres_id_tx b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list21 as
+	SELECT a.*,
+		b.pcp_svc_num as pcp_svc_num_t1
+	FROM id_list20 a
+	LEFT JOIN Pres_id_t1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list22 as
+	SELECT a.*,
+		b.pcp_svc_num as pcp_svc_num_t2
+	FROM id_list21 a
+	LEFT JOIN Pres_id_t2 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list23 as
+	SELECT a.*,
+		b.pcp_svc_num as pcp_svc_num_t3
+	FROM id_list22 a
+	LEFT JOIN Pres_id_t3 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list24 as
+	SELECT a.*,
+		b.pcp_svc_num as pcp_svc_num_t4
+	FROM id_list23 a
+	LEFT JOIN Pres_id_t4 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list25 as
+	SELECT a.*,
+		b.pcp_svc_num as pcp_svc_num_t5
+	FROM id_list24 a
+	LEFT JOIN Pres_id_t5 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list26 as
+	SELECT a.*,
+		b.pcp_svc_num as pcp_svc_num_t6
+	FROM id_list25 a
+	LEFT JOIN Pres_id_t6 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*Add diagnosis codes of depression, malnutrition, baseline chronic conditions,malnutrition and digestive syndroms;
+*subset all services data;
+*select all patients with conditions;
+*GVHD;
+PROC SQL;
+	CREATE table pres_record as
+	SELECT a.*,
+			b.dx_date as dx_date,
+			b.index_date as index_date
+	FROM all_svc_record a
+	INNER JOIN id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA pres_record;
+	SET pres_record;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('2795') then GVHD=1;
+		end;
+	if GVHD=1;
+RUN;
+
+DATA pres_record_t0;
+SET pres_record;
+IF (SVCDATE>=dx_date-180 AND SVCDATE <dx_date) OR (ADMDATE>=dx_date-180 AND ADMDATE <=dx_date AND DISDATE<=dx_date);
+RUN;
+DATA pres_record_tx;
+SET pres_record;
+IF (SVCDATE>=dx_date AND SVCDATE <index_date) OR (ADMDATE>=dx_date AND ADMDATE <=index_date AND DISDATE<=index_date);
+RUN;
+DATA pres_record_t1;
+SET pres_record;
+IF (SVCDATE>=index_date AND SVCDATE <index_date+180) OR (ADMDATE>=index_date AND ADMDATE <=index_date+180 AND DISDATE<=index_date+180);
+RUN;
+DATA pres_record_t2;
+SET pres_record;
+IF (SVCDATE>=index_date+180 AND SVCDATE <index_date+360) OR (ADMDATE>=index_date+180 AND ADMDATE <=index_date+360 AND DISDATE<=index_date+360);
+RUN;
+DATA pres_record_t3;
+SET pres_record;
+IF (SVCDATE>=index_date+360 AND SVCDATE <index_date+540) OR (ADMDATE>=index_date+360 AND ADMDATE <=index_date+540 AND DISDATE<=index_date+540);
+RUN;
+DATA pres_record_t4;
+SET pres_record;
+IF (SVCDATE>=index_date+540 AND SVCDATE <index_date+720) OR (ADMDATE>=index_date+540 AND ADMDATE <=index_date+720 AND DISDATE<=index_date+720);
+RUN;
+DATA pres_record_t5;
+SET pres_record;
+IF (SVCDATE>=index_date+720 AND SVCDATE <index_date+900) OR (ADMDATE>=index_date+720 AND ADMDATE <=index_date+900 AND DISDATE<=index_date+900);
+RUN;
+DATA pres_record_t6;
+SET pres_record;
+IF (SVCDATE>=index_date+900 AND SVCDATE <index_date+1080) OR (ADMDATE>=index_date+900 AND ADMDATE <=index_date+1080 AND DISDATE<=index_date+1080);
+RUN;
+*Check GVHD occurrence;
+%MACRO pres_record (time);
+PROC SQL;
+	CREATE table pres_id_&time. as
+	SELECT min(enrolid) as enrolid,
+			1 as GVHD
+	FROM pres_record_&time.
+	GROUP BY enrolid;
+QUIT;
+%MEND;
+%pres_record(t0);
+%pres_record(tx);
+%pres_record(t1);
+%pres_record(t2);
+%pres_record(t3);
+%pres_record(t4);
+%pres_record(t5);
+%pres_record(t6);
+PROC sql;
+	CREATE table id_list27 as
+	SELECT a.*,
+		b.GVHD as GVHD_t0
+	FROM id_list26 a
+	LEFT JOIN Pres_id_t0 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list28 as
+	SELECT a.*,
+		b.GVHD as GVHD_tx
+	FROM id_list27 a
+	LEFT JOIN Pres_id_tx b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list29 as
+	SELECT a.*,
+		b.GVHD as GVHD_t1
+	FROM id_list28 a
+	LEFT JOIN Pres_id_t1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list30 as
+	SELECT a.*,
+		b.GVHD as GVHD_t2
+	FROM id_list29 a
+	LEFT JOIN Pres_id_t2 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list31 as
+	SELECT a.*,
+		b.GVHD as GVHD_t3
+	FROM id_list30 a
+	LEFT JOIN Pres_id_t3 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list32 as
+	SELECT a.*,
+		b.GVHD as GVHD_t4
+	FROM id_list31 a
+	LEFT JOIN Pres_id_t4 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list33 as
+	SELECT a.*,
+		b.GVHD as GVHD_t5
+	FROM id_list32 a
+	LEFT JOIN Pres_id_t5 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list34 as
+	SELECT a.*,
+		b.GVHD as GVHD_t6
+	FROM id_list33 a
+	LEFT JOIN Pres_id_t6 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*Depression;
+PROC SQL;
+	CREATE table pres_record as
+	SELECT a.*,
+			b.dx_date as dx_date,
+			b.index_date as index_date
+	FROM all_svc_record a
+	INNER JOIN id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA pres_record;
+	SET pres_record;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('296', '298', '3004', '3090', '3091', '311') then Depression=1;
+		end;
+	if Depression=1;
+RUN;
+
+DATA pres_record_t0;
+SET pres_record;
+IF (SVCDATE>=dx_date-180 AND SVCDATE <dx_date) OR (ADMDATE>=dx_date-180 AND ADMDATE <=dx_date AND DISDATE<=dx_date);
+RUN;
+DATA pres_record_tx;
+SET pres_record;
+IF (SVCDATE>=dx_date AND SVCDATE <index_date) OR (ADMDATE>=dx_date AND ADMDATE <=index_date AND DISDATE<=index_date);
+RUN;
+DATA pres_record_t1;
+SET pres_record;
+IF (SVCDATE>=index_date AND SVCDATE <index_date+180) OR (ADMDATE>=index_date AND ADMDATE <=index_date+180 AND DISDATE<=index_date+180);
+RUN;
+DATA pres_record_t2;
+SET pres_record;
+IF (SVCDATE>=index_date+180 AND SVCDATE <index_date+360) OR (ADMDATE>=index_date+180 AND ADMDATE <=index_date+360 AND DISDATE<=index_date+360);
+RUN;
+DATA pres_record_t3;
+SET pres_record;
+IF (SVCDATE>=index_date+360 AND SVCDATE <index_date+540) OR (ADMDATE>=index_date+360 AND ADMDATE <=index_date+540 AND DISDATE<=index_date+540);
+RUN;
+DATA pres_record_t4;
+SET pres_record;
+IF (SVCDATE>=index_date+540 AND SVCDATE <index_date+720) OR (ADMDATE>=index_date+540 AND ADMDATE <=index_date+720 AND DISDATE<=index_date+720);
+RUN;
+DATA pres_record_t5;
+SET pres_record;
+IF (SVCDATE>=index_date+720 AND SVCDATE <index_date+900) OR (ADMDATE>=index_date+720 AND ADMDATE <=index_date+900 AND DISDATE<=index_date+900);
+RUN;
+DATA pres_record_t6;
+SET pres_record;
+IF (SVCDATE>=index_date+900 AND SVCDATE <index_date+1080) OR (ADMDATE>=index_date+900 AND ADMDATE <=index_date+1080 AND DISDATE<=index_date+1080);
+RUN;
+*Check Depression occurrence;
+%MACRO pres_record (time);
+PROC SQL;
+	CREATE table pres_id_&time. as
+	SELECT min(enrolid) as enrolid,
+			1 as Depression
+	FROM pres_record_&time.
+	GROUP BY enrolid;
+QUIT;
+%MEND;
+%pres_record(t0);
+%pres_record(tx);
+%pres_record(t1);
+%pres_record(t2);
+%pres_record(t3);
+%pres_record(t4);
+%pres_record(t5);
+%pres_record(t6);
+PROC sql;
+	CREATE table id_list35 as
+	SELECT a.*,
+		b.Depression as Depression_t0
+	FROM id_list34 a
+	LEFT JOIN Pres_id_t0 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list36 as
+	SELECT a.*,
+		b.Depression as Depression_tx
+	FROM id_list35 a
+	LEFT JOIN Pres_id_tx b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list37 as
+	SELECT a.*,
+		b.Depression as Depression_t1
+	FROM id_list36 a
+	LEFT JOIN Pres_id_t1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list38 as
+	SELECT a.*,
+		b.Depression as Depression_t2
+	FROM id_list37 a
+	LEFT JOIN Pres_id_t2 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list39 as
+	SELECT a.*,
+		b.Depression as Depression_t3
+	FROM id_list38 a
+	LEFT JOIN Pres_id_t3 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list40 as
+	SELECT a.*,
+		b.Depression as Depression_t4
+	FROM id_list39 a
+	LEFT JOIN Pres_id_t4 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list41 as
+	SELECT a.*,
+		b.Depression as Depression_t5
+	FROM id_list40 a
+	LEFT JOIN Pres_id_t5 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list42 as
+	SELECT a.*,
+		b.Depression as Depression_t6
+	FROM id_list41 a
+	LEFT JOIN Pres_id_t6 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*Malnutrition;
+PROC SQL;
+	CREATE table pres_record as
+	SELECT a.*,
+			b.dx_date as dx_date,
+			b.index_date as index_date
+	FROM all_svc_record a
+	INNER JOIN id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA pres_record;
+	SET pres_record;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('78321','7837','7994', '7830', '78322', '2639') then Malnutrition=1;
+		end;
+	if Malnutrition=1;
+RUN;
+
+DATA pres_record_t0;
+SET pres_record;
+IF (SVCDATE>=dx_date-180 AND SVCDATE <dx_date) OR (ADMDATE>=dx_date-180 AND ADMDATE <=dx_date AND DISDATE<=dx_date);
+RUN;
+DATA pres_record_tx;
+SET pres_record;
+IF (SVCDATE>=dx_date AND SVCDATE <index_date) OR (ADMDATE>=dx_date AND ADMDATE <=index_date AND DISDATE<=index_date);
+RUN;
+DATA pres_record_t1;
+SET pres_record;
+IF (SVCDATE>=index_date AND SVCDATE <index_date+180) OR (ADMDATE>=index_date AND ADMDATE <=index_date+180 AND DISDATE<=index_date+180);
+RUN;
+DATA pres_record_t2;
+SET pres_record;
+IF (SVCDATE>=index_date+180 AND SVCDATE <index_date+360) OR (ADMDATE>=index_date+180 AND ADMDATE <=index_date+360 AND DISDATE<=index_date+360);
+RUN;
+DATA pres_record_t3;
+SET pres_record;
+IF (SVCDATE>=index_date+360 AND SVCDATE <index_date+540) OR (ADMDATE>=index_date+360 AND ADMDATE <=index_date+540 AND DISDATE<=index_date+540);
+RUN;
+DATA pres_record_t4;
+SET pres_record;
+IF (SVCDATE>=index_date+540 AND SVCDATE <index_date+720) OR (ADMDATE>=index_date+540 AND ADMDATE <=index_date+720 AND DISDATE<=index_date+720);
+RUN;
+DATA pres_record_t5;
+SET pres_record;
+IF (SVCDATE>=index_date+720 AND SVCDATE <index_date+900) OR (ADMDATE>=index_date+720 AND ADMDATE <=index_date+900 AND DISDATE<=index_date+900);
+RUN;
+DATA pres_record_t6;
+SET pres_record;
+IF (SVCDATE>=index_date+900 AND SVCDATE <index_date+1080) OR (ADMDATE>=index_date+900 AND ADMDATE <=index_date+1080 AND DISDATE<=index_date+1080);
+RUN;
+*Check Malnutrition occurrence;
+%MACRO pres_record (time);
+PROC SQL;
+	CREATE table pres_id_&time. as
+	SELECT min(enrolid) as enrolid,
+			1 as Malnutrition
+	FROM pres_record_&time.
+	GROUP BY enrolid;
+QUIT;
+%MEND;
+%pres_record(t0);
+%pres_record(tx);
+%pres_record(t1);
+%pres_record(t2);
+%pres_record(t3);
+%pres_record(t4);
+%pres_record(t5);
+%pres_record(t6);
+PROC sql;
+	CREATE table id_list43 as
+	SELECT a.*,
+		b.Malnutrition as Malnutrition_t0
+	FROM id_list42 a
+	LEFT JOIN Pres_id_t0 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list44 as
+	SELECT a.*,
+		b.Malnutrition as Malnutrition_tx
+	FROM id_list43 a
+	LEFT JOIN Pres_id_tx b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list45 as
+	SELECT a.*,
+		b.Malnutrition as Malnutrition_t1
+	FROM id_list44 a
+	LEFT JOIN Pres_id_t1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list46 as
+	SELECT a.*,
+		b.Malnutrition as Malnutrition_t2
+	FROM id_list45 a
+	LEFT JOIN Pres_id_t2 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list47 as
+	SELECT a.*,
+		b.Malnutrition as Malnutrition_t3
+	FROM id_list46 a
+	LEFT JOIN Pres_id_t3 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list48 as
+	SELECT a.*,
+		b.Malnutrition as Malnutrition_t4
+	FROM id_list47 a
+	LEFT JOIN Pres_id_t4 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list49 as
+	SELECT a.*,
+		b.Malnutrition as Malnutrition_t5
+	FROM id_list48 a
+	LEFT JOIN Pres_id_t5 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list50 as
+	SELECT a.*,
+		b.Malnutrition as Malnutrition_t6
+	FROM id_list49 a
+	LEFT JOIN Pres_id_t6 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*nau_eme_dia;
+PROC SQL;
+	CREATE table pres_record as
+	SELECT a.*,
+			b.dx_date as dx_date,
+			b.index_date as index_date
+	FROM all_svc_record a
+	INNER JOIN id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA pres_record;
+	SET pres_record;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('78791','5645','7870') then nau_eme_dia=1;
+		end;
+	if nau_eme_dia=1;
+RUN;
+
+DATA pres_record_t0;
+SET pres_record;
+IF (SVCDATE>=dx_date-180 AND SVCDATE <dx_date) OR (ADMDATE>=dx_date-180 AND ADMDATE <=dx_date AND DISDATE<=dx_date);
+RUN;
+DATA pres_record_tx;
+SET pres_record;
+IF (SVCDATE>=dx_date AND SVCDATE <index_date) OR (ADMDATE>=dx_date AND ADMDATE <=index_date AND DISDATE<=index_date);
+RUN;
+DATA pres_record_t1;
+SET pres_record;
+IF (SVCDATE>=index_date AND SVCDATE <index_date+180) OR (ADMDATE>=index_date AND ADMDATE <=index_date+180 AND DISDATE<=index_date+180);
+RUN;
+DATA pres_record_t2;
+SET pres_record;
+IF (SVCDATE>=index_date+180 AND SVCDATE <index_date+360) OR (ADMDATE>=index_date+180 AND ADMDATE <=index_date+360 AND DISDATE<=index_date+360);
+RUN;
+DATA pres_record_t3;
+SET pres_record;
+IF (SVCDATE>=index_date+360 AND SVCDATE <index_date+540) OR (ADMDATE>=index_date+360 AND ADMDATE <=index_date+540 AND DISDATE<=index_date+540);
+RUN;
+DATA pres_record_t4;
+SET pres_record;
+IF (SVCDATE>=index_date+540 AND SVCDATE <index_date+720) OR (ADMDATE>=index_date+540 AND ADMDATE <=index_date+720 AND DISDATE<=index_date+720);
+RUN;
+DATA pres_record_t5;
+SET pres_record;
+IF (SVCDATE>=index_date+720 AND SVCDATE <index_date+900) OR (ADMDATE>=index_date+720 AND ADMDATE <=index_date+900 AND DISDATE<=index_date+900);
+RUN;
+DATA pres_record_t6;
+SET pres_record;
+IF (SVCDATE>=index_date+900 AND SVCDATE <index_date+1080) OR (ADMDATE>=index_date+900 AND ADMDATE <=index_date+1080 AND DISDATE<=index_date+1080);
+RUN;
+*Check nau_eme_dia occurrence;
+%MACRO pres_record (time);
+PROC SQL;
+	CREATE table pres_id_&time. as
+	SELECT min(enrolid) as enrolid,
+			1 as nau_eme_dia
+	FROM pres_record_&time.
+	GROUP BY enrolid;
+QUIT;
+%MEND;
+%pres_record(t0);
+%pres_record(tx);
+%pres_record(t1);
+%pres_record(t2);
+%pres_record(t3);
+%pres_record(t4);
+%pres_record(t5);
+%pres_record(t6);
+PROC sql;
+	CREATE table id_list51 as
+	SELECT a.*,
+		b.nau_eme_dia as nau_eme_dia_t0
+	FROM id_list50 a
+	LEFT JOIN Pres_id_t0 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list52 as
+	SELECT a.*,
+		b.nau_eme_dia as nau_eme_dia_tx
+	FROM id_list51 a
+	LEFT JOIN Pres_id_tx b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list53 as
+	SELECT a.*,
+		b.nau_eme_dia as nau_eme_dia_t1
+	FROM id_list52 a
+	LEFT JOIN Pres_id_t1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list54 as
+	SELECT a.*,
+		b.nau_eme_dia as nau_eme_dia_t2
+	FROM id_list53 a
+	LEFT JOIN Pres_id_t2 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list55 as
+	SELECT a.*,
+		b.nau_eme_dia as nau_eme_dia_t3
+	FROM id_list54 a
+	LEFT JOIN Pres_id_t3 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list56 as
+	SELECT a.*,
+		b.nau_eme_dia as nau_eme_dia_t4
+	FROM id_list55 a
+	LEFT JOIN Pres_id_t4 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list57 as
+	SELECT a.*,
+		b.nau_eme_dia as nau_eme_dia_t5
+	FROM id_list56 a
+	LEFT JOIN Pres_id_t5 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list58 as
+	SELECT a.*,
+		b.nau_eme_dia as nau_eme_dia_t6
+	FROM id_list57 a
+	LEFT JOIN Pres_id_t6 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*Assement of adjusted OOP medical costs from admission;
+DATA all_record;
+	SET all_ipt_sum all_opt_svc All_pres;
+RUN;
+PROC SQL;
+	CREATE table pres_record as
+	SELECT a.*,
+			b.dx_date as dx_date,
+			b.index_date as index_date
+	FROM all_record a
+	INNER JOIN id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*calculate total adjusted costs for each claims;
+DATA pres_record;
+	SET pres_record;
+	YEAR1=YEAR(SVCDATE);
+	YEAR2=YEAR(DISDATE);
+	IF YEAR1 = 2009 THEN rate=1.1589;
+	IF YEAR1 = 2010 THEN rate=1.1206;
+	IF YEAR1 = 2011 THEN rate=1.0876;
+	IF YEAR1 = 2012 THEN rate=1.0490;
+	IF YEAR1 = 2013 THEN rate=1.0239;
+	IF YEAR1 = 2014 THEN rate=1;
+	IF YEAR2 = 2009 THEN rate=1.1589;
+	IF YEAR2 = 2010 THEN rate=1.1206;
+	IF YEAR2 = 2011 THEN rate=1.0876;
+	IF YEAR2 = 2012 THEN rate=1.0490;
+	IF YEAR2 = 2013 THEN rate=1.0239;
+	IF YEAR2 = 2014 THEN rate=1;
+	IF rate =. THEN delete;
+	IF TOTCOINS =. THEN TOTCOINS = 0;
+	IF TOTCOPAY =. THEN TOTCOPAY = 0;
+	IF TOTDED =. THEN TOTDED = 0;
+	IF COINS =. THEN COINS = 0;
+	IF COPAY =. THEN COPAY = 0;
+	IF DEDUCT =. THEN DEDUCT = 0;
+	total_OOP=TOTCOINS+TOTCOPAY+TOTDED+COINS+COPAY+DEDUCT;
+	adj_total_OOP=total_OOP*rate;
+RUN;
+DATA pres_record_t0;
+SET pres_record;
+IF (SVCDATE>=dx_date-180 AND SVCDATE <dx_date) OR (DISDATE>=dx_date-180 AND DISDATE<=dx_date);
+RUN;
+DATA pres_record_tx;
+SET pres_record;
+IF (SVCDATE>=dx_date AND SVCDATE <index_date) OR (DISDATE>=dx_date AND DISDATE<=index_date);
+RUN;
+DATA pres_record_t1;
+SET pres_record;
+IF (SVCDATE>=index_date AND SVCDATE <index_date+180) OR (DISDATE>=index_date AND DISDATE<=index_date+180);
+RUN;
+DATA pres_record_t2;
+SET pres_record;
+IF (SVCDATE>=index_date+180 AND SVCDATE <index_date+360) OR (DISDATE>=index_date+180 AND DISDATE<=index_date+360);
+RUN;
+DATA pres_record_t3;
+SET pres_record;
+IF (SVCDATE>=index_date+360 AND SVCDATE <index_date+540) OR (DISDATE>=index_date+360 AND DISDATE<=index_date+540);
+RUN;
+DATA pres_record_t4;
+SET pres_record;
+IF (SVCDATE>=index_date+540 AND SVCDATE <index_date+720) OR (DISDATE>=index_date+540 AND DISDATE<=index_date+720);
+RUN;
+DATA pres_record_t5;
+SET pres_record;
+IF (SVCDATE>=index_date+720 AND SVCDATE <index_date+900) OR (DISDATE>=index_date+720 AND DISDATE<=index_date+900);
+RUN;
+DATA pres_record_t6;
+SET pres_record;
+IF (SVCDATE>=index_date+900 AND SVCDATE <index_date+1080) OR (DISDATE>=index_date+900 AND DISDATE<=index_date+1080);
+RUN;
+*Check adj_tot_oop occurrence;
+%MACRO pres_record (time);
+PROC SQL;
+	CREATE table pres_id_&time. as
+	SELECT min(enrolid) as enrolid,
+			sum(adj_total_OOP) as adj_tot_oop
+	FROM pres_record_&time.
+	GROUP BY enrolid;
+QUIT;
+%MEND;
+%pres_record(t0);
+%pres_record(tx);
+%pres_record(t1);
+%pres_record(t2);
+%pres_record(t3);
+%pres_record(t4);
+%pres_record(t5);
+%pres_record(t6);
+PROC sql;
+	CREATE table id_list59 as
+	SELECT a.*,
+		b.adj_tot_oop as adj_tot_oop_t0
+	FROM id_list58 a
+	LEFT JOIN Pres_id_t0 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list60 as
+	SELECT a.*,
+		b.adj_tot_oop as adj_tot_oop_tx
+	FROM id_list59 a
+	LEFT JOIN Pres_id_tx b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list61 as
+	SELECT a.*,
+		b.adj_tot_oop as adj_tot_oop_t1
+	FROM id_list60 a
+	LEFT JOIN Pres_id_t1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list62 as
+	SELECT a.*,
+		b.adj_tot_oop as adj_tot_oop_t2
+	FROM id_list61 a
+	LEFT JOIN Pres_id_t2 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list63 as
+	SELECT a.*,
+		b.adj_tot_oop as adj_tot_oop_t3
+	FROM id_list62 a
+	LEFT JOIN Pres_id_t3 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list64 as
+	SELECT a.*,
+		b.adj_tot_oop as adj_tot_oop_t4
+	FROM id_list63 a
+	LEFT JOIN Pres_id_t4 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list65 as
+	SELECT a.*,
+		b.adj_tot_oop as adj_tot_oop_t5
+	FROM id_list64 a
+	LEFT JOIN Pres_id_t5 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list66 as
+	SELECT a.*,
+		b.adj_tot_oop as adj_tot_oop_t6
+	FROM id_list65 a
+	LEFT JOIN Pres_id_t6 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA workingD.autolipid_obs;
+	SET id_list66;
+RUN;
