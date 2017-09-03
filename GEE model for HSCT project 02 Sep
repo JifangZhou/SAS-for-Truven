@@ -1,0 +1,167 @@
+LIBNAME workingD "C:\Users\jzhou86\Documents\HSCT project\Id list baseline outcomes and explanatory";
+*prepare the files for GEE models;
+*auto_hpn file preparation;
+DATA id_list;
+	SET workingD.auto_hpn_obs;
+DATA baseline_conditions;
+	SET workingD.baseline_cohort_0902;
+DATA pdc;
+	SET workingD.auto_hpn_persis_60;
+RUN;
+*add back pdc information back;
+PROC SQL;
+	CREATE table id_list1 as
+	SELECT a.*,
+		b.days_therapy as days_therapy
+	FROM id_list a
+	LEFT JOIN pdc b
+	ON a.enrolid = b.enrolid;
+QUIT;
+DATA id_list2;
+	SET id_list1;
+	IF days_therapy=. THEN days_therapy=0;
+	IF (days_therapy<180 OR postenroll_6m =0) THEN pdc_t1=.;
+	IF (days_therapy<360 OR postenroll_12m =0) THEN pdc_t2=.;
+	IF (days_therapy<540 OR postenroll_18m =0) THEN pdc_t3=.;
+	IF (days_therapy<720 OR postenroll_24m =0) THEN pdc_t4=.;
+	IF (days_therapy<900 OR postenroll_30m =0) THEN pdc_t5=.;
+	IF (days_therapy<1080 OR postenroll_36m =0) THEN pdc_t6=.;
+	IF insulin_use_t0=. THEN insulin_use_t0=1;
+	IF insulin_use_t1=. THEN insulin_use_t1=1;
+	IF insulin_use_t2=. THEN insulin_use_t2=1;
+	IF insulin_use_t3=. THEN insulin_use_t3=1;
+	IF insulin_use_t4=. THEN insulin_use_t4=1;
+	IF insulin_use_t5=. THEN insulin_use_t5=1;
+	IF insulin_use_t6=. THEN insulin_use_t6=1;
+	OOP_cat=0;
+	IF adj_tot_oop_tx>=2500 THEN OOP_cat=1;
+	RUN;
+
+*prepare files for GEE models;
+DATA file_t1;
+	SET id_list2;
+	KEEP enrolid exposed OOP_cat pdc_t1 insulin_use_t1 pcp_svc_num_t1 adj_tot_oop_t1 Depression_t1 Malnutrition_t1 nau_eme_dia_t1 time;
+	RENAME pdc_t1=pdc;
+	RENAME insulin_use_t1=insulin_use;
+	RENAME pcp_svc_num_t1=pcp_svc_num;
+	RENAME adj_tot_oop_t1=adj_tot_oop;
+	RENAME Depression_t1=Depression;
+	RENAME Malnutrition_t1=Malnutrition;
+	RENAME nau_eme_dia_t1=nau_eme_dia;
+	Time=1;
+RUN;
+DATA file_t2;
+	SET id_list2;
+	KEEP enrolid exposed OOP_cat pdc_t2 insulin_use_t2 pcp_svc_num_t2 adj_tot_oop_t2 Depression_t2 Malnutrition_t2 nau_eme_dia_t2 time;
+	RENAME pdc_t2=pdc;
+	RENAME insulin_use_t2=insulin_use;
+	RENAME pcp_svc_num_t2=pcp_svc_num;
+	RENAME adj_tot_oop_t2=adj_tot_oop;
+	RENAME Depression_t2=Depression;
+	RENAME Malnutrition_t2=Malnutrition;
+	RENAME nau_eme_dia_t2=nau_eme_dia;
+	Time=2;
+RUN;
+DATA file_t3;
+	SET id_list2;
+	KEEP enrolid exposed OOP_cat pdc_t3 insulin_use_t3 pcp_svc_num_t3 adj_tot_oop_t3 Depression_t3 Malnutrition_t3 nau_eme_dia_t3 time;
+	RENAME pdc_t3=pdc;
+	RENAME insulin_use_t3=insulin_use;
+	RENAME pcp_svc_num_t3=pcp_svc_num;
+	RENAME adj_tot_oop_t3=adj_tot_oop;
+	RENAME Depression_t3=Depression;
+	RENAME Malnutrition_t3=Malnutrition;
+	RENAME nau_eme_dia_t3=nau_eme_dia;
+	Time=3;
+RUN;
+DATA file_t4;
+	SET id_list2;
+	KEEP enrolid exposed OOP_cat pdc_t4 insulin_use_t4 pcp_svc_num_t4 adj_tot_oop_t4 Depression_t4 Malnutrition_t4 nau_eme_dia_t4 time;
+	RENAME pdc_t4=pdc;
+	RENAME insulin_use_t4=insulin_use;
+	RENAME pcp_svc_num_t4=pcp_svc_num;
+	RENAME adj_tot_oop_t4=adj_tot_oop;
+	RENAME Depression_t4=Depression;
+	RENAME Malnutrition_t4=Malnutrition;
+	RENAME nau_eme_dia_t4=nau_eme_dia;
+	Time=4;
+RUN;
+DATA file_t5;
+	SET id_list2;
+	KEEP enrolid exposed OOP_cat pdc_t5 insulin_use_t5 pcp_svc_num_t5 adj_tot_oop_t5 Depression_t5 Malnutrition_t5 nau_eme_dia_t5 time;
+	RENAME pdc_t5=pdc;
+	RENAME insulin_use_t5=insulin_use;
+	RENAME pcp_svc_num_t5=pcp_svc_num;
+	RENAME adj_tot_oop_t5=adj_tot_oop;
+	RENAME Depression_t5=Depression;
+	RENAME Malnutrition_t5=Malnutrition;
+	RENAME nau_eme_dia_t5=nau_eme_dia;
+	Time=5;
+RUN;
+DATA file_t6;
+	SET id_list2;
+	KEEP enrolid exposed OOP_cat pdc_t6 insulin_use_t6 pcp_svc_num_t6 adj_tot_oop_t6 Depression_t6 Malnutrition_t6 nau_eme_dia_t6 time;
+	RENAME pdc_t6=pdc;
+	RENAME insulin_use_t6=insulin_use;
+	RENAME pcp_svc_num_t6=pcp_svc_num;
+	RENAME adj_tot_oop_t6=adj_tot_oop;
+	RENAME Depression_t6=Depression;
+	RENAME Malnutrition_t6=Malnutrition;
+	RENAME nau_eme_dia_t6=nau_eme_dia;
+	Time=6;
+RUN;
+DATA analytical_file;
+	SET file_t1 file_t2 file_t3 file_t4 file_t5 file_t6;
+	IF pcp_svc_num=. THEN pcp_cat=0;
+	IF 1<=pcp_svc_num<=3 THEN pcp_cat=1;
+	IF 4<=pcp_svc_num THEN pcp_cat=2;
+	IF insulin_use=. THEN insulin_use=0;
+	IF Malnutrition=. THEN Malnutrition=0;
+	IF Depression=. THEN Depression=0;
+	IF nau_eme_dia=. THEN nau_eme_dia=0;
+	IF adj_tot_oop<1000 OR adj_tot_oop=. THEN period_oop_cat=0;
+	IF adj_tot_oop>=1000  THEN period_oop_cat=1;
+	DROP pcp_svc_num adj_tot_oop;
+RUN;
+*add back baseline condition information;
+PROC SQL;
+	CREATE table analytical_file_gee as
+	SELECT a.*,
+		b.baseline_lipid as baseline_lipid,
+		b.baseline_hpn as baseline_hpn,
+		b.baseline_dm2 as baseline_dm2,
+		b.age as age,
+		b.sex as sex,
+		b.CCI_NCI_cat as CCI_NCI_cat,
+		b.type_dx as type_dx,
+		b.hpn_baseline_pdc as hpn_baseline_pdc
+	FROM analytical_file a
+	LEFT JOIN baseline_conditions b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+* relevel the PDC threshold;
+DATA analytical_file_gee;
+	SET analytical_file_gee;
+	IF hpn_baseline_pdc<0.80 THEN baseline_pdc=0;
+	IF hpn_baseline_pdc>=0.80 THEN baseline_pdc=1;
+	IF pdc=. THEN pdc_cat=.;
+	IF pdc<0.80 THEN pdc_cat=0;
+	IF pdc>=0.80 THEN pdc_cat=1;
+	DROP hpn_baseline_pdc pdc;
+RUN;
+
+PROC GENMOD DATA=analytical_file_gee DESCENDING;
+	CLASS enrolid sex baseline_pdc pdc_cat CCI_NCI_cat type_dx pcp_cat time;
+	MODEL pdc_cat = age sex baseline_pdc type_dx exposed baseline_lipid baseline_dm2 CCI_NCI_cat time OOP_cat period_oop_cat insulin_use Malnutrition Depression nau_eme_dia/LINK =logit
+	DIST = BINOMIAL TYPE3;
+	REPEATED subject=enrolid / TYPE = EXCH COVB CORRW ;
+RUN;
+
+
+
+PROC MEANS DATA=analytical_file MEDIAN P25 P75;
+CLASS time exposed;
+	VAR pdc;
+RUN;
+
