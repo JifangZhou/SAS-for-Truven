@@ -1,0 +1,197 @@
+library("survival")
+library("survminer")
+library("rms")
+library("ggfortify")
+library("GGally")
+library("KMsurv")
+analytical_cohort<-read.csv("C:/Users/frick_000/OneDrive/Documents/id_list for matching 0830.csv", header = TRUE, sep = ",")
+analytical_cohort$age_cat[analytical_cohort$age <= 29] <- 0
+analytical_cohort$age_cat[analytical_cohort$age > 29 & analytical_cohort$age <=39] <- 1
+analytical_cohort$age_cat[analytical_cohort$age > 39 & analytical_cohort$age <=49] <- 2
+analytical_cohort$age_cat[analytical_cohort$age > 49 & analytical_cohort$age <=59] <- 3
+analytical_cohort$age_cat[analytical_cohort$age > 59 & analytical_cohort$age <=69] <- 4
+analytical_cohort$sex <- factor(analytical_cohort$sex)
+analytical_cohort$sex <- relevel(analytical_cohort$sex, ref = "1")
+analytical_cohort$age_cat <- factor(analytical_cohort$age_cat)
+analytical_cohort$age_cat <- relevel(analytical_cohort$age_cat, ref = "0")
+analytical_cohort$dx_year <- factor(analytical_cohort$dx_year)
+analytical_cohort$dx_year <- relevel(analytical_cohort$dx_year, ref = "2009")
+analytical_cohort$plantyp_cat <- factor(analytical_cohort$plantyp_cat)
+analytical_cohort$plantyp_cat <- relevel(analytical_cohort$plantyp_cat, ref = "1")
+analytical_cohort$region <- factor(analytical_cohort$region)
+analytical_cohort$region <- relevel(analytical_cohort$region, ref = "1")
+analytical_cohort$CCI_NCI_cat <- factor(analytical_cohort$CCI_NCI_cat)
+analytical_cohort$CCI_NCI_cat <- relevel(analytical_cohort$CCI_NCI_cat, ref = "0")
+analytical_cohort$Group_type <- factor(analytical_cohort$Group_type)
+analytical_cohort$Group_type <- relevel(analytical_cohort$Group_type, ref = "0")
+
+dm2<-analytical_cohort[complete.cases(analytical_cohort$dm2_baseline_pdc),]
+hpn<-analytical_cohort[complete.cases(analytical_cohort$hpn_baseline_pdc),]
+lipid<-analytical_cohort[complete.cases(analytical_cohort$lipid_baseline_pdc),]
+install.packages("foreign")
+library(foreign)
+analytical_cohort<-hpn
+w<-table(analytical_cohort$allo_HSCT_date)
+as.data.frame(w)
+tbl = table(analytical_cohort$sex,analytical_cohort$Group_type) 
+tbl
+chisq.test(tbl)
+
+
+library(dplyr)
+group_by(dm2,dm2$Group_type) %>%
+  summarise(
+    count = n(),
+    mean =mean(dm2_baseline_pdc, na.rm = TRUE),
+    sd = sd(dm2_baseline_pdc, na.rm = TRUE),
+    median = median(dm2_baseline_pdc, na.rm = TRUE)
+  )
+group_by(hpn,hpn$Group_type) %>%
+  summarise(
+    count = n(),
+    mean =mean(hpn_baseline_pdc, na.rm = TRUE),
+    sd = sd(hpn_baseline_pdc, na.rm = TRUE),
+    median = median(hpn_baseline_pdc, na.rm = TRUE)
+  )
+group_by(lipid,lipid$Group_type) %>%
+  summarise(
+    count = n(),
+    mean =mean(lipid_baseline_pdc, na.rm = TRUE),
+    sd = sd(lipid_baseline_pdc, na.rm = TRUE),
+    median = median(lipid_baseline_pdc, na.rm = TRUE)
+  )
+
+library("ggpubr")
+ggboxplot(lipid, x = "Group_type", y = "lipid_baseline_pdc", 
+          color = "Group_type", palette = c("#00AFBB", "#E7B800", "#FC4E07"),
+          ylab = "lipid_baseline_pdc", xlab = "Treatment")
+
+mytbl<-table(mydata$plantyp,analytical_cohort$Group_type) 
+margin.table(mytbl,1) 
+prop.table(mytbl,2) 
+factor(analytical_cohort$dm2_baseline_pdc)
+mydata<-na.omit(analytical_cohort$dm2_baseline_pdc)
+
+#propensity score matching
+
+library("MatchIt")
+library("dplyr")
+library("ggplot2")
+
+#Outcome variable difference in means
+group_by(analytical_cohort,analytical_cohort$Group_type) %>%
+  summarise(
+    count = n(),
+    mean =mean(age, na.rm = TRUE),
+    sd = sd(age, na.rm = TRUE),
+    median = median(age, na.rm = TRUE)
+  )
+
+
+#compare propensity of autoHCT, remove alloHCT group
+autoHCT<-lipid[lipid$Group_type != 2, ]
+autoHCT$Group_type[autoHCT$Group_type==2]<-1
+
+else_cov<-c("enrolid","age_cat","sex","type_dx","dx_year","plantyp_cat","region","CCI_NCI_cat")
+lapply(else_cov,function(v){t.test(autoHCT[,v]~autoHCT[,"Group_type"])})
+
+#Propensity score estimation
+m_ps<-glm(Group_type ~ age_cat + sex + type_dx + dx_year + plantyp_cat + region + CCI_NCI_cat,
+          family = binomial(), data = autoHCT)
+prs_df<- data.frame(pr_score = predict (m_ps, type ="response"),
+                    Group_type=m_ps$model$Group_type)
+head(prs_df)
+
+#examine the region of common support
+labs<- paste("Actual treatment received:" , c("autoHCT","Chemo_only"))
+prs_df %>%
+    mutate(Group_type = ifelse(Group_type == 1, labs[1],labs[2])) %>%
+    ggplot(aes(x=pr_score)) +
+    geom_histogram(color = "white") +
+    facet_wrap(~Group_type) +
+    xlab("Propensity of getting autoHCT") +
+    theme_bw()
+
+#execute a matching function algorithme
+autoHCT_nomiss<-autoHCT %>%
+    select(Group_type,one_of(else_cov)) %>%
+    na.omit()
+##set row name
+rownames(autoHCT_nomiss)<-autoHCT_nomiss$enrolid
+head(autoHCT_nomiss)
+mod_match<-matchit(Group_type ~ age_cat + sex + type_dx + dx_year + plantyp_cat + region + CCI_NCI_cat,
+                   method = "nearest", ratio=3, data = autoHCT_nomiss)
+
+dta_m<-match.data(mod_match)
+dim(dta_m)
+summary(mod_match)
+
+mm<-mod_match$match.matrix
+tx<-as.numeric(row.names(mm))
+m<-cbind(tx,as.numeric(mm))
+m[1:5,]
+write.table(m, "f:/lipid_auto.txt", sep="\t")
+
+
+#diagnosis diff-in means
+dta_m %>% 
+  group_by(Group_type) %>%
+  select(one_of(else_cov)) %>%
+  summarise_all(funs(mean))
+# diagnosis, visualization
+fn_bal <- function(dta_m, variable) {
+  dta_m$variable <- dta_m[, variable]
+  dta_m$Group_type <- as.factor(dta_m$Group_type)
+  ggplot(dta_m, aes(x = distance, y = variable, color = Group_type)) +
+    geom_point(alpha = 0.2, size = 1.3) +
+    geom_smooth(method = "loess", se = F) +
+    xlab("Propensity score") +
+    ylab(variable) +
+    theme_bw()
+}
+
+library(gridExtra)
+grid.arrange(
+  fn_bal(dta_m, "age_cat"),
+  fn_bal(dta_m, "sex") + theme(legend.position = "none"),
+  fn_bal(dta_m, "type_dx"),
+  fn_bal(dta_m, "dx_year") + theme(legend.position = "none"),
+  fn_bal(dta_m, "plantyp_cat"),
+  fn_bal(dta_m, "region"),
+  fn_bal(dta_m, "CCI_NCI_cat"),
+  nrow = 7, widths = c(1, 0.8)
+)
+
+a<-get_matches(mod_match, autoHCT_nomiss, id_cols="enrolid",newdata = autoHCT_nomiss)
+
+
+analytical_cohort$SurvObj <- with(analytical_cohort, Surv(lenfol_VTE_365, fstat_VTE_365 == 1))
+Srv <- Surv(analytical_cohort$lenfol_VTE_365,analytical_cohort$fstat_VTE_365)
+Srv <- Surv(analytical_cohort$lenfol_VTE_365,analytical_cohort$fstat_VTE_365)~analytical_cohort$ini_status
+km.by.four <- survfit(SurvObj ~ Case_cat, data = analytical_cohort, conf.type = "log-log")
+km.by.ini <- survfit(SurvObj ~ analytical_cohort$ini_status, data = analytical_cohort)
+
+
+ggsurv(km.by.four,  lty.est=c(1:4), surv.col = c("black","red","green","blue"))+theme_classic()
+pi
+summary(Srv)
+survdiff(Srv)
+
+analytical_cohort<-analytical_cohort[analytical_cohort$SCD_status==1,]
+pi<-ggsurvplot(km.by.ini,fun="cumhaz",break.x.by=90, pval=T,linetype=1, censor = F, cumevents = TRUE, risk.table = TRUE)
+print (pi, surv.plot.height = 0.4,ncensor.plot.height = NULL, legend=NULL)
+
+
+
+f <- coxph(Srv ~ factor(ini_status)+age+sex+VTE_type+case_type_final
+           +transfusion_status+Trauma_status+Central_catheter_status+malignancy_status+Pregnancy_status
+           +AF_status+Hypertension_status+chronic_kidney_disease_status+DM2_status+CHF_status+CCI_cat
+           +OBRI_cat2+Any_AC_prior+prior_Antiplatelet+prior_contraceptiv_HRT
+           +prior_hydroxyurea+prior_nsaids+prior_opioid, data=analytical_cohort)
+f
+exp(coef(f))
+exp(confint(f))
+
+initiation_AC_date
+Ever_bleeding
+Ever_bleeding_date
