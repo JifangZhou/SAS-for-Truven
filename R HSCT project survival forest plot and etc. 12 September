@@ -1,0 +1,77 @@
+master_cohort<-read.csv("C:/Users/frick_000/Documents/HSCT analysis/allo_dm2_masterfile.csv", header = TRUE, sep = ",")
+gee_cohort<-read.csv("C:/Users/frick_000/Documents/HSCT analysis/allo_hpn_gee.csv", header = TRUE, sep = ",")
+library("geepack")
+gee_cohort$age_cat <- factor(gee_cohort$age_cat)
+gee_cohort$age_cat <- relevel(gee_cohort$age_cat, ref = "4")
+geeglmfit.uni <- geeglm(pdc_cat_08~factor(exposed), id=enrolid, family=binomial(link="logit"), corstr="exchangeable", data=gee_cohort,  waves=Time,std.err = "san.se")
+geeglmfit.duo <- geeglm(pdc_cat_08~factor(age_cat)+factor(sex), id=enrolid, family=binomial(link="logit"), corstr="exchangeable", data=gee_cohort, waves=Time,std.err = "san.se")
+geeglmfit.ex <- geeglm(pdc_cat_08~factor(exposed)+factor(age_cat)+factor(sex)+factor(CCI_NCI_cat)+factor(OOP_cat)+factor(type_dx)
+                       +factor(baseline_dm2)+factor(baseline_lipid)+factor(GVHD_confirm)
+                       +factor(pcp_cat)+factor(insulin_use)+factor(Depression)+factor(Malnutrition)+factor(nau_eme_dia), id=enrolid,  family=binomial(link="logit"),  corstr="exchangeable", data=gee_cohort,  waves=Time)
+summary(geeglmfit.uni)
+summary(geeglmfit.ex)
+anova(geeglmfit.uni,geeglmfit.duo)
+se<-summary(geeglmfit.ex)$coefficients
+est<-exp(se[,"Estimate"])
+CI_low<-exp(se[,"Estimate"]-se[,"Std.err"]*qnorm(0.975))
+CI_high<-exp(se[,"Estimate"]+se[,"Std.err"]*qnorm(0.975))
+L<-cbind(se, est,CI_low,CI_high)
+Covariate <- c("(Intercept)","exposed","agecat=1","agecat=2" ,
+               "agecat=3","sex=2","NCICCI=1","NCICCI=2","oopcat=1","oopcat=2",
+               "ANLL","HD","MM","MDS","MPN","NHL","baseline_dm","baseline_lipid","GVHD",
+               "PCPcat=1","PCPcat=2","insulin","depression","malnutrition","nausea/emesis/diarrhrea")
+L1 <- as.data.frame(cbind(Covariate,L))
+L1<-L1[!L1$Covariate=="(Intercept)",]
+pi<-ggplot(data=L1,aes(x=est,y=Covariate))+
+  geom_point(aes(size=400,fill=2), colour="blue",shape=21)+
+  geom_errorbarh(aes(xmin=CI_low,xmax=CI_high),height=0.0, colour="blue")+
+  geom_vline(xintercept=1,linetype="dashed")
+pi+scale_size(range = c(0, 7))
+
+boxplot(pdc~Time, data=gee_cohort)
+require(foreign)
+require(nnet)
+require(ggplot2)
+require(reshape2)
+
+id_opioid<-gee_cohort[, c("exposed", "pdc", "Time")]
+id_opioid<-id_opioid[complete.cases(id_opioid),]
+attach(id_opioid)
+id_opioid$timecat[Time == 1] <- "Baseline"
+id_opioid$timecat[Time == 2]<- "0-6 Mo"
+id_opioid$timecat[Time == 3] <- "7-12 Mo"
+id_opioid$timecat[Time == 4] <- "13-18 Mo"
+id_opioid$timecat[Time == 5] <- "19-24 Mo"
+id_opioid$timecat[Time == 6] <- "25-30 Mo"
+id_opioid$timecat[Time == 7] <- "31-36 Mo"
+detach(id_opioid) 
+
+p <- ggplot(id_opioid, aes(factor(Time), pdc))
+p + geom_boxplot()
+p + geom_boxplot(outlier.colour = "black", outlier.size = 0.5,aes(fill = factor(exposed)))+scale_fill_manual(values=c("#6155DF", "#df6155"))
+
+scale_fill_brewer(palette="RdBu")
+#survival analysis
+#Create time and census variable)
+master_cohort$time_cover<-master_cohort$insurance_end-master_cohort$index_date
+master_cohort$days_therapy_60[is.na(master_cohort$days_therapy_60)]<- 0
+master_cohort$status_60<-ifelse(master_cohort$days_therapy_60 <= master_cohort$time_cover, 1, 0)
+master_cohort$time_60 <- ifelse(master_cohort$days_therapy_60 <= master_cohort$time_cover,master_cohort$days_therapy_60,master_cohort$time_cover)
+Sur<-Surv(master_cohort$time_60,master_cohort$status_60)
+Sur<-Surv(master_cohort$time_60,master_cohort$status_60)~ master_cohort$exposed
+master_cohort$SurvObj <- with(master_cohort, Surv(time_60, status_60 == 1))
+
+km.by.SCD <- survfit(SurvObj ~ exposed, data = master_cohort, conf.type = "log-log")
+plot(km.by.SCD,loglog=TRUE)
+ggsurvplot(km.by.SCD, data=master_cohort,fun="cumhaz",conf.int = TRUE,ggtheme = theme_bw())
+plot(km.by.SCD,fun = function(x) 1-x)
+summary(Sur)
+survdiff(Sur)
+pi<-ggsurvplot(km.by.SCD,fun="cumhaz",break.x.by=180, pval=0.15,linetype=1, censor = TRUE, cumevents = FALSE, risk.table = TRUE)
+print (pi, ncensor.plot.height = NULL, legend=NULL)
+master_cohort$sex <- factor(master_cohort$sex)
+master_cohort$CCI_NCI_cat <- factor(master_cohort$CCI_NCI_cat)
+f <- cph(Sur ~ age +sex +type_dx+CCI_NCI_cat+exposed+baseline_hpn+baseline_lipid, surv=TRUE,x=TRUE, y=TRUE,data=master_cohort)
+f
+temp <- cox.zph(f)
+temp
