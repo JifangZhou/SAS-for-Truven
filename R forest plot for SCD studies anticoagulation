@@ -1,0 +1,111 @@
+install.packages('geepack')
+library(forestplot)
+cochrane_from_rmeta <- 
+  structure(list(
+    mean  = c(NA, NA, 0.47, 0.82, 0.43, 0.47, 0.59, NA, 0.52, 0.77, 0.45, 0.49, 0.71), 
+    lower = c(NA, NA, 0.38, 0.51, 0.35, 0.37, 0.36, NA, 0.39, 0.43, 0.33, 0.36, 0.40),
+    upper = c(NA, NA, 0.58, 1.25, 0.54, 0.59, 0.93, NA, 0.68, 1.31, 0.60, 0.66, 1.21)),
+    .Names = c("mean", "lower", "upper"), 
+    row.names = c(NA, -11L), 
+    class = "data.frame")
+
+tabletext<-cbind(
+  c("", "Unadjusted", "Any anticoagulant","Any parenteral anticoagulant",
+    "Any oral anticoagulant", "Warfarin", "DOAC", "Adjusted", 
+    "Any anticoagulant","Any parenteral anticoagulant",
+    "Any oral anticoagulant", "Warfarin", "DOAC"),
+  c("SCD  ", "no. (%)", "142 (32.7)", "24    (5.5)", "122 (28.1)", "103 (23.7)", "20    (4.6)",
+    NA,"142 (32.7)", "24    (5.5)", "122 (28.1)", "103 (23.7)", "20    (4.6)"),
+  c("Non-SCD", "no. (%)", "1103 (50.8)", "145    (6.7)", "1029 (47.4)", "868  (40.0)", "163    (7.5)", 
+     NA,"1103 (50.8)", "145    (6.7)", "1029 (47.4)", "868  (40.0)", "163    (7.5)"),
+  c("", "OR  (95% CI) ", "0.47 (0.38-0.58)", "0.82 (0.51-1.25)", "0.43 (0.35-0.54)", "0.47 (0.37-0.59)", "0.59 (0.36-0.93)", 
+    NA, "0.52 (0.39-0.68)", "0.77 (0.43-1.31)", "0.45 (0.33-0.60)", "0.49 (0.36-0.66)", "0.71 (0.40-1.21)"))
+
+forestplot(tabletext, 
+           hrzl_lines = gpar(col="#444444"),txt_gp = fpTxtGp(label=gpar(cex=0.80),xlab= gpar(cex=0.7), summary = gpar(cex=0.9),ticks = gpar(cex=0.8)),
+           cochrane_from_rmeta,new_page = TRUE,
+           boxsize = .25,
+           zero=1,
+           is.summary=c(TRUE,TRUE,rep(FALSE,5),TRUE,rep(FALSE,5)),
+           clip=c(0.1,1.5), 
+           xlog=F, 
+           xlab = "        Delayed Initiation-----------Timely Initiation",
+           col=fpColors(box="Black",line="Black", summary="Black"))
+
+# Plot the forest plot of the main analysis
+
+cochrane_from_rmeta <- 
+  structure(list(
+    mean  = c(NA, NA, 0.52, 
+              NA, 1.15, 1.30, 0.69, 
+              NA, 0.78, 1.00, 2.37, 0.55, 
+              NA, 1.60, 0.55, 0.95, 0.73, 0.42, 1.56,
+              NA, 0.94, 0.57,	0.96,	0.85, 0.91, 0.79,
+              NA, 0.49, 0.53, 1.33, 1.26, 1.01), 
+    lower = c(NA, NA, 0.39, 
+              NA, 0.91, 0.88, 0.57, 
+              NA, 0.65, 0.98, 1.82, 0.37, 
+              NA, 1.13, 0.38, 0.72, 0.56, 0.27, 1.18, 
+              NA, 0.73,	0.40,	0.78,	0.56, 0.70,	0.63,
+              NA, 0.37,	0.28, 0.66,	1.00, 0.80),
+    upper = c(NA, NA, 0.68, 
+              NA, 1.46, 1.71, 0.83, 
+              NA, 0.95, 1.03, 3.10, 0.82, 
+              NA, 2.25, 0.78, 1.27, 0.97, 0.62, 2.06,
+              NA, 1.20, 0.80, 1.18, 1.29, 1.19, 0.99,
+              NA, 0.64, 0.99, 2.59, 1.58,	1.28)),
+    .Names = c("mean", "lower", "upper"), 
+    row.names = c(NA, -32L), 
+    class = "data.frame")
+
+tabletext<-cbind(
+  c( NA,"Covariates", "Sickle cell disease",
+     "Demographics", "Age, yrs   40-59  vs. < 40", "Age, yrs     60+   vs. < 40", "Gender   Female  vs. Male",
+     "Index VTE-related", "PE  vs. DVT","LOS for index VTE event", "VTE primary D/C DX  vs.  VTE secondary D/C DX","VTE ED DX               vs.  VTE secondary D/C DX",
+     "VTE risk factors","Recent hospitalization or major surgery*","Central catheter use†", "Recent trauma†", "Malignancy","Pregnancy" , "Oral contraceptives & HRT" ,
+     "Comorbidities", "Chronic pulmonary disease","Chronic heart failure", "Hypertension","Chronic kidney disease","CCI Score   2+  vs. 0-1","OBRI   Moderate / High  vs. Low risk",
+     "Medications", "Prior anticoagulant exposure", "Antiplatelet agents" ,"Hydroxyurea","NSAIDs","Opioid analgesics"),
+  c( NA, "OR  (95% CI) ", "0.52 (0.39-0.68)",
+     NA, "1.15 (0.91-1.46)", "1.23 (0.88-1.71)","0.69 (0.57-0.83)", 
+     NA, "0.78 (0.65-0.95)", "1.00 (0.98-1.03)",  "2.37 (1.82-3.10)", "0.55 (0.37-0.82)",
+     NA, "1.60 (1.13-2.25)", "0.55 (0.38-0.78)",  "0.95 (0.72-1.27)", "0.73 (0.56-0.97)", "0.42 (0.27-0.62)", "1.56 (1.18-2.06)",
+     NA, "0.94 (0.73-1.20)", "0.57 (0.40-0.80)",  "0.96 (0.78-1.18)", "0.85 (0.56-1.29)", "0.91 (0.70-1.19)", "0.79 (0.63-0.99)",
+     NA, "0.49 (0.37-0.64)", "0.53 (0.28-0.99)",  "1.33 (0.66-2.59)", "1.26 (1.00-1.58)", "1.01 (0.80-1.28)"),
+  c( NA, "p-value", "<0.001", 
+     NA, "0.2292", "0.2303", "<0.001",
+     NA, "<0.05  ", "0.8823", "<0.001", "<0.01  ", 
+     NA, "<0.01  ", "<0.001", "0.7371", "<0.05  ", "<0.001","<0.01  ",
+     NA, "0.5977","<0.01  ","0.7156", "0.4570","0.4958", "<0.05  ",
+     NA, "<0.001","<0.05  ","0.4167","<0.05  ","0.9144"))
+
+
+forestplot(tabletext, 
+           hrzl_lines = gpar(col="#444444"),txt_gp = fpTxtGp(label=gpar(cex=0.80),xlab= gpar(cex=0.7), summary = gpar(cex=0.9),ticks = gpar(cex=0.8)),
+           cochrane_from_rmeta,new_page = TRUE,
+           boxsize = .25,
+           zero=1,
+           is.summary=c(TRUE,TRUE,FALSE,TRUE,rep(FALSE,3),TRUE,rep(FALSE,4),TRUE,rep(FALSE,6),TRUE,rep(FALSE,6),TRUE,rep(FALSE,5)),
+           clip=c(0.1,3.5), 
+           xlog=F, 
+           xlab = "Delayed Initiation---Timely Initiation                                   ",
+           col=fpColors(box="Black",line="Black", summary="Black"))
+
+
+
+#Regroupment
+#To deleted
+"(Intercept)"
+#Main
+"SCD status"
+#Demographic
+"Age","Female vs Male"
+#VTE-event specific
+"PE vs DVT" ,"VTE Dx at ER vs. VTE as Primary Admission Dx","VTE as 2nd Admission Dxvs. VTE as primary Admission Dx","LOS for index VTE"
+#Health resource utilization
+"Number of prior admission","Number of prior ER visits","Transfusion status","Central catheter use", "Admission or operatation in the past 30 days", 
+#Comorbidities
+"Recent Trauma", "Malignancy status","Pregnancy status" , "AF status ","Hypertension status","Chronic kidney disease","CCI as continuous variable",
+#Bleeding risks
+"OBRI moderate and high risk vs. low risk"
+#Medication History
+"Any prior anticoagulant exposure", "prior Antiplatelet" ,"prior contraceptiv or HRT" ,"prior Hydroxyurea","prior NSAIDs","prior opioids" )
