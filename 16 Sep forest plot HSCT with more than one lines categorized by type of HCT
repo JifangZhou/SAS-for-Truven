@@ -1,0 +1,25 @@
+# Diabetes adherence
+tabletext<-  c("Primary exposure", "Chemotherapy alone vs HCT (Unadjusted OR)", "Chemotherapy alone vs HCT (Adjusted OR)",
+                "Demographics and aseline characteristics","Age ≤ 39 vs 60-64", "Age 40-59 vs 60-64","Female vs Male", "NCI CCI 3+ vs 0", "NCI CCI 1-2 vs 0",
+                "Time-variant clinica factors","GVHD", "Depression","Malnutrition","Nausea, emesis and diarrhrea")
+     forestplot(tabletext, 
+                hrzl_lines = gpar(col="#444444"),txt_gp = fpTxtGp(label=gpar(cex=0.80),xlab= gpar(cex=0.7), summary = gpar(cex=0.9),ticks = gpar(cex=0.8)),
+                legend = c("Allogeneic HCT", "Autologous HCT"),
+           fn.ci_norm = c(fpDrawNormalCI, fpDrawCircleCI),
+           boxsize = .25, # We set the box size to better visualize the type
+           line.margin = .2, # We need to add this to avoid crowding
+           mean = cbind(c(NA,0.65, 0.62, NA,NA, 0.37,0.64,1.26,NA,NA,1.19,0.39,4.35,0.73),c(NA,0.77, 0.92,NA,NA, 0.60,1.27,0.89,NA,NA,NA,1.36,1.07,1.33)),
+           lower = cbind(c(NA,0.31, 0.28,NA,NA, 0.17,0.32,0.48,NA,NA,0.38,0.15,0.05,0.35), c(NA,0.48, 0.57,NA,NA, 0.40,0.82,0.26,NA,NA,NA,0.68,0.48,0.79)),
+           upper = cbind(c(NA,1.36, 1.34,NA,NA, 0.81,1.27,3.31,NA,NA,3.73,1.04,360.32,1.52),c(NA,1.23, 1.49,NA,NA, 0.92,1.98,3.08,NA,NA,NA,2.72,2.36,2.24)),
+           is.summary=c(TRUE,rep(FALSE,2),TRUE,rep(FALSE,5),TRUE,rep(FALSE,4)), 
+           clip =c(0.1, 5),
+           zero=1,
+           lty.ci = c(1, 1),
+           col=fpColors(box=c("blue", "darkred")),
+           xlab="Less Adherent---More Adherent                 ")
+     
+     
+     
+         
+     exp(c(-1,1)*qnorm(0.975)*0.239  -0.259   )
+     exp(-0.259   )
