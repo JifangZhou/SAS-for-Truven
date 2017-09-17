@@ -1,6 +1,6 @@
 # Diabetes adherence
 tabletext<-  c("Primary exposure", "Chemotherapy alone vs HCT (Unadjusted OR)", "Chemotherapy alone vs HCT (Adjusted OR)",
-                "Demographics and aseline characteristics","Age ≤ 39 vs 60-64", "Age 40-59 vs 60-64","Female vs Male", "NCI CCI 3+ vs 0", "NCI CCI 1-2 vs 0",
+                "Demographics and baseline characteristics","Age 18-39 vs 60-64", "Age 40-59 vs 60-64","Female vs Male", "NCI CCI 3+ vs 0", "NCI CCI 1-2 vs 0",
                 "Time-variant clinica factors","GVHD", "Depression","Malnutrition","Nausea, emesis and diarrhrea")
      forestplot(tabletext, 
                 hrzl_lines = gpar(col="#444444"),txt_gp = fpTxtGp(label=gpar(cex=0.80),xlab= gpar(cex=0.7), summary = gpar(cex=0.9),ticks = gpar(cex=0.8)),
@@ -17,9 +17,47 @@ tabletext<-  c("Primary exposure", "Chemotherapy alone vs HCT (Unadjusted OR)", 
            lty.ci = c(1, 1),
            col=fpColors(box=c("blue", "darkred")),
            xlab="Less Adherent---More Adherent                 ")
+# Hypertension adherence
+     tabletext<-  c("Primary exposure", "Chemotherapy alone vs HCT (Unadjusted OR)", "Chemotherapy alone vs HCT (Adjusted OR)",
+                    "Demographics and baseline characteristics","Age 18-39 vs 60-64", "Age 40-59 vs 60-64","Female vs Male", "NCI CCI 3+ vs 0", "NCI CCI 1-2 vs 0",
+                    "Time-variant clinica factors","GVHD", "Depression","Malnutrition","Nausea, emesis and diarrhrea")
+     forestplot(tabletext, 
+                hrzl_lines = gpar(col="#444444"),txt_gp = fpTxtGp(label=gpar(cex=0.80),xlab= gpar(cex=0.7), summary = gpar(cex=0.9),ticks = gpar(cex=0.8)),
+                legend = c("Allogeneic HCT", "Autologous HCT"),
+                fn.ci_norm = c(fpDrawNormalCI, fpDrawCircleCI),
+                boxsize = .25, # We set the box size to better visualize the type
+                line.margin = .2, # We need to add this to avoid crowding
+                mean = cbind(c(NA,0.71, 0.58, NA,0.16,1.04,0.90,0.13,0.13,NA,2.10,0.85,0.59,0.92),c(NA,0.87, 0.82,NA,0.64,1.25,0.91,1.19,1.37,NA,NA,0.77,0.41,1.09)),
+                lower = cbind(c(NA,0.49, 0.38,NA,0.03,0.67,0.60,0.01,0.01,NA,0.97,0.50,0.25,0.62), c(NA,0.69, 0.65,NA,0.28,0.99,0.74,0.59,0.65,NA,NA,0.58,0.25,0.84)),
+                upper = cbind(c(NA,1.03, 0.89,NA,0.97,1.61,1.34,1.70,1.77,NA,4.54,1.47,1.39,1.37),c(NA,1.09, 1.04,NA,1.43,1.59,1.13,2.42,2.89,NA,NA,1.02,0.66,1.42)),
+                is.summary=c(TRUE,rep(FALSE,2),TRUE,rep(FALSE,5),TRUE,rep(FALSE,4)), 
+                clip =c(0.1, 3),
+                zero=1,
+                lty.ci = c(1, 1),
+                col=fpColors(box=c("blue", "darkred")),
+                xlab="Less Adherent---More Adherent                 ")     
      
      
+#Factors affecting earlier discontinuation
+# Medication persistence DM2
+     tabletext<-  c("Primary exposure",  "Chemotherapy alone vs HCT",
+                    "Demographics and baseline characteristics","Baseline PDC \u2265 0.80", 
+                    "COPD","Chronic heart failure","Stroke","Chronic kidney disease", "Depression","Malnutrition","Nausea, emesis and diarrhrea")
+     forestplot(tabletext, 
+                hrzl_lines = gpar(col="#444444"),txt_gp = fpTxtGp(label=gpar(cex=0.80),xlab= gpar(cex=0.7), summary = gpar(cex=0.9),ticks = gpar(cex=0.8)),
+                legend = c("Allogeneic HCT", "Autologous HCT"),
+                fn.ci_norm = c(fpDrawNormalCI, fpDrawCircleCI),
+                boxsize = .25, # We set the box size to better visualize the type
+                line.margin = .2, # We need to add this to avoid crowding
+                mean = cbind(c(NA,1.93, NA, 0.75,1.71,3.03,2.34,2.99,1.28,3.87,0.92),c(NA,1.49, NA, 0.68,0.86,1.14,1.30,1.02,2.10,1.31,1.18)),
+                lower = cbind(c(NA,1.10, NA, 0.44,0.70,0.73,0.27,0.78,0.52,0.96,0.36), c(NA,1.04, NA, 0.50,0.50,0.49,0.63,0.66,1.04,0.62,0.64)),
+                upper = cbind(c(NA,3.39, NA, 1.29,4.18,12.59,20.49,11.44,3.18,15.59,2.39),c(NA,2.15, NA, 0.94,1.49,2.66,2.70,1.58,4.24,2.75,2.18)),
+                is.summary=c(TRUE,FALSE,TRUE,rep(FALSE,8)), 
+                clip =c(0.1, 4.5),
+                zero=1,
+                lty.ci = c(1, 1),
+                col=fpColors(box=c("blue", "darkred")),
+                xlab="Persistent Use---Early Discontinuation                                ")   
      
-         
-     exp(c(-1,1)*qnorm(0.975)*0.239  -0.259   )
-     exp(-0.259   )
+     exp(c(-1,1)*qnorm(0.975)*0.1156  -0.1436   )
+     exp(-0.1436   )
