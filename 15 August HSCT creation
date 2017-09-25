@@ -1,0 +1,859 @@
+LIBNAME Myfile 'F:\User Folders\jzhou86\HSCT general cases';
+LIBNAME Redbook 'E:\Truven Data';
+LIBNAME WorkingD 'F:\User Folders\jzhou86\HSCT working directory';
+
+DATA inpt_sum;
+SET Myfile.scd_ccaei_09 Myfile.scd_ccaei_10 Myfile.scd_ccaei_11 Myfile.scd_ccaei_12 Myfile.scd_ccaei_13
+	Myfile.scd_mdcri_09 Myfile.scd_mdcri_10 Myfile.scd_mdcri_11 Myfile.scd_mdcri_12 Myfile.scd_mdcri_13
+	Myfile.scd_ccaei_142  
+	Myfile.scd_mdcri_142;
+DATA outpt_svc;
+SET	Myfile.scd_ccaeo_09 Myfile.scd_ccaeo_10 Myfile.scd_ccaeo_11 Myfile.scd_ccaeo_12 Myfile.scd_ccaeo_13
+	Myfile.scd_mdcro_09 Myfile.scd_mdcro_10 Myfile.scd_mdcro_11 Myfile.scd_mdcro_12 Myfile.scd_mdcro_13
+	Myfile.scd_ccaeo_142 
+	Myfile.scd_mdcro_142;
+DATA drug_pres;
+SET	Myfile.scd_ccaed_09 Myfile.scd_ccaed_10 Myfile.scd_ccaed_11 Myfile.scd_ccaed_12 Myfile.scd_ccaed_13
+	Myfile.scd_mdcrd_09 Myfile.scd_mdcrd_10 Myfile.scd_mdcrd_11 Myfile.scd_mdcrd_12 Myfile.scd_mdcrd_13
+	Myfile.scd_ccaed_142  
+	Myfile.scd_mdcrd_142;
+DATA inpt_svc;
+SET	Myfile.scd_ccaes_09 Myfile.scd_ccaes_10 Myfile.scd_ccaes_11 Myfile.scd_ccaes_12 Myfile.scd_ccaes_13
+	Myfile.scd_mdcrs_09 Myfile.scd_mdcrs_10 Myfile.scd_mdcrs_11 Myfile.scd_mdcrs_12 Myfile.scd_mdcrs_13
+	Myfile.scd_ccaes_142 
+	Myfile.scd_mdcrs_142;
+DATA Myfileance_all;
+SET	Myfile.scd_ccaet_09 Myfile.scd_ccaet_10 Myfile.scd_ccaet_11 Myfile.scd_ccaet_12 Myfile.scd_ccaet_13
+	Myfile.scd_mdcrt_09 Myfile.scd_mdcrt_10 Myfile.scd_mdcrt_11 Myfile.scd_mdcrt_12 Myfile.scd_mdcrt_13
+	Myfile.scd_ccaet_142 
+	Myfile.scd_mdcrt_142;
+DATA redbook;
+	SET Redbook.redbook;
+RUN;
+
+DATA all_record;
+	SET inpt_sum outpt_svc;
+RUN;
+*Select all ANLL patients;
+*'2040',  
+'2050', '2060',
+'23872', '23873', '23874', '23875', 
+'23876', '28983', '2384', '23871', 
+'2030', '2031', '2386',
+'200', '2020', '2021', '2022', '2028', 
+'201';
+data  id_list1;
+set inpt_sum;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2050', '2060') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+	CREATE TABLE id_list1 as
+	SELECT min(enrolid) as enrolid,
+	min(DOBYR) as DOBYR,
+	min(ADMDATE) as index_date
+	FROM id_list1
+	GROUP BY enrolid;
+QUIT;
+
+data  id_list2;
+set outpt_svc;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2050', '2060') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE id_list2 as
+SELECT min (enrolid) as enrolid,
+	min(DOBYR) as DOBYR,
+	min(SVCDATE) as index_date,
+	max(SVCDATE) as index_date2
+FROM id_list2
+GROUP BY enrolid;
+QUIT;
+
+DATA id_list2;
+	SET id_list2;
+	IF index_date2-index_date>=30;
+RUN;
+
+DATA ANLL_id;
+	SET id_list1 id_list2;
+RUN;
+
+PROC SQL;
+CREATE TABLE ANLL_id as
+SELECT min (enrolid) as enrolid,
+	min(DOBYR) as DOBYR,
+	min(index_date) as index_date
+FROM ANLL_id
+GROUP BY enrolid;
+QUIT;
+
+DATA ANLL_id;
+	SET ANLL_id;
+	age=YEAR(index_date)-DOBYR;
+RUN;
+
+* Assessment of counfounding diagnosis;
+
+data  id_list3;
+set all_record;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: (
+'2040', 
+'23872', '23873', '23874', '23875', 
+'23876', '28983', '2384', '23871', 
+'2030', '2031', '2386',
+'200', '2020', '2021', '2022', '2028', 
+'201',
+'2051') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE id_list3 as
+SELECT min (enrolid) as enrolid,
+	1 as confounding_dx
+FROM id_list3
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE Myfile.ANLL_id as
+SELECT a.*,
+	b.confounding_dx as confounding_dx
+FROM ANLL_id a
+LEFT JOIN id_list3 b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+*Select all ALL patients;
+*'2040',  
+'2050', '2060',
+'23872', '23873', '23874', '23875', 
+'23876', '28983', '2384', '23871', 
+'2030', '2031', '2386',
+'200', '2020', '2021', '2022', '2028', 
+'201';
+data  id_list1;
+set inpt_sum;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2040') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+	CREATE TABLE id_list1 as
+	SELECT min(enrolid) as enrolid,
+	min(DOBYR) as DOBYR,
+	min(ADMDATE) as index_date
+	FROM id_list1
+	GROUP BY enrolid;
+QUIT;
+
+data  id_list2;
+set outpt_svc;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2040') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE id_list2 as
+SELECT min (enrolid) as enrolid,
+	min(DOBYR) as DOBYR,
+	min(SVCDATE) as index_date,
+	max(SVCDATE) as index_date2
+FROM id_list2
+GROUP BY enrolid;
+QUIT;
+
+DATA id_list2;
+	SET id_list2;
+	IF index_date2-index_date>=30;
+RUN;
+
+DATA ALL_id;
+	SET id_list1 id_list2;
+RUN;
+
+PROC SQL;
+CREATE TABLE ALL_id as
+SELECT min (enrolid) as enrolid,
+	min(DOBYR) as DOBYR,
+	min(index_date) as index_date
+FROM ALL_id
+GROUP BY enrolid;
+QUIT;
+
+DATA ALL_id;
+	SET ALL_id;
+	age=YEAR(index_date)-DOBYR;
+RUN;
+
+* Assessment of counfounding diagnosis;
+
+data  id_list3;
+set all_record;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: (
+'2050', '2060',
+'23872', '23873', '23874', '23875', 
+'23876', '28983', '2384', '23871', 
+'2030', '2031', '2386',
+'200', '2020', '2021', '2022', '2028', 
+'201',
+'2051') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE id_list3 as
+SELECT min (enrolid) as enrolid,
+	1 as confounding_dx
+FROM id_list3
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE Myfile.ALL_id as
+SELECT a.*,
+	b.confounding_dx as confounding_dx
+FROM ALL_id a
+LEFT JOIN id_list3 b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+*Select all MDS patients;
+*'2040',  
+'2050', '2060',
+'23872', '23873', '23874', '23875', 
+'23876', '28983', '2384', '23871', 
+'2030', '2031', '2386',
+'200', '2020', '2021', '2022', '2028', 
+'201';
+data  id_list1;
+set inpt_sum;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('23872', '23873', '23874', '23875') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+	CREATE TABLE id_list1 as
+	SELECT min(enrolid) as enrolid,
+	min(DOBYR) as DOBYR,
+	min(ADMDATE) as index_date
+	FROM id_list1
+	GROUP BY enrolid;
+QUIT;
+
+data  id_list2;
+set outpt_svc;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('23872', '23873', '23874', '23875') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE id_list2 as
+SELECT min (enrolid) as enrolid,
+	min(DOBYR) as DOBYR,
+	min(SVCDATE) as index_date,
+	max(SVCDATE) as index_date2
+FROM id_list2
+GROUP BY enrolid;
+QUIT;
+
+DATA id_list2;
+	SET id_list2;
+	IF index_date2-index_date>=30;
+RUN;
+
+DATA MDS_id;
+	SET id_list1 id_list2;
+RUN;
+
+PROC SQL;
+CREATE TABLE MDS_id as
+SELECT min (enrolid) as enrolid,
+	min(DOBYR) as DOBYR,
+	min(index_date) as index_date
+FROM MDS_id
+GROUP BY enrolid;
+QUIT;
+
+DATA MDS_id;
+	SET MDS_id;
+	age=YEAR(index_date)-DOBYR;
+RUN;
+
+* Assessment of counfounding diagnosis;
+
+data  id_list3;
+set all_record;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: (
+'2040', 
+'2050', '2060',
+'23876', '28983', '2384', '23871', 
+'2030', '2031', '2386',
+'200', '2020', '2021', '2022', '2028', 
+'201',
+'2051') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE id_list3 as
+SELECT min (enrolid) as enrolid,
+	1 as confounding_dx
+FROM id_list3
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE Myfile.MDS_id as
+SELECT a.*,
+	b.confounding_dx as confounding_dx
+FROM MDS_id a
+LEFT JOIN id_list3 b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+*Select all MPN patients;
+*'2040',  
+'2050', '2060',
+'23872', '23873', '23874', '23875', 
+'23876', '28983', '2384', '23871', 
+'2030', '2031', '2386',
+'200', '2020', '2021', '2022', '2028', 
+'201';
+data  id_list1;
+set inpt_sum;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('23876', '28983', '2384', '23871') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+	CREATE TABLE id_list1 as
+	SELECT min(enrolid) as enrolid,
+	min(DOBYR) as DOBYR,
+	min(ADMDATE) as index_date
+	FROM id_list1
+	GROUP BY enrolid;
+QUIT;
+
+data  id_list2;
+set outpt_svc;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('23876', '28983', '2384', '23871') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE id_list2 as
+SELECT min (enrolid) as enrolid,
+	min(DOBYR) as DOBYR,
+	min(SVCDATE) as index_date,
+	max(SVCDATE) as index_date2
+FROM id_list2
+GROUP BY enrolid;
+QUIT;
+
+DATA id_list2;
+	SET id_list2;
+	IF index_date2-index_date>=30;
+RUN;
+
+DATA MPN_id;
+	SET id_list1 id_list2;
+RUN;
+
+PROC SQL;
+CREATE TABLE MPN_id as
+SELECT min (enrolid) as enrolid,
+	min(DOBYR) as DOBYR,
+	min(index_date) as index_date
+FROM MPN_id
+GROUP BY enrolid;
+QUIT;
+
+DATA MPN_id;
+	SET MPN_id;
+	age=YEAR(index_date)-DOBYR;
+RUN;
+
+* Assessment of counfounding diagnosis;
+
+data  id_list3;
+set all_record;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: (
+'2040', 
+'2050', '2060',
+'23872', '23873', '23874', '23875', 
+'2030', '2031', '2386',
+'200', '2020', '2021', '2022', '2028', 
+'201',
+'2051') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE id_list3 as
+SELECT min (enrolid) as enrolid,
+	1 as confounding_dx
+FROM id_list3
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE Myfile.MPN_id as
+SELECT a.*,
+	b.confounding_dx as confounding_dx
+FROM MPN_id a
+LEFT JOIN id_list3 b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+*Select all MM patients;
+*'2040',  
+'2050', '2060',
+'23872', '23873', '23874', '23875', 
+'23876', '28983', '2384', '23871', 
+'2030', '2031', '2386',
+'200', '2020', '2021', '2022', '2028', 
+'201';
+data  id_list1;
+set inpt_sum;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2030', '2031', '2386') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+	CREATE TABLE id_list1 as
+	SELECT min(enrolid) as enrolid,
+	min(DOBYR) as DOBYR,
+	min(ADMDATE) as index_date
+	FROM id_list1
+	GROUP BY enrolid;
+QUIT;
+
+data  id_list2;
+set outpt_svc;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2030', '2031', '2386') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE id_list2 as
+SELECT min (enrolid) as enrolid,
+	min(DOBYR) as DOBYR,
+	min(SVCDATE) as index_date,
+	max(SVCDATE) as index_date2
+FROM id_list2
+GROUP BY enrolid;
+QUIT;
+
+DATA id_list2;
+	SET id_list2;
+	IF index_date2-index_date>=30;
+RUN;
+
+DATA MM_id;
+	SET id_list1 id_list2;
+RUN;
+
+PROC SQL;
+CREATE TABLE MM_id as
+SELECT min (enrolid) as enrolid,
+	min(DOBYR) as DOBYR,
+	min(index_date) as index_date
+FROM MM_id
+GROUP BY enrolid;
+QUIT;
+
+DATA MM_id;
+	SET MM_id;
+	age=YEAR(index_date)-DOBYR;
+RUN;
+
+* Assessment of counfounding diagnosis;
+
+data  id_list3;
+set all_record;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: (
+'2040', 
+'2050', '2060',
+'23872', '23873', '23874', '23875', 
+'23876', '28983', '2384', '23871', 
+'200', '2020', '2021', '2022', '2028', 
+'201',
+'2051') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE id_list3 as
+SELECT min (enrolid) as enrolid,
+	1 as confounding_dx
+FROM id_list3
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE Myfile.MM_id as
+SELECT a.*,
+	b.confounding_dx as confounding_dx
+FROM MM_id a
+LEFT JOIN id_list3 b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+*Select all NHL patients;
+*'2040',  
+'2050', '2060',
+'23872', '23873', '23874', '23875', 
+'23876', '28983', '2384', '23871', 
+'2030', '2031', '2386',
+'200', '2020', '2021', '2022', '2028', 
+'201';
+data  id_list1;
+set inpt_sum;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('200', '2020', '2021', '2022', '2028') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+	CREATE TABLE id_list1 as
+	SELECT min(enrolid) as enrolid,
+	min(DOBYR) as DOBYR,
+	min(ADMDATE) as index_date
+	FROM id_list1
+	GROUP BY enrolid;
+QUIT;
+
+data  id_list2;
+set outpt_svc;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('200', '2020', '2021', '2022', '2028') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE id_list2 as
+SELECT min (enrolid) as enrolid,
+	min(DOBYR) as DOBYR,
+	min(SVCDATE) as index_date,
+	max(SVCDATE) as index_date2
+FROM id_list2
+GROUP BY enrolid;
+QUIT;
+
+DATA id_list2;
+	SET id_list2;
+	IF index_date2-index_date>=30;
+RUN;
+
+DATA NHL_id;
+	SET id_list1 id_list2;
+RUN;
+
+PROC SQL;
+CREATE TABLE NHL_id as
+SELECT min (enrolid) as enrolid,
+	min(DOBYR) as DOBYR,
+	min(index_date) as index_date
+FROM NHL_id
+GROUP BY enrolid;
+QUIT;
+
+DATA NHL_id;
+	SET NHL_id;
+	age=YEAR(index_date)-DOBYR;
+RUN;
+
+* Assessment of counfounding diagnosis;
+
+data  id_list3;
+set all_record;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: (
+'2040', 
+'2050', '2060',
+'23872', '23873', '23874', '23875', 
+'23876', '28983', '2384', '23871', 
+'2030', '2031', '2386',
+'201',
+'2051') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE id_list3 as
+SELECT min (enrolid) as enrolid,
+	1 as confounding_dx
+FROM id_list3
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE Myfile.NHL_id as
+SELECT a.*,
+	b.confounding_dx as confounding_dx
+FROM NHL_id a
+LEFT JOIN id_list3 b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+*Select all HD patients;
+*'2040',  
+'2050', '2060',
+'23872', '23873', '23874', '23875', 
+'23876', '28983', '2384', '23871', 
+'2030', '2031', '2386',
+'200', '2020', '2021', '2022', '2028', 
+'201';
+data  id_list1;
+set inpt_sum;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('201') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+	CREATE TABLE id_list1 as
+	SELECT min(enrolid) as enrolid,
+	min(DOBYR) as DOBYR,
+	min(ADMDATE) as index_date
+	FROM id_list1
+	GROUP BY enrolid;
+QUIT;
+
+data  id_list2;
+set outpt_svc;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('201') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE id_list2 as
+SELECT min (enrolid) as enrolid,
+	min(DOBYR) as DOBYR,
+	min(SVCDATE) as index_date,
+	max(SVCDATE) as index_date2
+FROM id_list2
+GROUP BY enrolid;
+QUIT;
+
+DATA id_list2;
+	SET id_list2;
+	IF index_date2-index_date>=30;
+RUN;
+
+DATA HD_id;
+	SET id_list1 id_list2;
+RUN;
+
+PROC SQL;
+CREATE TABLE HD_id as
+SELECT min (enrolid) as enrolid,
+	min(DOBYR) as DOBYR,
+	min(index_date) as index_date
+FROM HD_id
+GROUP BY enrolid;
+QUIT;
+
+DATA HD_id;
+	SET HD_id;
+	age=YEAR(index_date)-DOBYR;
+RUN;
+
+* Assessment of counfounding diagnosis;
+
+data  id_list3;
+set all_record;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: (
+'2040', 
+'2050', '2060',
+'23872', '23873', '23874', '23875', 
+'23876', '28983', '2384', '23871', 
+'2030', '2031', '2386',
+'200', '2020', '2021', '2022', '2028', 
+'2051') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE id_list3 as
+SELECT min (enrolid) as enrolid,
+	1 as confounding_dx
+FROM id_list3
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE Myfile.HD_id as
+SELECT a.*,
+	b.confounding_dx as confounding_dx
+FROM HD_id a
+LEFT JOIN id_list3 b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+* Merge all patients with eligible primary diagnosis;
+DATA id_list1;
+	SET Myfile.anll_id;
+	TYPE_Dx="ANLL";
+RUN;
+DATA id_list2;
+	SET Myfile.all_id;
+	TYPE_Dx="ALL";
+RUN;
+DATA id_list3;
+	SET Myfile.mds_id;
+	TYPE_Dx="MDS";
+RUN;
+DATA id_list4;
+	SET Myfile.mpn_id;
+	TYPE_Dx="MPN";
+RUN;
+DATA id_list5;
+	SET Myfile.mm_id;
+	TYPE_Dx="MM";
+RUN;
+DATA id_list6;
+	SET Myfile.nhl_id;
+	TYPE_Dx="NHL";
+RUN;
+DATA id_list7;
+	SET Myfile.hd_id;
+	TYPE_Dx="HD";
+RUN;
+DATA id_list;
+	SET id_list1 id_list2 id_list3 id_list4 id_list5 id_list6 id_list7;
+IF age>=18 AND age<=64;
+RUN;
+PROC FREQ DATA=id_list;
+TABLE confounding_dx / missing;;
+RUN;
+* Check the enrollment status of patients with the insurance records;
+PROC SORT DATA=Myfileance_all;
+	by enrolid DTSTART ;
+RUN;
+
+PROC SORT DATA=id_list;
+	by enrolid;
+RUN;
+
+DATA Myfile.insur;
+MERGE id_list (in=a keep=enrolid index_date) Myfileance_all (in=b keep=enrolid DTSTART DTEND MEMDAYS );
+by enrolid;
+if a=1 and b=1;
+run;
+
+**Restrict the enroll records 6 months before and 12 months after the index date***;
+
+data enroll_prior enroll_post;
+set  Myfile.insur;
+if index_date-210 <= DTSTART < index_date then output enroll_prior;
+if index_date =< DTSTART <= index_date+390 then output enroll_post;
+run;
+*NOTE: There were 9827505 observations read from the data set MYFILE.INSUR.
+NOTE: The data set WORK.ENROLL_PRIOR has 1169339 observations and 5 variables.
+NOTE: The data set WORK.ENROLL_POST has 2690486 observations and 5 variables.;
+
+
+%MACRO enroll (time, n, index);
+**Sum the enrollment days for each id***;
+proc summary nway data= enroll_&time.;
+var MEMDAYS;
+by enrolid;
+output out=enroll_&time._sum sum=enroll_day;
+run;
+
+/*Check the number of people who do not have enrollment files in the 12 months &time. to drug initiation*/
+
+data enroll_&time._merge;
+set enroll_&time._sum;
+if 0 <= enroll_day < &n. then &index.=0;
+if enroll_day >= &n. then &index.=1;
+run;
+
+
+%MEND;
+
+%enroll (prior, 180, priorenroll_6m);
+%enroll (post, 360, postenroll_12m);
+
+DATA Enroll_prior_sum;
+	SET Enroll_prior_sum;
+	prior_elig=0;
+	IF enroll_day>=180 THEN prior_elig=1;
+
+	
+
+
+
+
+
+
+
+
+
+
+
