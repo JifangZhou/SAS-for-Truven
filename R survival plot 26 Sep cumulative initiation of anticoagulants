@@ -1,0 +1,7 @@
+analytical_cohort<-read.csv("C:/Users/jzhou86/Documents/SCD Project/SCD and DVT/survival kit 0926.csv", header = TRUE, sep = ",")
+analytical_cohort$SurvObj <- with(analytical_cohort, Surv(Time, fstat == 1))
+km.by.two <- survfit(SurvObj ~ SCD_status, data = analytical_cohort, conf.type = "log-log")
+autoplot(survfit(SurvObj ~ SCD_status, data = analytical_cohort),
+         surv.size = 1, surv.linetype = 'solid',  fun= 'event',
+         conf.int = FALSE, censor = FALSE,  ylim = c(0, 0.8), xlab = 'Days', ylab = 'Cumulative incidence')+guides(linetype = F)+scale_color_manual(values=c('#FF0000','#000000','#0000FF'),name = 'SCD Status', labels=c('Matched Non-SCD','Matched SCD','Unmatched SCD'),guide = guide_legend(reverse = TRUE))+
+  geom_vline(xintercept=1,linetype="dashed")+theme_classic()
