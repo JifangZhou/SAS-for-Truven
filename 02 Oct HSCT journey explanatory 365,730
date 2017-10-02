@@ -1,0 +1,352 @@
+*Start with allo HCT recipients;
+*Assessment of inpatient admissions 100-365 days post-transplantation;
+DATA ipt_sum_allo_365;
+	SET workingD.ipt_allo_sum;
+	IF index_date+100<ADMDATE<=index_date+365;
+DATA ipt_sum_allo_730;
+	SET workingD.ipt_allo_sum;
+	IF index_date+365<ADMDATE<=index_date+730;
+RUN;
+PROC SQL;
+CREATE TABLE adm_num_allo_365 as
+SELECT min(enrolid) as enrolid,
+		count(ADMDATE) as ADM_num
+FROM ipt_sum_allo_365
+GROUP BY enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE adm_num_allo_730 as
+SELECT min(enrolid) as enrolid,
+		count(ADMDATE) as ADM_num
+FROM ipt_sum_allo_730
+GROUP BY enrolid;
+QUIT;
+*add number of inpatient stays, with 180d look back days;
+DATA ipt_allo_sum;
+	SET workingD.ipt_allo_sum;
+	KEEP enrolid ADMDATE DAYS;
+RUN;
+proc sort data=ipt_allo_sum;
+by enrolid ADMDATE;
+run;
+proc transpose data = ipt_allo_sum out=fill_dates (drop=_name_) prefix = ADMDATE;
+by enrolid;
+var ADMDATE;
+run;
+proc transpose data = ipt_allo_sum out=days_supply (drop=_name_) prefix = DAYS;
+by enrolid;
+var DAYS;
+run;
+data both;
+merge fill_dates days_supply;
+by enrolid;
+run; 
+PROC sql;
+	CREATE table both as
+	SELECT a.*,
+			b.index_date-180 as start_dt,
+			b.index_date+365 as end_dt
+	FROM both a
+	INNER JOIN allo_id b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+data Days_365;
+set both;
+array daydummy(545) day1-day545;
+array filldates(*) ADMDATE1 - ADMDATE100;
+array days_supply(*) DAYS1-DAYS100;
+ do ii=1 to 545; daydummy(ii)=0;end;
+ do ii=1 to 545;
+ do i = 1 to dim(filldates) while (filldates(i) ne .);
+ if filldates(i)<= start_dt + ii -1 <= filldates(i)+days_supply(i)-1
+ then daydummy(ii)=1;
+ end;
+ end;
+drop i ii;
+dayscovered=sum(of day281 - day545);
+days_admitted=dayscovered;
+run;
+DATA ipt_allo_sum;
+	SET workingD.ipt_allo_sum;
+	KEEP enrolid ADMDATE DAYS;
+RUN;
+proc sort data=ipt_allo_sum;
+by enrolid ADMDATE;
+run;
+proc transpose data = ipt_allo_sum out=fill_dates (drop=_name_) prefix = ADMDATE;
+by enrolid;
+var ADMDATE;
+run;
+proc transpose data = ipt_allo_sum out=days_supply (drop=_name_) prefix = DAYS;
+by enrolid;
+var DAYS;
+run;
+data both;
+merge fill_dates days_supply;
+by enrolid;
+run; 
+PROC sql;
+	CREATE table both as
+	SELECT a.*,
+			b.index_date+185 as start_dt,
+			b.index_date+730 as end_dt
+	FROM both a
+	INNER JOIN allo_id b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+data Days_730;
+set both;
+array daydummy(545) day1-day545;
+array filldates(*) ADMDATE1 - ADMDATE100;
+array days_supply(*) DAYS1-DAYS100;
+ do ii=1 to 545; daydummy(ii)=0;end;
+ do ii=1 to 545;
+ do i = 1 to dim(filldates) while (filldates(i) ne .);
+ if filldates(i)<= start_dt + ii -1 <= filldates(i)+days_supply(i)-1
+ then daydummy(ii)=1;
+ end;
+ end;
+drop i ii;
+dayscovered=sum(of day181 - day545);
+days_admitted=dayscovered;
+run;
+
+*Add ER numbers;
+DATA outpatient_ER_records;
+	SET post_allo_opt_365;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0637','0981') THEN ER=1;
+	ELSE IF STDPROV in ('220','428') THEN ER=1;
+	ELSE IF STDPLAC in ('23') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120','10220','10320','10420','10520',
+						'12220','20120','20220','21120','21220','22120','22320',
+						'30120','30220','30320','30420','30520','30620',
+						'31120','31220','31320','31420','31520','31620') THEN ER=1;
+	IF ER=1;
+RUN;
+PROC SQL;
+CREATE TABLE outpatient_ER_records as
+SELECT min(enrolid) as enrolid,
+		SVCDATE as SVCDATE
+FROM outpatient_ER_records
+GROUP BY enrolid, SVCDATE;
+QUIT;
+PROC SQL;
+CREATE TABLE ER_num_365 as
+SELECT min(enrolid) as enrolid,
+		count(SVCDATE) as ER_num_365
+FROM outpatient_ER_records
+GROUP BY enrolid;
+QUIT;
+DATA outpatient_ER_records;
+	SET post_allo_opt_730;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0637','0981') THEN ER=1;
+	ELSE IF STDPROV in ('220','428') THEN ER=1;
+	ELSE IF STDPLAC in ('23') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120','10220','10320','10420','10520',
+						'12220','20120','20220','21120','21220','22120','22320',
+						'30120','30220','30320','30420','30520','30620',
+						'31120','31220','31320','31420','31520','31620') THEN ER=1;
+	IF ER=1;
+RUN;
+PROC SQL;
+CREATE TABLE outpatient_ER_records as
+SELECT min(enrolid) as enrolid,
+		SVCDATE as SVCDATE
+FROM outpatient_ER_records
+GROUP BY enrolid, SVCDATE;
+QUIT;
+PROC SQL;
+CREATE TABLE ER_num_730 as
+SELECT min(enrolid) as enrolid,
+		count(SVCDATE) as ER_num_730
+FROM outpatient_ER_records
+GROUP BY enrolid;
+QUIT;
+*add number of PCP visits;
+*PCP as defined as STDPROV as 200 MD, 204 internal medicine, 240 familay practice, 825 Nurse Practitioner, 845 Physician Assistant;
+DATA pcp_record;
+	SET post_allo_opt_365;
+	IF STDPROV in: ('200',
+				'204','240',
+				'825','845') THEN PCP= 1;/*seen by PCP*/
+	IF PCP=1;
+RUN;
+PROC SQL;
+CREATE TABLE pcp_record as
+SELECT min(enrolid) as enrolid,
+		SVCDATE as SVCDATE
+FROM pcp_record
+GROUP BY enrolid, SVCDATE;
+QUIT;
+PROC SQL;
+CREATE TABLE PCP_num_365 as
+SELECT min(enrolid) as enrolid,
+		count(SVCDATE) as PCP_num_365
+FROM pcp_record
+GROUP BY enrolid;
+QUIT;
+DATA pcp_record;
+	SET post_allo_opt_730;
+	IF STDPROV in: ('200',
+				'204','240',
+				'825','845') THEN PCP= 1;/*seen by PCP*/
+	IF PCP=1;
+RUN;
+PROC SQL;
+CREATE TABLE pcp_record as
+SELECT min(enrolid) as enrolid,
+		SVCDATE as SVCDATE
+FROM pcp_record
+GROUP BY enrolid, SVCDATE;
+QUIT;
+PROC SQL;
+CREATE TABLE PCP_num_730 as
+SELECT min(enrolid) as enrolid,
+		count(SVCDATE) as PCP_num_730
+FROM pcp_record
+GROUP BY enrolid;
+QUIT;
+*add number of specialist visits;
+*Specialists defined as STDPROV as 443 Pediatric Hematology-Oncology, 280 Hematology, 380 Oncology;
+DATA spe_record;
+	SET post_allo_opt_365;
+	IF STDPROV in: ('443','280','380') THEN spe= 1;/*seen by spe*/
+	IF spe=1;
+RUN;
+PROC SQL;
+CREATE TABLE spe_record as
+SELECT min(enrolid) as enrolid,
+		SVCDATE as SVCDATE
+FROM spe_record
+GROUP BY enrolid, SVCDATE;
+QUIT;
+PROC SQL;
+CREATE TABLE spe_num_365 as
+SELECT min(enrolid) as enrolid,
+		count(SVCDATE) as spe_num_365
+FROM spe_record
+GROUP BY enrolid;
+QUIT;
+DATA spe_record;
+	SET post_allo_opt_730;
+	IF STDPROV in: ('443','280','380') THEN spe= 1;/*seen by spe*/
+	IF spe=1;
+RUN;
+PROC SQL;
+CREATE TABLE spe_record as
+SELECT min(enrolid) as enrolid,
+		SVCDATE as SVCDATE
+FROM spe_record
+GROUP BY enrolid, SVCDATE;
+QUIT;
+PROC SQL;
+CREATE TABLE spe_num_730 as
+SELECT min(enrolid) as enrolid,
+		count(SVCDATE) as spe_num_730
+FROM spe_record
+GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table allo_id1 as
+	SELECT a.*,
+		b.adm_num as adm_num_365
+	FROM allo_id a
+	LEFT JOIN adm_num_allo_365 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table allo_id2 as
+	SELECT a.*,
+		b.adm_num as adm_num_730
+	FROM allo_id1 a
+	LEFT JOIN adm_num_allo_730 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table allo_id3 as
+	SELECT a.*,
+		b.days_admitted as days_admitted_365
+	FROM allo_id2 a
+	LEFT JOIN days_365 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table allo_id4 as
+	SELECT a.*,
+		b.days_admitted as days_admitted_730
+	FROM allo_id3 a
+	LEFT JOIN days_730 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table allo_id5 as
+	SELECT a.*,
+		b.ER_num_365 as ER_num_365
+	FROM allo_id4 a
+	LEFT JOIN ER_num_365 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table allo_id6 as
+	SELECT a.*,
+		b.ER_num_730 as ER_num_730
+	FROM allo_id5 a
+	LEFT JOIN ER_num_730 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table allo_id7 as
+	SELECT a.*,
+		b.PCP_num_365 as PCP_num_365
+	FROM allo_id6 a
+	LEFT JOIN PCP_num_365 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table allo_id8 as
+	SELECT a.*,
+		b.PCP_num_730 as PCP_num_730
+	FROM allo_id7 a
+	LEFT JOIN PCP_num_730 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table allo_id9 as
+	SELECT a.*,
+		b.SPE_num_365 as SPE_num_365
+	FROM allo_id8 a
+	LEFT JOIN SPE_num_365 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table allo_id10 as
+	SELECT a.*,
+		b.SPE_num_730 as SPE_num_730
+	FROM allo_id9 a
+	LEFT JOIN SPE_num_730 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA workingD.analytical_cohort_allo_0110;
+	SET allo_id10;
+	IF adm_num_365=. THEN adm_num_365=0;
+	IF adm_num_730=. THEN adm_num_730=0;
+	IF days_admitted_365=. THEN days_admitted_365=0;
+	IF days_admitted_730=. THEN days_admitted_730=0;
+	IF ER_num_365=. THEN ER_num_365=0;
+	IF ER_num_730=. THEN ER_num_730=0;
+	IF PCP_num_365=. THEN PCP_num_365=0;
+	IF PCP_num_730=. THEN PCP_num_730=0;
+	IF SPE_num_365=. THEN SPE_num_365=0;
+	IF SPE_num_730=. THEN SPE_num_730=0;
+RUN;
