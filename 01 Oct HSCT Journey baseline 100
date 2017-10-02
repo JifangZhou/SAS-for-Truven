@@ -1,0 +1,496 @@
+LIBNAME Myfile 'F:\User Folders\jzhou86\HSCT general cases';
+LIBNAME WorkingD 'F:\User Folders\jzhou86\HSCT working directory';
+
+DATA pre_allo;
+	SET workingD.allo_svc_pre;
+DATA pre_auto;
+	SET workingD.auto_svc_pre;
+DATA post_allo_svc_100;
+	SET workingD.allo_svc_post;
+	IF allo_HSCT_date<=SVCDATE<=allo_HSCT_date+100;
+DATA post_auto_svc_100;
+	SET workingD.auto_svc_post;
+	IF auto_HSCT_date<=SVCDATE<=auto_HSCT_date+100;
+DATA post_allo_svc_365;
+	SET workingD.allo_svc_post;
+	IF allo_HSCT_date+100<SVCDATE<=allo_HSCT_date+365;
+DATA post_auto_svc_365;
+	SET workingD.auto_svc_post;
+	IF auto_HSCT_date+100<SVCDATE<=auto_HSCT_date+365;
+DATA post_allo_svc_730;
+	SET workingD.allo_svc_post;
+	IF allo_HSCT_date+365<SVCDATE<=allo_HSCT_date+730;
+DATA post_auto_svc_730;
+	SET workingD.auto_svc_post;
+	IF auto_HSCT_date+365<SVCDATE<=auto_HSCT_date+730;
+DATA inpt_sum;
+SET Myfile.scd_ccaei_09 Myfile.scd_ccaei_10 Myfile.scd_ccaei_11 Myfile.scd_ccaei_12 Myfile.scd_ccaei_13
+	Myfile.scd_mdcri_09 Myfile.scd_mdcri_10 Myfile.scd_mdcri_11 Myfile.scd_mdcri_12 Myfile.scd_mdcri_13
+	Myfile.scd_ccaei_142  
+	Myfile.scd_mdcri_142;
+DATA allo_id;
+	SET workingD.id_allo_0110;
+DATA auto_id;
+	SET workingD.id_auto_0110;
+RUN;
+PROC SQL;
+CREATE TABLE ipt_allo_sum as
+SELECT a.*,
+		b.index_date as index_date
+FROM inpt_sum a
+INNER JOIN allo_id b
+ON a.enrolid=b.enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE ipt_auto_sum as
+SELECT a.*,
+		b.index_date as index_date
+FROM inpt_sum a
+INNER JOIN auto_id b
+ON a.enrolid=b.enrolid;
+QUIT;
+DATA ipt_sum_allo_pre;
+	SET ipt_allo_sum;
+	IF index_date-180<=DISDATE<index_date;
+DATA ipt_sum_auto_pre;
+	SET ipt_auto_sum;
+	IF index_date-180<=DISDATE<index_date;
+DATA ipt_sum_allo_100;
+	SET ipt_allo_sum;
+	IF index_date<=DISDATE<=index_date+100;
+DATA ipt_sum_auto_100;
+	SET ipt_auto_sum;
+	IF index_date<=DISDATE<=index_date+100;
+RUN;
+
+* Add allo HCT baseline variables and 100 days variables;
+DATA all_claims_pre;
+	SET ipt_sum_allo_pre pre_allo;
+RUN;
+DATA dm2_list;
+set all_claims_pre;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('250') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE dm2_list as
+SELECT min(enrolid) as enrolid,
+	1 as dm2
+FROM dm2_list
+GROUP BY enrolid;
+QUIT;
+
+DATA HPN_list;
+set all_claims_pre;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('401','402','403','404','405') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE HPN_list as
+SELECT min(enrolid) as enrolid,
+	1 as HPN
+FROM HPN_list
+GROUP BY enrolid;
+QUIT;
+
+DATA lipid_list;
+set all_claims_pre;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2720','2721','2722','2723','2724') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE lipid_list as
+SELECT min(enrolid) as enrolid,
+	1 as lipid
+FROM lipid_list
+GROUP BY enrolid;
+QUIT;
+*Merge back the files with chronic conditions;
+PROC sql;
+	CREATE table allo_id1 as
+	SELECT a.*,
+		b.lipid as baseline_lipid
+	FROM allo_id a
+	LEFT JOIN lipid_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table allo_id2 as
+	SELECT a.*,
+		b.HPN as baseline_hpn
+	FROM allo_id1 a
+	LEFT JOIN HPN_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table allo_id3 as
+	SELECT a.*,
+		b.dm2 as baseline_dm2
+	FROM allo_id2 a
+	LEFT JOIN dm2_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA allo_id3;
+	SET allo_id3;
+	IF baseline_dm2=. THEN baseline_dm2=0;
+	IF baseline_lipid=. THEN baseline_lipid=0;
+	IF baseline_hpn=. THEN baseline_hpn=0;
+RUN;	
+*other baseline characteristics;
+*COPD
+Acute myocardial infarction or history of AMI
+Congestive heart failure
+Cerebrovascular disease
+Moderate-severe renal disease
+Moderate-severe liver disease;
+DATA copd_list;
+set all_claims_pre;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('490','491','492','493','494','495','496',
+						'500','501','502','503','504','505',
+						'4168','4169','5064','5191') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE copd_list as
+SELECT min(enrolid) as enrolid,
+	1 as copd
+FROM copd_list
+GROUP BY enrolid;
+QUIT;
+
+DATA AMI_list;
+set all_claims_pre;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('410','412') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE AMI_list as
+SELECT min(enrolid) as enrolid,
+	1 as AMI
+FROM AMI_list
+GROUP BY enrolid;
+QUIT;
+
+DATA CHF_list;
+set all_claims_pre;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('39891','4254','4255','4257','4258','4259','428') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE CHF_list as
+SELECT min(enrolid) as enrolid,
+	1 as CHF
+FROM CHF_list
+GROUP BY enrolid;
+QUIT;
+
+DATA Stroke_list;
+set all_claims_pre;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('430','431','432','433','434','435','436','437','438') then case=1;
+		end;
+	array proc {*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('0061','0062','0063','0065','3812','3832','3842','3922','3928','3974') then case=1;
+		end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE Stroke_list as
+SELECT min(enrolid) as enrolid,
+	1 as Stroke
+FROM Stroke_list
+GROUP BY enrolid;
+QUIT;
+
+DATA CKD_list;
+set all_claims_pre;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('40301','40311','40391','40402','40403','40412','40413','40492','40493',
+                       '582','583','585','586','588','V420','V451','V56') then case=1;
+		end;
+	array proc {*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('3927','3942','3995','5498','5569') then case=1;
+		end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE CKD_list as
+SELECT min(enrolid) as enrolid,
+	1 as CKD
+FROM CKD_list
+GROUP BY enrolid;
+QUIT;
+
+DATA CLD_list;
+set all_claims_pre;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('07022','07023','07044','V427',
+			'4560', '4561', '4562',
+			'5722','5723','5724','5725','5726','5727','5728') then case=1;
+		end;
+	array proc {*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('391 ','4291','505') then case=1;
+		end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE CLD_list as
+SELECT min(enrolid) as enrolid,
+	1 as CLD
+FROM CLD_list
+GROUP BY enrolid;
+QUIT;	
+
+PROC sql;
+	CREATE table allo_id4 as
+	SELECT a.*,
+		b.copd as baseline_copd
+	FROM allo_id3 a
+	LEFT JOIN copd_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table allo_id5 as
+	SELECT a.*,
+		b.AMI as baseline_AMI
+	FROM allo_id4 a
+	LEFT JOIN AMI_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table allo_id6 as
+	SELECT a.*,
+		b.CHF as baseline_CHF
+	FROM allo_id5 a
+	LEFT JOIN CHF_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table allo_id7 as
+	SELECT a.*,
+		b.Stroke as baseline_Stroke
+	FROM allo_id6 a
+	LEFT JOIN Stroke_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table allo_id8 as
+	SELECT a.*,
+		b.CKD as baseline_CKD
+	FROM allo_id7 a
+	LEFT JOIN CKD_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table allo_id9 as
+	SELECT a.*,
+		b.CLD as baseline_CLD
+	FROM allo_id8 a
+	LEFT JOIN CLD_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+DATA allo_id9;
+	SET allo_id3;
+	IF baseline_copd=. THEN baseline_copd=0;
+	IF baseline_ami=. THEN baseline_ami=0;
+	IF baseline_CHF=. THEN baseline_CHF=0;
+	IF baseline_Stroke=. THEN baseline_Stroke=0;
+	IF baseline_CKD=. THEN baseline_CKD=0;
+	IF baseline_CLD=. THEN baseline_CLD=0;
+RUN;	
+
+*assessment of 100 day events;
+DATA id_list;
+SET workingD.analytical_allo_0110_baseline;
+DATA all_claims_100;
+	SET post_allo_svc_100 ipt_sum_allo_100;
+RUN;
+*Transfusion events;
+DATA Transfusion_list;
+set post_allo_svc_100;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('V582') then case=1;
+		end;
+	array proc {*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('9903','P9010','P9011','P9051','P9054','P9056') then case=1;
+		end;
+	array proc_red {*} proc1-proc15;
+		do i = 1 to dim(proc_red);
+		if proc_red{i} in: ('9904','P9016','P9021','P9022','P9038','P9039','P9040','P9057','P9058') then case=2;
+		end;
+	array proc_pla {*} proc1-proc15;
+		do i = 1 to dim(proc_pla);
+		if proc_pla{i} in: ('9905','P9019', 'P9020', 
+						'P9031','P9032','P9033','P9034','P9035','P9036','P9037',
+						'P9052', 'P9053', 'P9055', 'P9072') then case=3;
+		end;
+	if REVCODE="0382" then case=1; 
+	if REVCODE="0381" then case=2; 
+	if REVCODE="0384" then case=3; 
+if case ^= .;
+run; 
+
+PROC SQL;
+CREATE TABLE Trans_list as
+SELECT min(enrolid) as enrolid,
+	count(SVCDATE) as num_trans
+FROM Transfusion_list
+GROUP BY enrolid;
+QUIT;	
+*Assess CMV infection, oral mucositis, opportunistic infection and GVHD;
+DATA CMV_list;
+set all_claims_100;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('0785') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE CMV_list as
+SELECT min(enrolid) as enrolid,
+	1 as CMV
+FROM CMV_list
+GROUP BY enrolid;
+QUIT;
+
+DATA mucositis_list;
+set all_claims_100;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('5280') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE mucositis_list as
+SELECT min(enrolid) as enrolid,
+	1 as mucositis
+FROM mucositis_list
+GROUP BY enrolid;
+QUIT;
+
+DATA Oinfection_list;
+set all_claims_100;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('112','1173','4846','1175','1363') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE Oinfection_list as
+SELECT min(enrolid) as enrolid,
+	1 as Oinfection
+FROM Oinfection_list
+GROUP BY enrolid;
+QUIT;
+
+DATA GVHD_list;
+set all_claims_100;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2795') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE GVHD_list as
+SELECT min(enrolid) as enrolid,
+	1 as GVHD
+FROM GVHD_list
+GROUP BY enrolid;
+QUIT;
+*Merge back the files with chronic conditions;
+PROC sql;
+	CREATE table allo_id1 as
+	SELECT a.*,
+		b.num_trans as num_trans_100
+	FROM id_list a
+	LEFT JOIN Trans_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table allo_id2 as
+	SELECT a.*,
+		b.CMV as CMV_100
+	FROM allo_id1 a
+	LEFT JOIN CMV_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table allo_id3 as
+	SELECT a.*,
+		b.mucositis as mucositis_100
+	FROM allo_id2 a
+	LEFT JOIN mucositis_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table allo_id4 as
+	SELECT a.*,
+		b.Oinfection as Oinfection_100
+	FROM allo_id3 a
+	LEFT JOIN Oinfection_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table allo_id5 as
+	SELECT a.*,
+		b.GVHD as GVHD_100
+	FROM allo_id4 a
+	LEFT JOIN GVHD_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+DATA workingD.allo_0110_baseline_100;
+	SET allo_id5;
+	IF num_trans_100=. THEN num_trans_100=0;
+	IF CMV_100=. THEN CMV_100=0;
+	IF mucositis_100=. THEN mucositis_100=0;
+	IF Oinfection_100=. THEN Oinfection_100=0;
+	IF GVHD_100=. THEN GVHD_100=0;
+RUN;	
+
+
+PROC FREQ DATA=all_claims_100;
+TABLE REVCODE; RUN;
