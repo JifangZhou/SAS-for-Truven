@@ -1,0 +1,569 @@
+*extract all Opioid prescriptions;
+PROC sql;
+	CREATE table temp_opioid as
+	SELECT a.*,
+		b.STRNGTH as STRNGTH,
+		b.flag as flag
+	FROM drugs_all a
+	INNER JOIN WorkingD.narcoticall_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+DATA drug_all_addratio;
+ SET temp_opioid;
+ 	IF flag='Buprenorphine' THEN ratio=37.5;
+ 	ELSE IF flag= 'Codeine' THEN ratio=0.13;
+	ELSE IF flag= 'Fentanyl' THEN ratio=3;
+	ELSE IF flag= 'Hydrocodone' THEN ratio=1;
+	ELSE IF flag= 'Hydromorphone' THEN ratio=5;
+	ELSE IF flag= 'Meperidine' THEN ratio=0.1;
+	ELSE IF flag= 'Methadone' THEN ratio=4.7;
+	ELSE IF flag= 'Morphine' THEN ratio=1;
+	ELSE IF flag= 'Oxycodone' THEN ratio=1.5;
+	ELSE IF flag= 'Oxymorphone' THEN ratio=3;
+	ELSE IF flag= 'Pentazocine' THEN ratio=0.37;
+	ELSE IF flag= 'Propoxyphene' THEN ratio=0.08;
+	ELSE IF flag= 'Tapentadol' THEN ratio=0.4;
+	ELSE IF flag= 'Tramadol' THEN ratio=0.2;
+RUN;
+
+* add strngth to medication by molecules 'Buprenorphine';
+DATA drug_Buprenorphine;
+SET drug_all_addratio;
+IF flag = 'Buprenorphine';
+IF STRNGTH = '2 MG-0.5 MG' THEN str=2;
+ELSE IF STRNGTH = '5 MCG/HR' THEN str=0.84;/* to confirm*/
+ELSE IF STRNGTH = '8 MG-2 MG' THEN str=8;
+RUN;
+
+* add strngth to medication by molecules 'Codeine';
+DATA drug_Codeine;
+SET drug_all_addratio;
+IF flag = 'Codeine';
+IF STRNGTH = '120 MG/5 ML-12 MG/5 ML' THEN str=1135.2;/* to confirm*/
+ELSE IF STRNGTH = '30 MG' THEN str=30;
+ELSE IF STRNGTH = '300 MG-15 MG' THEN str=15;
+ELSE IF STRNGTH = '300 MG-30 MG' THEN str=30;
+ELSE IF STRNGTH = '300 MG-60 MG' THEN str=60;
+ELSE IF STRNGTH = '325 MG-50 MG-40 MG-30 MG' THEN str=50; /* to confirm*/
+ELSE IF STRNGTH = '60 MG' THEN str=60;
+ELSE IF STRNGTH = '9 MG-200 MG' THEN str=200; /* to confirm*/
+RUN;
+
+* add strngth to medication by molecules 'Fentanyl';
+DATA drug_Fentanyl;
+SET drug_all_addratio;
+IF flag = 'Fentanyl';
+IF STRNGTH = '100 MCG/HR' THEN str=2.4;/* assume 24 hrs to confirm*/
+ELSE IF STRNGTH = '12 MCG/HR' THEN str=0.288;/* assume 24 hrs to confirm*/
+ELSE IF STRNGTH = '25 MCG/HR' THEN str=0.6;/* assume 24 hrs to confirm*/
+ELSE IF STRNGTH = '50 MCG/HR' THEN str=1.2;/* assume 24 hrs to confirm*/
+ELSE IF STRNGTH = '75 MCG/HR' THEN str=1.8;/* assume 24 hrs to confirm*/
+RUN;
+
+* add strngth to medication by molecules 'Hydrocodone';
+DATA drug_Hydrocodone;
+SET drug_all_addratio;
+IF flag = 'Hydrocodone';
+IF STRNGTH = '1.5 MG-5 MG' THEN str=5;
+ELSE IF STRNGTH = '10 MG-200 MG' THEN str=10;
+ELSE IF STRNGTH = '300 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '300 MG-5 MG' THEN str=5;
+ELSE IF STRNGTH = '300 MG-7.5 MG' THEN str=7.5;
+ELSE IF STRNGTH = '325 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '325 MG-5 MG' THEN str=5;
+ELSE IF STRNGTH = '325 MG-7.5 MG' THEN str=7.5;
+ELSE IF STRNGTH = '500 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '500 MG-2.5 MG' THEN str=2.5;
+ELSE IF STRNGTH = '500 MG-5 MG' THEN str=5;
+ELSE IF STRNGTH = '500 MG-7.5 MG' THEN str=7.5;
+ELSE IF STRNGTH = '650 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '650 MG-7.5 MG' THEN str=7.5;
+ELSE IF STRNGTH = '660 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '7.5 MG-200 MG' THEN str=7.5;
+ELSE IF STRNGTH = '750 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '750 MG-7.5 MG' THEN str=7.5;
+ELSE IF STRNGTH = '8 MG-10 MG' THEN str=10; /* to confirm*/
+ELSE IF STRNGTH = '8 MG/5 ML-10 MG/5 ML' THEN str=400; /* to confirm*/
+RUN;
+
+* add strngth to medication by molecules 'Hydromorphone';
+DATA drug_Hydromorphone;
+SET drug_all_addratio;
+IF flag = 'Hydromorphone';
+IF STRNGTH = '12 MG' THEN str=12;
+ELSE IF STRNGTH = '16 MG' THEN str=16;
+ELSE IF STRNGTH = '2 MG' THEN str=2;
+ELSE IF STRNGTH = '4 MG' THEN str=4;
+ELSE IF STRNGTH = '8 MG' THEN str=8;
+RUN;
+
+* add strngth to medication by molecules 'Meperidine';
+DATA drug_Meperidine;
+SET drug_all_addratio;
+IF flag = 'Meperidine';
+IF STRNGTH = '100 MG' THEN str=100;
+ELSE IF STRNGTH = '50 MG' THEN str=50;
+ELSE IF STRNGTH = '50 MG-25 MG' THEN str=50;/* to confirm*/
+RUN;
+
+* add strngth to medication by molecules 'Methadone';
+DATA drug_Methadone;
+SET drug_all_addratio;
+IF flag = 'Methadone';
+IF STRNGTH = '10 MG' THEN str=10;
+ELSE IF STRNGTH = '5 MG' THEN str=5;
+RUN;
+
+* add strngth to medication by molecules 'Morphine';
+DATA drug_Morphine;
+SET drug_all_addratio;
+IF flag = 'Morphine';
+IF STRNGTH = '10 MG' THEN str=10;
+ELSE IF STRNGTH = '100 MG' THEN str=100;
+ELSE IF STRNGTH = '15 MG' THEN str=15;
+ELSE IF STRNGTH = '20 MG' THEN str=20;
+ELSE IF STRNGTH = '200 MG' THEN str=200;
+ELSE IF STRNGTH = '30 MG' THEN str=30;
+ELSE IF STRNGTH = '30 MG-1.2 MG' THEN str=30;
+ELSE IF STRNGTH = '50 MG' THEN str=50;
+ELSE IF STRNGTH = '60 MG' THEN str=60;
+ELSE IF STRNGTH = '80 MG' THEN str=80;
+ELSE IF STRNGTH = '90 MG' THEN str=90;
+RUN;
+
+* add strngth to medication by molecules 'Oxycodone';
+DATA drug_Oxycodone;
+SET drug_all_addratio;
+IF flag = 'Oxycodone';
+IF STRNGTH = '10 MG' THEN str=10;
+ELSE IF STRNGTH = '15 MG' THEN str=15;
+ELSE IF STRNGTH = '20 MG' THEN str=20;
+ELSE IF STRNGTH = '30 MG' THEN str=30;
+ELSE IF STRNGTH = '325 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '325 MG-2.5 MG' THEN str=2.5;
+ELSE IF STRNGTH = '325 MG-4.5 MG-0.38 MG' THEN str=4.88;
+ELSE IF STRNGTH = '325 MG-4.8355 MG' THEN str=4.8355;
+ELSE IF STRNGTH = '325 MG-7.5 MG' THEN str=7.5;
+ELSE IF STRNGTH = '40 MG' THEN str=40;
+ELSE IF STRNGTH = '400 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '5 MG' THEN str=5;
+ELSE IF STRNGTH = '500 MG-5 MG' THEN str=5;
+ELSE IF STRNGTH = '500 MG-7.5 MG' THEN str=7.5;
+ELSE IF STRNGTH = '60 MG' THEN str=60;
+ELSE IF STRNGTH = '650 MG-10 MG' THEN str=10;
+ELSE IF STRNGTH = '80 MG' THEN str=80;
+RUN;
+
+* add strngth to medication by molecules 'Oxymorphone';
+DATA drug_Oxymorphone;
+SET drug_all_addratio;
+IF flag = 'Oxymorphone';
+IF STRNGTH = '10 MG' THEN str=10;
+ELSE IF STRNGTH = '15 MG' THEN str=15;
+ELSE IF STRNGTH = '20 MG' THEN str=20;
+ELSE IF STRNGTH = '30 MG' THEN str=30;
+ELSE IF STRNGTH = '40 MG' THEN str=40;
+ELSE IF STRNGTH = '5 MG' THEN str=5;
+RUN;
+
+* add strngth to medication by molecules 'Pentazocine';
+DATA drug_Pentazocine;
+SET drug_all_addratio;
+IF flag = 'Pentazocine';
+IF STRNGTH = '0.5 MG-50 MG' THEN str=50;
+ELSE IF STRNGTH = '650 MG-25 MG' THEN str=25;
+RUN;
+
+* add strngth to medication by molecules 'Propoxyphene';
+DATA drug_Propoxyphene;
+SET drug_all_addratio;
+IF flag = 'Propoxyphene';
+IF STRNGTH = '100 MG' THEN str=100;
+ELSE IF STRNGTH = '325 MG-50 MG' THEN str=50;
+ELSE IF STRNGTH = '500 MG-100 MG' THEN str=100;
+ELSE IF STRNGTH = '65 MG' THEN str=65;
+ELSE IF STRNGTH = '650 MG-100 MG' THEN str=100;
+RUN;
+*NOTE: The data set WORK.DRUG_PROPOXYPHENE has 315 observations and 91 variables.
+;
+* add strngth to medication by molecules 'Tapentadol';
+DATA drug_Tapentadol;
+SET drug_all_addratio;
+IF flag = 'Tapentadol';
+IF STRNGTH = '100 MG' THEN str=100;
+ELSE IF STRNGTH = '50 MG' THEN str=50;
+ELSE IF STRNGTH = '75 MG' THEN str=75;
+RUN;
+*NOTE: The data set WORK.DRUG_TAPENTADOL has 63 observations and 91 variables.
+;
+* add strngth to medication by molecules 'Tramadol';
+DATA drug_Tramadol;
+SET drug_all_addratio;
+IF flag = 'Tramadol';
+IF STRNGTH = '100 MG' THEN str=100;
+ELSE IF STRNGTH = '200 MG' THEN str=200;
+ELSE IF STRNGTH = '300 MG' THEN str=300;
+ELSE IF STRNGTH = '325 MG-37.5 MG' THEN str=37.5;
+ELSE IF STRNGTH = '50 MG' THEN str=50;
+RUN;
+*NOTE: The data set WORK.DRUG_TRAMADOL has 1443 observations and 91 variables.
+;
+DATA all_opiatedrug;
+SET drug_Buprenorphine drug_Codeine drug_Fentanyl drug_Hydrocodone drug_Meperidine drug_Methadone drug_Morphine drug_Oxycodone
+	drug_Oxymorphone drug_Pentazocine drug_Propoxyphene drug_Tapentadol drug_Tramadol;
+RUN;
+
+DATA all_drug_OME;
+SET all_opiatedrug;
+OME=METQTY*str*ratio;
+IF OME=. THEN OME=0;
+RUN;
+
+*Merge the file back to the id_list and cluster by Sequency number;
+
+PROC sql;
+	CREATE table id_list_eligible_7 as
+	SELECT a.*,
+		b.OME as OME_dose,
+		b.SVCDATE as SVCDATE
+	FROM id_list_eligible_5 a
+	LEFT JOIN all_drug_OME b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list_eligible_8;
+	SET id_list_eligible_7;
+	IF SVCDATE ^=. AND SVCDATE< ADMDATE-180 THEN OME_dose=0;
+	IF SVCDATE ^=. AND SVCDATE> ADMDATE THEN OME_dose=0;
+	IF OME_dose=. THEN OME_dose=0;
+	IF OME_dose<0 THEN OME_dose=0;
+	OME_dose_14_pre=0;
+	IF SVCDATE ^=. AND ADMDATE-14 <=SVCDATE<= ADMDATE THEN OME_dose_14_pre=OME_dose;
+RUN;
+PROC SQL;
+	CREATE TABLE id_list_OME as
+	SELECT 	min(SEQNUM) as SEQNUM,
+			sum(OME_dose) as total_OME_dose,
+			sum(OME_dose_14_pre) as total_OME_14_pre
+	FROM id_list_eligible_8
+	GROUP BY SEQNUM;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_eligible_9 as
+	SELECT a.*,
+		b.total_OME_dose as total_OME_dose,
+		b.total_OME_14_pre as total_OME_14_pre
+	FROM id_list_eligible_5 a
+	LEFT JOIN id_list_OME b
+	ON a.SEQNUM = b.SEQNUM;
+QUIT;
+
+PROC MEANS DATA=id_list_eligible_9;
+VAR total_OME_dose;RUN;
+
+DATA id_list_eligible_9;
+	SET id_list_eligible_9;
+	opioid=1;
+	IF total_OME_dose=0 THEN opioid=0;
+RUN;
+
+*extract all NSAIDs prescriptions;
+PROC sql;
+	CREATE table temp_NSAIDs as
+	SELECT a.*,
+		b.STRNGTH as STRNGTH
+	FROM drugs_all a
+	INNER JOIN WorkingD.nsaids_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+DATA all_drug_NSAIDs;
+SET temp_NSAIDs;
+NSAIDs=1;
+RUN;
+*Merge back the NSAIDs file to the ipt records;
+PROC sql;
+	CREATE table id_list_eligible_10 as
+	SELECT a.*,
+		b.NSAIDs as NSAIDs,
+		b.SVCDATE as SVCDATE
+	FROM id_list_eligible_9 a
+	LEFT JOIN all_drug_NSAIDs b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list_eligible_11;
+	SET id_list_eligible_10;
+	IF SVCDATE ^=. AND SVCDATE< ADMDATE-180 THEN NSAIDs=0;
+	IF SVCDATE ^=. AND SVCDATE> ADMDATE THEN NSAIDs=0;
+	IF NSAIDs=. THEN NSAIDs=0;
+	IF NSAIDs<0 THEN NSAIDs=0;
+	NSAIDs_14_pre=0;
+	IF SVCDATE ^=. AND ADMDATE-14 <=SVCDATE<= ADMDATE THEN NSAIDs_14_pre=NSAIDs;
+RUN;
+PROC SQL;
+	CREATE TABLE id_list_NSAIDs as
+	SELECT 	min(SEQNUM) as SEQNUM,
+			sum(NSAIDs) as NSAIDs_count,
+			sum(NSAIDs_14_pre) as NSAIDs_14_pre_count
+	FROM id_list_eligible_11
+	GROUP BY SEQNUM;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_eligible_12 as
+	SELECT a.*,
+		b.NSAIDs_count as NSAIDs_count,
+		b.NSAIDs_14_pre_count as NSAIDs_14_pre_count
+	FROM id_list_eligible_9 a
+	LEFT JOIN id_list_NSAIDs b
+	ON a.SEQNUM = b.SEQNUM;
+QUIT;
+
+DATA id_list_eligible_12;
+	SET id_list_eligible_12;
+	NSAIDs=1;
+	IF NSAIDs_count=0 THEN NSAIDs=0;
+	Hu_cat_high=0;
+	IF total_Hu>=90 THEN Hu_cat_high=1;
+RUN;
+
+DATA id_list_eligible_13;
+	SET id_list_eligible_12;
+IF total_Hu>0;
+Hu_cat_high=0;
+IF total_Hu>=90 THEN Hu_cat_high=1;
+RUN;
+
+*Add back # of admissions in the six month's period;
+*extract all admission events;
+DATA inpt_records;
+ SET inpt_sum;
+ KEEP enrolid ADMDATE;
+RUN;
+*Merge back the inpt records back to admission id list;
+PROC sql;
+	CREATE table id_list_eligible_14 as
+	SELECT a.*,
+		b.ADMDATE as adm
+	FROM id_list_eligible_12 a
+	LEFT JOIN inpt_records b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*Select all admission occurred over the 6 months pre-index period;
+DATA id_list_eligible_15;
+	SET id_list_eligible_14;
+	adm_event=1;
+	IF adm ^=. AND adm< ADMDATE-180 THEN adm_event=0;
+	IF adm ^=. AND adm>= ADMDATE THEN adm_event=0;
+	IF adm=. THEN adm_event=0;
+RUN;
+*Collapse on the number of admissions;
+PROC SQL;
+	CREATE TABLE id_list_pre_adm as
+	SELECT 	min(SEQNUM) as SEQNUM,
+			sum(adm_event) as adm_pre_count
+	FROM id_list_eligible_15
+	GROUP BY SEQNUM;
+QUIT;
+*Add back to the analytical cohort;
+PROC sql;
+	CREATE table id_list_eligible_16 as
+	SELECT a.*,
+		b.adm_pre_count as adm_pre_count
+	FROM id_list_eligible_12 a
+	LEFT JOIN id_list_pre_adm b
+	ON a.SEQNUM = b.SEQNUM;
+QUIT;
+
+*Add back the ER visits to the analytical file;
+*Select all ER visits;
+DATA ER_records;
+	SET outpatient_records;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0637','0981') THEN ER=1;
+	ELSE IF STDPROV in ('220','428') THEN ER=1;
+	ELSE IF STDPLAC in ('23') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120','10220','10320','10420','10520',
+						'12220','20120','20220','21120','21220','22120','22320',
+						'30120','30220','30320','30420','30520','30620',
+						'31120','31220','31320','31420','31520','31620') THEN ER=1;
+	IF ER=1;
+	DROP ER;
+RUN;
+*Select unique dates;
+PROC SQL;
+	CREATE TABLE ER_unique_date as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) as ER_date
+	FROM ER_records
+	GROUP BY enrolid, SVCDATE;
+QUIT;
+*Merge back the ER records back to admission id list;
+PROC sql;
+	CREATE table id_list_eligible_17 as
+	SELECT a.*,
+		b.ER_date as ER_date
+	FROM id_list_eligible_16 a
+	LEFT JOIN ER_unique_date b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*Select all ER visits occurred over the 6 months pre-index period;
+DATA id_list_eligible_18;
+	SET id_list_eligible_17;
+	ER_event=1;
+	IF ER_date ^=. AND ER_date< ADMDATE-180 THEN ER_event=0;
+	IF ER_date ^=. AND ER_date> ADMDATE THEN ER_event=0;
+	IF ER_date=. THEN ER_event=0;
+RUN;
+*Collapse on the number of ER;
+PROC SQL;
+	CREATE TABLE id_list_pre_ER as
+	SELECT 	min(SEQNUM) as SEQNUM,
+			sum(ER_event) as ER_pre_count
+	FROM id_list_eligible_18
+	GROUP BY SEQNUM;
+QUIT;
+*Add back to the analytical cohort;
+PROC sql;
+	CREATE table id_list_eligible_19 as
+	SELECT a.*,
+		b.ER_pre_count as ER_pre_count
+	FROM id_list_eligible_16 a
+	LEFT JOIN id_list_pre_ER b
+	ON a.SEQNUM = b.SEQNUM;
+QUIT;
+
+*Add outcomes--All-cause readmissions;
+*Merge back the inpt records back to admission id list;
+PROC sql;
+	CREATE table id_list_eligible_20 as
+	SELECT a.*,
+		b.ADMDATE as adm
+	FROM id_list_eligible_19 a
+	LEFT JOIN inpt_records b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*Select all admission occurred over the 6 months pre-index period;
+DATA id_list_eligible_21;
+	SET id_list_eligible_20;
+	Day_30_readm=0;
+	Day_7_readm=0;
+	IF adm ^=. AND DISDATE+30>=adm> DISDATE THEN Day_30_readm=1;
+	IF adm ^=. AND DISDATE+7>=adm> DISDATE THEN Day_7_readm=1;
+RUN;
+*Collapse on the number of re-admissions;
+PROC SQL;
+	CREATE TABLE id_list_post_readm as
+	SELECT 	min(SEQNUM) as SEQNUM,
+			max(Day_30_readm) as Day_30_readm,
+			max(Day_7_readm) as Day_7_readm
+	FROM id_list_eligible_21
+	GROUP BY SEQNUM;
+QUIT;
+*Add back to the analytical cohort;
+PROC sql;
+	CREATE table id_list_eligible_22 as
+	SELECT a.*,
+		b.Day_30_readm as Day_30_readm,
+		b.Day_7_readm as Day_7_readm
+	FROM id_list_eligible_19 a
+	LEFT JOIN id_list_post_readm b
+	ON a.SEQNUM = b.SEQNUM;
+QUIT;
+
+*Add back all_cause ER visits;
+*Merge back the ER records back to admission id list;
+PROC sql;
+	CREATE table id_list_eligible_23 as
+	SELECT a.*,
+		b.ER_date as ER_date
+	FROM id_list_eligible_22 a
+	LEFT JOIN ER_unique_date b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*Select all ER visits occurred over the 6 months pre-index period;
+DATA id_list_eligible_24;
+	SET id_list_eligible_23;
+	Day_30_ER=0;
+	Day_7_ER=0;
+	IF ER_date ^=. AND DISDATE+30>=ER_date>= DISDATE THEN Day_30_ER=1;
+	IF ER_date ^=. AND DISDATE+7>=ER_date>= DISDATE THEN Day_7_ER=1;
+RUN;
+*Collapse on the number of re-ER visits;
+PROC SQL;
+	CREATE TABLE id_list_post_ER as
+	SELECT 	min(SEQNUM) as SEQNUM,
+			max(Day_30_ER) as Day_30_ER,
+			max(Day_7_ER) as Day_7_ER
+	FROM id_list_eligible_24
+	GROUP BY SEQNUM;
+QUIT;
+*Add back to the analytical cohort;
+PROC sql;
+	CREATE table id_list_eligible_25 as
+	SELECT a.*,
+		b.Day_30_ER as Day_30_ER,
+		b.Day_7_ER as Day_7_ER
+	FROM id_list_eligible_22 a
+	LEFT JOIN id_list_post_ER b
+	ON a.SEQNUM = b.SEQNUM;
+QUIT;
+
+DATA id_list_eligible_26;
+	SET id_list_eligible_25;
+	adm_pre_cat=0;
+	IF adm_pre_count>0 THEN adm_pre_cat=1;
+	ER_pre_cat=0;
+	IF ER_pre_count>0 THEN ER_pre_cat=1;
+	Day_30_acute=0;
+	Day_7_acute=0;
+	IF max(Day_30_ER,Day_30_readm)=1 THEN Day_30_acute=1;
+	IF max(Day_7_ER,Day_7_readm)=1 THEN Day_7_acute=1;
+RUN;
+
+*Recalculate SCD-related readmission events;
+*collect unique admission dates;
+DATA id_list_eligible_27;
+	SET id_list_eligible_26;
+	KEEP enrolid ADMDATE;
+RUN;
+*Merge back the inpt records back to admission id list;
+PROC sql;
+	CREATE table id_list_eligible_28 as
+	SELECT a.*,
+		b.ADMDATE as adm
+	FROM id_list_eligible_26 a
+	LEFT JOIN id_list_eligible_27 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*Select all admission occurred over the 6 months pre-index period;
+DATA id_list_eligible_29;
+	SET id_list_eligible_28;
+	Day_30_SCD_correct=0;
+	Day_7_SCD_correct=0;
+	IF adm ^=. AND DISDATE+30>=adm> DISDATE THEN Day_30_SCD_correct=1;
+	IF adm ^=. AND DISDATE+7>=adm> DISDATE THEN Day_7_SCD_correct=1;
+RUN;
+*Collapse on the number of re-admissions;
+PROC SQL;
+	CREATE TABLE id_list_post_readm as
+	SELECT 	min(SEQNUM) as SEQNUM,
+			max(Day_30_SCD_correct) as Day_30_SCD_correct,
+			max(Day_7_SCD_correct) as Day_7_SCD_correct
+	FROM id_list_eligible_29
+	GROUP BY SEQNUM;
+QUIT;
+*Add back to the analytical cohort;
+PROC sql;
+	CREATE table id_list_eligible_30 as
+	SELECT a.*,
+		b.Day_30_SCD_correct as Day_30_SCD_correct,
+		b.Day_7_SCD_correct as Day_7_SCD_correct
+	FROM id_list_eligible_26 a
+	LEFT JOIN id_list_post_readm b
+	ON a.SEQNUM = b.SEQNUM;
+QUIT;
