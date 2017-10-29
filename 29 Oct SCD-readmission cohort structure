@@ -1,0 +1,630 @@
+LIBNAME Rawdata "C:\Users\jzhou86\Documents\SCD Project\Raw Data";
+LIBNAME WorkingD "C:\Users\jzhou86\Documents\SCD Project\Working directory";
+DATA inpt_sum;
+SET Rawdata.scd_ccaei_09 Rawdata.scd_ccaei_10 Rawdata.scd_ccaei_11 Rawdata.scd_ccaei_12 Rawdata.scd_ccaei_13
+	Rawdata.scd_mdcri_09 Rawdata.scd_mdcri_10 Rawdata.scd_mdcri_11 Rawdata.scd_mdcri_12 Rawdata.scd_mdcri_13
+	Rawdata.scd_ccaei_142   
+	Rawdata.scd_mdcri_142;
+DATA outpatient_records;
+SET Rawdata.scd_ccaeo_09 Rawdata.scd_ccaeo_10 Rawdata.scd_ccaeo_11 Rawdata.scd_ccaeo_12 Rawdata.scd_ccaeo_13
+	Rawdata.scd_mdcro_09 Rawdata.scd_mdcro_10 Rawdata.scd_mdcro_11 Rawdata.scd_mdcro_12 Rawdata.scd_mdcro_13
+	Rawdata.scd_ccaeo_142   
+	Rawdata.scd_mdcro_142;
+DATA insurance_all;
+SET	Rawdata.scd_ccaet_09 Rawdata.scd_ccaet_10 Rawdata.scd_ccaet_11 Rawdata.scd_ccaet_12 Rawdata.scd_ccaet_13
+	Rawdata.scd_mdcrt_09 Rawdata.scd_mdcrt_10 Rawdata.scd_mdcrt_11 Rawdata.scd_mdcrt_12 Rawdata.scd_mdcrt_13
+	Rawdata.scd_ccaet_142  
+	Rawdata.scd_mdcrt_142;
+DATA drugs_all;
+SET	Rawdata.scd_ccaed_09 Rawdata.scd_ccaed_10 Rawdata.scd_ccaed_11 Rawdata.scd_ccaed_12 Rawdata.scd_ccaed_13
+	Rawdata.scd_mdcrd_09 Rawdata.scd_mdcrd_10 Rawdata.scd_mdcrd_11 Rawdata.scd_mdcrd_12 Rawdata.scd_mdcrd_13
+	Rawdata.scd_ccaed_142  
+	Rawdata.scd_mdcrd_142;
+DATA ipt_svc_all;
+SET	Rawdata.scd_ccaes_09 Rawdata.scd_ccaes_10 Rawdata.scd_ccaes_11 Rawdata.scd_ccaes_12 Rawdata.scd_ccaes_13
+	Rawdata.scd_mdcrs_09 Rawdata.scd_mdcrs_10 Rawdata.scd_mdcrs_11 Rawdata.scd_mdcrs_12 Rawdata.scd_mdcrs_13
+	Rawdata.scd_ccaes_142 
+	Rawdata.scd_mdcrs_142;
+RUN;
+
+*Select SCT cases by using icd-9 methods;
+data  acute_care_list;
+set inpt_sum;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2825') then sct = 1;
+end;
+if sct = 1;
+run; 
+
+data  opt_care_list;
+set outpatient_records;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2825') then sct = 1;
+end;
+if sct = 1;
+run; 
+DATA case_dx;
+SET acute_care_list;
+RUN;
+
+PROC SQL;
+	CREATE TABLE sct_list as
+	SELECT min(enrolid) as enrolid
+	FROM case_dx
+	GROUP BY enrolid;
+QUIT;
+
+* definition of malignant cancer with invasive nature;
+*ICD-9 140-209;
+
+DATA cancer_list;
+	SET outpatient_records inpt_sum;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('14', '15', '16', '17', '18', '19', '20') then case=1;
+		end;
+	if case=1;
+RUN;
+PROC SQL;
+	CREATE TABLE cancer_list as
+	SELECT min(enrolid) as enrolid
+	FROM cancer_list
+	GROUP BY enrolid;
+QUIT;
+
+* Identify solid organ transplantation;
+
+DATA organ_trans_list;
+	SET outpatient_records inpt_sum;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('V420', 'V421', 'V427', 'V432', 'V438') then case=1;
+		end;
+	if case=1;
+RUN;
+
+PROC SQL;
+	CREATE TABLE organ_trans_list as
+	SELECT min(enrolid) as enrolid
+	FROM organ_trans_list
+	GROUP BY enrolid;
+QUIT;
+*V42.81 (Bone marrow replaced by transplant), V42.82 (Peripheral stem cells replaced by transplant) identified;
+DATA stem_trans_list;
+	SET outpatient_records inpt_sum;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('V4281','V4282') then case=1;
+		end;
+	if case=1;
+RUN;
+
+PROC SQL;
+	CREATE TABLE stem_trans_list as
+	SELECT min(enrolid) as enrolid
+	FROM stem_trans_list
+	GROUP BY enrolid;
+QUIT;
+
+*Application of the RuSH algorithm;
+*SCD-related Drug;
+DATA Drug_NDC;
+	SET 	workingD.hydroxyurea_ndc
+			workingD.iron_chelator_ndc 
+			workingD.esa_ndc
+			workingD.narcoticall_ndc
+			workingD.Folic_NDC;	
+RUN;
+
+PROC sql;
+	CREATE table id_list_drug as
+	SELECT a.*,
+		b.GENNME
+	FROM drugs_all a
+	INNER JOIN Drug_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list_drug as
+	SELECT min(enrolid) as enrolid
+	FROM id_list_drug
+	GROUP BY enrolid;
+QUIT;
+* Procedures;
+DATA id_list_procedure;
+set outpatient_records inpt_sum ipt_svc_all;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('36430','36455','38100','38101','38120','47562','47600','93886') then scd = 1;
+end;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('990','9901','9902','4143','415','5750','8871') then scd = 1;
+end;
+IF REVCODE in: ('038','039') then scd = 1;
+if scd = 1;
+run; 
+
+PROC SQL;
+	CREATE TABLE id_list_procedure as
+	SELECT min(enrolid) as enrolid
+	FROM id_list_procedure
+	GROUP BY enrolid;
+QUIT;
+
+* complications;
+DATA id_list_complication;
+set outpatient_records inpt_sum ipt_svc_all;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('5851','5852','5853','7910',
+				'48','49','50','486','5173',
+				'4160','43491','4329','4359','345',
+				'430','431','4320','4321','4329',
+				'6073','27503','574','57510','7334',
+				'3629','7590','7892','28952','2894',
+				'70710','7301','28264','28262','28269','0955','0155',
+				'730','7301','7302') then scd = 1;
+end;
+if scd = 1;
+run; 
+
+PROC SQL;
+	CREATE TABLE id_list_complication as
+	SELECT min(enrolid) as enrolid
+	FROM id_list_complication
+	GROUP BY enrolid;
+QUIT;
+
+DATA Rush_list;
+	SET id_list_drug id_list_procedure id_list_complication;
+RUN;
+PROC SQL;
+	CREATE TABLE Rush_list as
+	SELECT min(enrolid) as enrolid
+	FROM Rush_list
+	GROUP BY enrolid;
+QUIT;
+
+*Add attributes back and start cleaning;
+DATA all_records;
+	SET outpatient_records inpt_sum ipt_svc_all;
+RUN;
+
+PROC SQL;
+CREATE TABLE id_list as
+SELECT min (enrolid) as enrolid,
+	min(age) as age,
+	min(sex) as sex,
+	min(region) as region,
+	min(PLANTYP) as Plan_type
+FROM all_records
+GROUP BY enrolid;
+QUIT;
+DATA sct_list;
+	SET sct_list;
+	sct=1;
+RUN;
+PROC sql;
+	CREATE table id_list2 as
+	SELECT a.*,
+		b.sct as sct_status
+	FROM id_list a
+	LEFT JOIN sct_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+DATA cancer_list;
+	SET cancer_list;
+	cancer=1;
+RUN;
+
+PROC sql;
+	CREATE table id_list3 as
+	SELECT a.*,
+		cancer as cancer_status
+	FROM id_list2 a
+	LEFT JOIN cancer_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+DATA organ_trans_list;
+	SET organ_trans_list;
+	organ_trans=1;
+RUN;
+PROC sql;
+	CREATE table id_list4 as
+	SELECT a.*,
+		organ_trans as organ_trans_status
+	FROM id_list3 a
+	LEFT JOIN organ_trans_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+DATA stem_trans_list;
+	SET stem_trans_list;
+	stem_trans=1;
+RUN;
+PROC sql;
+	CREATE table id_list5 as
+	SELECT a.*,
+		stem_trans as stem_trans_status
+	FROM id_list4 a
+	LEFT JOIN stem_trans_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA Rush_list;
+	SET Rush_list;
+	Rush=1;
+RUN;
+PROC sql;
+	CREATE table id_list6 as
+	SELECT a.*,
+		Rush as Rush_status
+	FROM id_list5 a
+	LEFT JOIN Rush_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_eligible;
+	SET id_list6;
+	IF sct_status=1 THEN delete;
+	IF cancer_status=1 THEN delete;
+	IF organ_trans_status=1 THEN delete;
+	IF stem_trans_status=1 THEN delete;
+	IF Rush_status=1;
+RUN;
+* Select all related inpatient records;
+PROC sql;
+	CREATE table ipt_list as
+	SELECT a.*
+	FROM Inpt_sum a
+	INNER JOIN id_eligible b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA ipt_scd_related;
+set ipt_list;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('28242', '28262', '28264', '28269',
+				'5851','5852','5853','7910',
+				'48','49','50','486',
+				'5173',
+				'4150','4160','4168',
+				'430', '431', '432', '43301', '43311', '43321', '43331', '43341', '43351', '43361', '43371', '43381', '43391', '434', '436',
+				'6073',
+				'2750',
+				'574','57510',
+				'7334',
+				'3629','7590','7892','28952','2894',
+				'70710','7301','0955','0155',
+				'7300','7301','7302') then scd_related = 1;
+end;
+if scd_related = 1;
+RUN;
+
+PROC SQL;
+	CREATE TABLE ipt_id_list as
+	SELECT 	min(enrolid) as enrolid,
+			min(DOBYR) as DOBYR,
+			min(sex) as sex,
+			min(region) as region,
+			min(PLANTYP) as Plan_type
+	FROM ipt_scd_related
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE insurance_date as
+	SELECT 	min(enrolid) as enrolid,
+			min(DTSTART) as DTSTART,
+			max(DTEND) as DTEND
+	FROM Insurance_all
+	GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table ipt_id_add_insur as
+	SELECT a.*,
+		b.DTSTART as DTSTART,
+		b.DTEND as DTEND
+	FROM ipt_id_list a
+	LEFT JOIN insurance_date b
+	ON a.enrolid = b.enrolid;
+QUIT;
+* add insurance data to the inpatient records;
+PROC sql;
+	CREATE table ipt_id_insur as
+	SELECT a.*,
+		b.DTSTART as DTSTART,
+		b.DTEND as DTEND
+	FROM ipt_scd_related a
+	LEFT JOIN ipt_id_add_insur b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*require at least 365 days before admission and 30 days after discharge;
+DATA ipt_id_insur_criteria;
+	SET ipt_id_insur;
+	IF DTSTART+180<=ADMDATE;
+	IF DTEND-30>=DISDATE;
+RUN;
+PROC SQL;
+	CREATE TABLE id_list_eligible as
+	SELECT 	min(SEQNUM) as SEQNUM,
+			min(enrolid) as enrolid,
+			min(DOBYR) as DOBYR,
+			min(sex) as sex,
+			min(region) as region,
+			min(PLANTYP) as Plan_type,
+			min(DTSTART) as DTSTART,
+			max(DTEND) as DTEND,
+			min(ADMDATE)as ADMDATE,
+			min(DISDATE)as DISDATE,
+			min(dx1) as dx1,
+			min(dx2) as dx2,
+			min(dx3) as dx3,
+			min(dx4) as dx4,
+			min(dx5) as dx5,
+			min(dx6) as dx6,
+			min(dx7) as dx7,
+			min(dx8) as dx8,
+			min(dx9) as dx9,
+			min(dx10) as dx10,
+			min(dx11) as dx11,
+			min(dx12) as dx12,
+			min(dx13) as dx13,
+			min(dx14) as dx14,
+			min(dx15) as dx15,
+			min(proc1) as proc1,
+			min(proc2) as proc2,
+			min(proc3) as proc3,
+			min(proc4) as proc4,
+			min(proc5) as proc5,
+			min(proc6) as proc6,
+			min(proc7) as proc7,
+			min(proc8) as proc8,
+			min(proc9) as proc9,
+			min(proc10) as proc10,
+			min(proc11) as proc11,
+			min(proc12) as proc12,
+			min(proc13) as proc13,
+			min(proc14) as proc14,
+			min(proc15) as proc15,
+			max(DSTATUS) as DSTATUS
+	FROM ipt_id_insur_criteria
+	GROUP BY SEQNUM;
+QUIT;
+PROC FREQ DATA=id_list_eligible;
+TABLE DSTATUS; RUN;
+*determine where there SCD-related admission events are associated with 30-day readmission;
+proc sort data=id_list_eligible;by enrolid ADMDATE;run;
+data id_list_eligible_1;
+set id_list_eligible;
+by enrolid;
+set id_list_eligible ( firstobs = 2 keep = ADMDATE rename = (ADMDATE = Next_ADMDATE) )
+    id_list_eligible (      obs = 1 drop = _all_                                     );
+Prev_ADMDATE = ifn( first.enrolid, (.), lag(ADMDATE) );
+Next_ADMDATE = ifn(  last.enrolid, (.), Next_ADMDATE );
+Day_30_SCD=0;
+Day_7_SCD=0;
+IF Next_ADMDATE ^=. AND Next_ADMDATE-DISDATE<=30 THEN Day_30_SCD=1;
+IF Next_ADMDATE ^=. AND Next_ADMDATE-DISDATE<=7 THEN Day_7_SCD=1;
+run;
+
+
+*Assess Hudroxyurea exposure;
+*extract all HU prescriptions;
+PROC sql;
+	CREATE table temp_hydrea as
+	SELECT a.*,
+		b.STRNGTH as STRNGTH
+	FROM drugs_all a
+	INNER JOIN WorkingD.hydroxyurea_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC FREQ DATA=temp_hydrea;
+TABLE STRNGTH;RUN;
+DATA temp_hydrea;
+	SET temp_hydrea;
+ IF STRNGTH = '500 MG' THEN str=0.5;
+ELSE IF STRNGTH = '400 MG' THEN str=0.4;
+ELSE IF STRNGTH = '300 MG' THEN str=0.3;
+ELSE IF STRNGTH = '200 MG' THEN str=0.2;
+ELSE IF STRNGTH = . THEN str=0;
+Hu_dose = METQTY*str;
+RUN;
+
+PROC sql;
+	CREATE table id_list_eligible_2 as
+	SELECT a.*,
+		b.Hu_dose as Hu_dose,
+		b.SVCDATE as SVCDATE
+	FROM id_list_eligible_1 a
+	LEFT JOIN temp_hydrea b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list_eligible_3;
+	SET id_list_eligible_2;
+	IF SVCDATE ^=. AND SVCDATE< ADMDATE-180 THEN Hu_dose=0;
+	IF SVCDATE ^=. AND SVCDATE> ADMDATE THEN Hu_dose=0;
+	IF Hu_dose=. THEN Hu_dose=0;
+	Hu_dose_14_pre=0;
+	IF SVCDATE ^=. AND ADMDATE-14 <=SVCDATE <= ADMDATE THEN Hu_dose_14_pre=Hu_dose;
+RUN;
+
+
+PROC SQL;
+	CREATE TABLE id_list_eligible_4 as
+	SELECT 	min(SEQNUM) as SEQNUM,
+			min(enrolid) as enrolid,
+			min(DOBYR) as DOBYR,
+			min(sex) as sex,
+			min(region) as region,
+			min(ADMDATE)as ADMDATE,
+			min(DISDATE)as DISDATE,
+			min(dx1) as dx1,
+			min(dx2) as dx2,
+			min(dx3) as dx3,
+			min(dx4) as dx4,
+			min(dx5) as dx5,
+			min(dx6) as dx6,
+			min(dx7) as dx7,
+			min(dx8) as dx8,
+			min(dx9) as dx9,
+			min(dx10) as dx10,
+			min(dx11) as dx11,
+			min(dx12) as dx12,
+			min(dx13) as dx13,
+			min(dx14) as dx14,
+			min(dx15) as dx15,
+			min(proc1) as proc1,
+			min(proc2) as proc2,
+			min(proc3) as proc3,
+			min(proc4) as proc4,
+			min(proc5) as proc5,
+			min(proc6) as proc6,
+			min(proc7) as proc7,
+			min(proc8) as proc8,
+			min(proc9) as proc9,
+			min(proc10) as proc10,
+			min(proc11) as proc11,
+			min(proc12) as proc12,
+			min(proc13) as proc13,
+			min(proc14) as proc14,
+			min(proc15) as proc15,
+			max(DSTATUS) as DSTATUS,
+			sum(Hu_dose) as total_Hu,
+			sum(Hu_dose_14_pre) as Hu_dose_14_pre,
+			max(Day_30_SCD) as Day_30_SCD,
+			max(Day_7_SCD) as Day_7_SCD
+	FROM id_list_eligible_3
+	GROUP BY SEQNUM;
+QUIT;
+MEAN STD MEDIAN p25 p75 p99
+PROC MEANS DATA=id_list_eligible_5 ;
+CLASS Hu_cat;
+VAR total_Hu;RUN;
+PROC MEANS DATA=user_readmission_cohort MEAN STD MEDIAN P25 P75;
+CLASS Hu_cat_high;
+VAR LOS ;RUN;
+PROC FREQ DATA=id_list_eligible_30;
+TABLE age_cat*Hu_cat_high/chisq nocol norow nopercent;RUN;
+PROC FREQ DATA=id_list_eligible_12;
+TABLE NSAIDs*Hu_cat/chisq nocol norow nopercent;RUN;
+PROC FREQ DATA=user_readmission_cohort;
+TABLE age_cat*Hu_cat_high /chisq nocol norow nopercent;RUN;
+/* Create a function using boolean logic with the WEEKDAY function 
+   to adjust the start of the week from Sunday to Monday */
+ 
+proc fcmp outlib = work.functions.samples;
+   function sas_myweekday(mydate);
+        return(weekday(mydate)-1+(weekday(mydate)=1)*7);
+   endsub;
+run;
+
+options cmplib=work.functions;
+DATA id_list_eligible_5;
+	SET id_list_eligible_4;
+	age=YEAR(ADMDATE)-DOBYR;
+	IF age<=17 THEN age_cat=1;
+	ELSE IF age<=29 THEN age_cat=2;
+	ELSE IF age<=39 THEN age_cat=3;
+	ELSE IF age<=49 THEN age_cat=4;
+	ELSE IF age>=50 THEN age_cat=5;
+	LOS=DISDATE-ADMDATE+1;
+	Hu_cat=1;
+	IF Hu_dose_14_pre=total_Hu THEN Hu_cat=0;
+	IF total_Hu=0 THEN Hu_cat=0;
+	IF Hu_dose_14_pre=total_Hu THEN total_Hu=0;
+	IF total_Hu>756 THEN total_Hu=756;
+	Hu_cat_high=0;
+	IF total_Hu>90 THEN Hu_cat_high=1;
+	ACS = 0;Pneumonia = 0;ACS_Pneumonia = 0;Asthma = 0;transfusion = 0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+			if icd{i} in: ('5173') then ACS = 1;
+			end;
+	array ice {*} dx1-dx15;
+		do i = 1 to dim(ice);
+			if ice{i} in: ('480','481','482','483','484','485','486','487','488') then Pneumonia = 1;
+			end;
+	array icf {*} dx1-dx15;
+		do i = 1 to dim(icf);
+			if icf{i} in: ('5173','480','481','482','483','484','485','486','487','488') then ACS_Pneumonia = 1;
+			end;
+	array icg {*} dx1-dx15;
+		do i = 1 to dim(icg);
+			if icg{i} in: ('493') then Asthma = 1;
+			end;
+	array proc {*} proc1-proc15;
+		do i = 1 to dim(proc);
+			if proc{i} in: ('P9010','P9011','P9051','P9054','P9056','9903', 
+							'P9016' 'P9021' 'P9022' 'P9038','P9039' 'P9040','P9057','P9058','9904') then transfusion = 1;
+			end;
+	array ich {*} dx1-dx15;
+		do i = 1 to dim(ich);
+			if ich{i} in: ('V582') then transfusion = 1;
+end;
+DROP i;
+ index_year=year(ADMDATE);
+ index_month=month(ADMDATE);
+ datefulltext = DISDATE;
+ weekday = sas_myweekday(DISDATE);
+ format ADMDATE mmddyy10. datefulltext weekdatx.;
+ /*determine season and weekdays*/
+IF index_month=12 OR index_month=1 OR index_month=2 THEN season="Winter";
+IF index_month=3 OR index_month=4 OR index_month=5 THEN season="Spring";
+IF index_month=6 OR index_month=7 OR index_month=8 THEN season="Summer";
+IF index_month=9 OR index_month=10 OR index_month=11 THEN season="Fall";
+IF weekday<=5 THEN weekend=0;
+ELSE IF weekday>=6 THEN weekend=1;
+
+RUN;
+
+*Identification of NSAIDs and opioid exposure status over the 6-month pre-index event period;
+
+Hu_cat (ref="0")		
+	IF total_Hu>0;
+IF total_Hu<75 THEN total_Hu_cat=0;
+
+proc genmod data=adult_SCD_readmission_cohort DESCENDING;
+class sex enrolid ACS_Pneumonia (ref="0") Asthma (ref="0") transfusion (ref="0") index_year season weekend (ref="0") NSAIDs (ref="0") Hu_cat (ref="0") adm_pre_cat (ref="0") ER_pre_cat (ref="0");
+model Day_7_SCD_correct = sex age LOS ACS_Pneumonia Asthma transfusion index_year weekend total_OME_dose Hu_cat total_Hu NSAIDs season adm_pre_cat ER_pre_cat/ dist=bin link=logit type3;
+repeated subject=enrolid / type=AR(1)  covb corrw;
+run;
+
+proc genmod data=adult_SCD_readmission_cohort DESCENDING;
+class sex enrolid ACS_Pneumonia (ref="0") Asthma (ref="0") transfusion (ref="0") index_year season weekend (ref="0") NSAIDs (ref="0") Hu_cat_high (ref="0") adm_pre_cat (ref="0") ER_pre_cat (ref="0");
+model Day_30_SCD_correct = sex age LOS ACS_Pneumonia Asthma transfusion index_year weekend total_OME_dose Hu_cat_high NSAIDs season adm_pre_cat ER_pre_cat/ dist=bin link=logit type3;
+repeated subject=enrolid / type=AR(1)  covb corrw;
+run;
+proc genmod data=adult_SCD_readmission_cohort DESCENDING;
+class sex enrolid ACS_Pneumonia (ref="0") Asthma (ref="0") transfusion (ref="0") index_year season weekend (ref="0") NSAIDs (ref="0") adm_pre_cat (ref="0") ER_pre_cat (ref="0");
+model Day_30_SCD_correct = sex age LOS ACS_Pneumonia Asthma transfusion index_year weekend total_OME_dose total_Hu NSAIDs season adm_pre_cat ER_pre_cat/ dist=bin link=logit type3;
+repeated subject=enrolid / type=AR(1)  covb corrw;
+run;
+
+ACS_Pneumonia Asthma transfusion index_year weekend opioid NSAIDs Hu_cat_high (ref="0") total_OME_dose Hu_cat (ref="0")
+Hu_cat (ref="0")
+ Hu_cat_high (ref="0")
+DATA workingD.Oct_28_Hu_exposed_cohort;
+	SET id_list_eligible_13;
+RUN;
+DATA workingD.Oct_29_SCD_readmission_cohort;
+	SET id_list_eligible_30;
+RUN;
+DATA user_readmission_cohort;
+	SET id_list_eligible_30;
+	IF total_Hu>0;
+RUN;
+	IF total_Hu>0;
+DATA WorkingD.OCT_29_SCD_analytical_cohort;
+	SET id_list_eligible_30;
+RUN;
+
+PROC FREQ DATA=adult_SCD_readmission_cohort;
+TABLE NSAIDs*Hu_cat_high/chisq nocol norow nopercent;RUN;
