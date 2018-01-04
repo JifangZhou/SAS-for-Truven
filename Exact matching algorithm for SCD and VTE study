@@ -1,0 +1,167 @@
+LIBNAME WorkingD "C:\Users\jzhou86\Documents\SCD Project\SCD and DVT\SCD DVT working directory";
+
+DATA id_list;
+	SET workingD.id_list_addbaseline_obs;
+	rand_num=uniform(0);
+	IF age in (0:4) THEN 		agecate = 1 ;
+	IF age in (5:9) THEN		agecate = 2 ;
+	IF age in (10:14) THEN 		agecate = 3 ;
+	IF age in (15:19) THEN		agecate = 4 ;
+	IF age in (20:24) THEN 		agecate = 5 ;
+	IF age in (25:29) THEN		agecate = 6 ;
+	IF age in (30:34) THEN 		agecate = 7 ;
+	IF age in (35:39) THEN		agecate = 8 ;
+	IF age in (40:44) THEN		agecate = 9 ;
+	IF age in (45:49) THEN		agecate = 10 ;
+	IF age in (50:54) THEN 		agecate = 11 ;
+	IF age in (55:59) THEN		agecate = 12 ;
+	IF age in (60:64) THEN 		agecate = 13 ;
+	IF age in (65:69) THEN		agecate = 14 ;
+	IF age in (70:74) THEN 		agecate = 15 ;
+	IF age in (75:79) THEN		agecate = 16 ;
+	IF age in (80:84) THEN 		agecate = 17 ;
+	IF age in (85:89) THEN		agecate = 18 ;
+	IF age in (90:94) THEN		agecate = 19 ;
+	IF age in (95:99) THEN		agecate = 20 ;
+	IF age in (100:109) THEN	agecate = 21 ;
+RUN;
+
+DATA study;
+	SET id_list;
+	IF SCD_Status=1;
+	IF last_enroll_date-index_date>=90;
+	IF ini_AC_date ^=. AND -7<=ini_AC_date-index_date<=7;
+	IF CCI_obs=. THEN CCI_obs=0;
+	IF CCI_obs=0 THEN CCI_cat=0;
+	ELSE IF CCI_obs<=2 THEN CCI_cat=1;
+	ELSE IF CCI_obs>2 THEN CCI_cat=2;
+	vte_type_cat=1;
+	IF VTE_type="DVT" THEN vte_type_cat=0;
+	AC_type=1;
+	IF ini_AC_date=Warfarin_ini_date THEN AC_type=0;
+DATA control;
+	SET id_list;
+	IF SCD_Status=0;
+	IF last_enroll_date-index_date>=90;
+	IF ini_AC_date ^=. AND -7<=ini_AC_date-index_date<=7;
+	IF CCI_obs=. THEN CCI_obs=0;
+	IF CCI_obs=0 THEN CCI_cat=0;
+	ELSE IF CCI_obs<=2 THEN CCI_cat=1;
+	ELSE IF CCI_obs>2 THEN CCI_cat=2;
+	vte_type_cat=1;
+	IF VTE_type="DVT" THEN vte_type_cat=0;
+	AC_type=1;
+	IF ini_AC_date=Warfarin_ini_date THEN AC_type=0;
+RUN;
+
+ *Matching on range of values;
+data control2;
+set control;
+ index_date_low=index_date-365;
+ index_date_high=index_date+365;
+ run;
+
+ proc sql;
+ create table controls_id as
+ select
+ a.enrolid as study_id,
+ b.enrolid as control_id,
+ a.age as study_age,
+ b.age as control_age,
+ a.sex as study_sex,
+ b.sex as control_sex,
+ a.rand_num as rand_num
+ from study a, control2 b
+ where ((a.index_date between b.index_date_low and b.index_date_high)
+ and a.sex=b.sex and a.agecate=b.agecate and a.region=b.region and a.vte_type_cat=b.vte_type_cat and a.AC_type=b.AC_type and a.CCI_cat=b.CCI_cat);
+
+
+* count the number of control subjects for each case subject;
+proc sort data=controls_id;
+ by study_id;
+ run;
+data controls_id2(keep=study_id num_controls);
+set controls_id;
+ by study_id;
+ retain num_controls;
+ if first.study_id then num_controls=1;
+ else num_controls=num_controls+1;
+ if last.study_id then output;
+ run;
+
+ * now merge the counts back into the dataset;
+data controls_id3;
+merge controls_id
+ controls_id2;
+ by study_id;
+ run;
+* now order the rows to select the first matching control;
+proc sort data=controls_id3;
+ by control_id num_controls rand_num;
+ run;
+data controls_id4;
+set controls_id3;
+ by control_id;
+ if first.control_id;
+ run;
+ proc sort data=controls_id4;
+ by study_id;
+ run;
+
+ proc sort data=controls_id4 ;
+ by study_id rand_num;
+ run;
+data controls_id5 not_enough;
+set controls_id4;
+ by study_id ;
+ retain num;
+ if first.study_id then num=1;
+ if num le 5 then do;
+ output controls_id5;
+ num=num+1;
+ end;
+ if last.study_id then do;
+ if num le 5 then output not_enough;
+ end;
+ run;
+
+  * Remove the insufficient cases;
+ data controls_id3;
+merge controls_id5
+ not_enough(in=b_);
+ by study_id;
+ if b_ then delete;
+ run;
+
+ PROC SQL;
+ create table temp_control as
+ select
+min(control_id) as enrolid,
+0 as case_control
+ from controls_id3
+GROUP BY control_id;
+QUIT;
+
+ PROC SQL;
+ create table temp_case as
+ select
+min(study_id) as enrolid,
+1 as case_control
+ from controls_id3
+GROUP BY study_id;
+QUIT;
+DATA workingD.case_control_90_list;
+	SET Temp_control Temp_case;
+RUN;
+
+DATA workingD.all_matching_0104;
+	SET study control;
+RUN;
+
+ PROC SQL;
+ create table workingD.SCD_VTE_matched_0104 as
+ select a.*
+ from workingD.all_matching_0104 a
+ INNER JOIN workingD.case_control_90_list b
+ ON a.enrolid=b.enrolid;
+QUIT;
