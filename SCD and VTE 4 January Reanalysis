@@ -1,0 +1,578 @@
+LIBNAME workingD "C:\Users\jzhou86\Documents\SCD Project\SCD and DVT\SCD DVT working directory";
+
+DATA scd;
+SET workingD.scd_vte_list_0926;
+DATA all_id;
+SET workingD.analytical;
+KEEP enrolid index_date SCD_status sex region DOBYR age index_year case_type_final VTE_type LOS_index_VTE_event 
+		number_adm_prior number_ER_prior transfusion_status cancer_status last_enroll_date 
+		DVT_recur_date_7 PE_recur_date_7 VTE_recur_7 VTE_recur_date_7 lenfol fstat;
+RUN;
+
+PROC FREQ DATA=all;
+TABLE SCD_status*VTE_type;
+RUN;
+*add anticoagulant initiation dates;
+
+PROC SQL;
+	CREATE TABLE id_list_1 as
+	SELECT a.*,
+			b.Warfarin_ini_date as Warfarin_ini_date
+	FROM all_id a
+	LEFT JOIN workingD.warfarin_id b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list_2 as
+	SELECT a.*,
+			b.dabigatran_ini_date as dabigatran_ini_date
+	FROM id_list_1 a
+	LEFT JOIN workingD.dabigatran_id b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list_3 as
+	SELECT a.*,
+			b.rivaroxaban_ini_date as rivaroxaban_ini_date
+	FROM id_list_2 a
+	LEFT JOIN workingD.rivaroxaban_id b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list_4 as
+	SELECT a.*,
+			b.apixaban_ini_date as apixaban_ini_date
+	FROM id_list_3 a
+	LEFT JOIN workingD.apixaban_id b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE id_list_5 as
+	SELECT a.*,
+			b.edoxaban_ini_date as edoxaban_ini_date
+	FROM id_list_4 a
+	LEFT JOIN workingD.edoxaban_id b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*determine the first ever (earliest) anticoagulant exposure date;
+DATA id_list_25_dec;
+	SET id_list_5;
+	ini_AC_date=.;
+	ini_AC_date=min(Warfarin_ini_date, dabigatran_ini_date, rivaroxaban_ini_date, apixaban_ini_date,edoxaban_ini_date);
+RUN;
+
+*exclude all ac exposed patients before the -7th day from index date;
+DATA id_list_6;
+	SET id_list_25_dec;
+	IF ini_AC_date=. THEN delete;
+	IF ini_AC_date-index_date <-7 THEN delete;
+	IF ini_AC_date-index_date >7 THEN delete;
+	AC_type=1;
+	IF ini_AC_date=Warfarin_ini_date THEN AC_type=0;
+	VTE_type_cat=1;
+	IF VTE_type="DVT" THEN VTE_type_cat=0;
+RUN;
+
+PROC FREQ DATA=id_list_8;
+TABLE SCD_status*CCI_cat/chisq;
+RUN;
+*add CCI scores to the id_list_6;
+
+PROC SQL;
+	CREATE TABLE id_list_7 as
+	SELECT a.*,
+			b.CCI_obs as CCI_obs
+	FROM id_list_6 a
+	LEFT JOIN workingD.id_list_addbaseline_obs b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list_8;
+	SET id_list_7;
+	IF CCI_obs=. THEN CCI_obs=0;
+	IF CCI_obs=0 THEN CCI_cat=0;
+	ELSE IF CCI_obs<=2 THEN CCI_cat=1;
+	ELSE IF CCI_obs>2 THEN CCI_cat=2;
+RUN;
+
+
+PROC LOGISTIC DATA = id_list_8 descend;
+	CLASS SCD_status sex region index_year case_type_final VTE_type_cat CCI_cat AC_type;
+ MODEL SCD_status = sex region age index_year case_type_final VTE_type_cat CCI_cat
+		AC_type
+ / RISKLIMITS
+ LACKFIT RSQUARE PARMLABEL;
+ OUTPUT OUT=AllPropen prob=prob ;
+ RUN;
+
+ DATA control_id;
+ SET match_list;
+ Keep VAR3;
+ Rename VAR3=enrolid;
+ RUN;
+DATA case_id;
+ SET id_list_8;
+ IF SCD_status=1;
+ RUN;
+
+ DATA matched_id_list;
+ SET case_id control_id;
+ Keep enrolid;
+ RUN;
+
+PROC SQL;
+	CREATE TABLE workingD.id_list_matched as
+	SELECT a.*,
+			b.case_control as case_control
+	FROM workingD.allpropen a
+	INNER JOIN Case_control_id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC FREQ DATA=workingD.scd_vte_matched_0104;
+TABLE 	SCD_status*sex 
+		SCD_status*region
+		SCD_status*index_year
+		SCD_status*case_type_final
+		SCD_status*VTE_type_cat
+		SCD_status*CCI_cat
+		SCD_status*AC_type/chisq nocol norow nopercent;
+RUN;
+
+PROC TTEST DATA=workingD.scd_vte_matched_0104;
+	CLASS SCD_status;
+	VAR age number_adm_prior number_ER_prior CCI_obs;
+RUN;
+
+DATA Matched_id_list;
+	SET workingD.scd_vte_matched_0104;
+	dabigatran_ini_cat=0;
+	rivaroxaban_ini_cat=0;	
+	apixaban_ini_cat=0;
+	edoxaban_ini_cat=0;
+	warfarin_ini_cat=0;
+	IF dabigatran_ini_date=ini_AC_date THEN dabigatran_ini_cat=1;
+	ELSE IF rivaroxaban_ini_date=ini_AC_date THEN rivaroxaban_ini_cat=1;
+	ELSE IF apixaban_ini_date=ini_AC_date THEN apixaban_ini_cat=1;
+	ELSE IF edoxaban_ini_date=ini_AC_date THEN edoxaban_ini_cat=1;
+	IF warfarin_ini_date=ini_AC_date THEN warfarin_ini_cat=1;
+	IF warfarin_ini_date=ini_AC_date THEN dabigatran_ini_cat=0;
+	IF warfarin_ini_date=ini_AC_date THEN rivaroxaban_ini_cat=0;
+	IF warfarin_ini_date=ini_AC_date THEN apixaban_ini_cat=0;
+	IF warfarin_ini_date=ini_AC_date THEN edoxaban_ini_cat=0;
+	lap_ini=ini_AC_date-index_date;
+	IF lap_ini<=0 THEN lap_ini=0;
+	fstat_ini=1;
+	IF dabigatran_ini_date-index_date>365 THEN dabigatran_ini_date=.;
+	IF rivaroxaban_ini_date-index_date>365 THEN rivaroxaban_ini_date=.;
+	IF apixaban_ini_date-index_date>365 THEN apixaban_ini_date=.;
+	IF edoxaban_ini_date-index_date>365 THEN edoxaban_ini_date=.;
+	IF warfarin_ini_date-index_date>365 THEN warfarin_ini_date=.;
+RUN;
+
+PROC FREQ DATA=Matched_id_list;
+TABLE 	SCD_status*dabigatran_ini_cat 
+		SCD_status*rivaroxaban_ini_cat
+		SCD_status*apixaban_ini_cat
+		SCD_status*edoxaban_ini_cat
+		SCD_status*AC_type/chisq nocol norow nopercent;
+RUN;
+DATA Matched_id_list;
+	SET Matched_id_list;
+	Switch=0;
+	IF (AC_type=0 AND min(dabigatran_ini_date, rivaroxaban_ini_date, apixaban_ini_date,edoxaban_ini_date)^=.) THEN Switch=1;
+	IF (AC_type=0 AND min(dabigatran_ini_date, rivaroxaban_ini_date, apixaban_ini_date,edoxaban_ini_date)^=.) THEN Switch_time=min(dabigatran_ini_date, rivaroxaban_ini_date, apixaban_ini_date,edoxaban_ini_date)-ini_AC_date;
+	IF (AC_type=1 AND warfarin_ini_date^=.) THEN Switch=2;
+	IF (AC_type=1 AND warfarin_ini_date^=.) THEN Switch_time=warfarin_ini_date-ini_AC_date;
+	IF dabigatran_ini_cat=1 THEN first_AC=1;
+	IF rivaroxaban_ini_cat=1 THEN first_AC=2;
+	IF apixaban_ini_cat=1 THEN first_AC=3;
+	IF edoxaban_ini_cat=1 THEN first_AC=4;
+	IF warfarin_ini_cat=1 THEN first_AC=5;
+	IF dabigatran_ini_date=ini_AC_date THEN dabigatran_ini_date=.;
+	IF rivaroxaban_ini_date=ini_AC_date THEN rivaroxaban_ini_date=.;
+	IF apixaban_ini_date=ini_AC_date THEN apixaban_ini_date=.;
+	IF edoxaban_ini_date=ini_AC_date THEN edoxaban_ini_date=.;
+	IF warfarin_ini_date=ini_AC_date THEN warfarin_ini_date=.;
+	IF dabigatran_ini_date=min(dabigatran_ini_date, rivaroxaban_ini_date, apixaban_ini_date,edoxaban_ini_date,warfarin_ini_date) THEN second_AC=1;
+	IF rivaroxaban_ini_date=min(dabigatran_ini_date, rivaroxaban_ini_date, apixaban_ini_date,edoxaban_ini_date,warfarin_ini_date) THEN second_AC=2;
+	IF apixaban_ini_date=min(dabigatran_ini_date, rivaroxaban_ini_date, apixaban_ini_date,edoxaban_ini_date,warfarin_ini_date) THEN second_AC=3;
+	IF edoxaban_ini_date=min(dabigatran_ini_date, rivaroxaban_ini_date, apixaban_ini_date,edoxaban_ini_date,warfarin_ini_date) THEN second_AC=4;
+	IF warfarin_ini_date=min(dabigatran_ini_date, rivaroxaban_ini_date, apixaban_ini_date,edoxaban_ini_date,warfarin_ini_date) THEN second_AC=5;
+RUN;
+PROC FREQ DATA=Matched_id_list;
+TABLE 	SCD_status*first_AC
+		SCD_status*second_AC
+		first_AC*second_AC/chisq nocol norow nopercent;
+RUN;
+PROC TTEST DATA=Matched_id_list;
+CLASS SCD_status;
+VAR lap_ini;
+RUN;
+proc univariate data=Matched_id_list;
+CLASS SCD_status;
+VAR lap_ini;
+histogram;
+run;
+PROC TTEST DATA=Matched_id_list;
+CLASS Switch;
+var Switch_time;
+RUN;
+*extract all pharmacy record data from the all pres data;
+DATA AC_pres;
+	SET workingD.AC_pres;
+RUN;
+*assess persistence;
+*******Persistence assessment, End of baseline assessment;
+*Persistence assessment;
+
+
+DATA all_ipt_sum;
+	SET workingD.ipt;
+	DROP index_date;
+RUN;
+DATA pres_record;
+	SET AC_pres;
+RUN;
+
+DATA pres_record;
+	SET pres_record;
+	KEEP enrolid SVCDATE DAYSUPP index_date;
+RUN;
+
+*convert the inpatient history data as prescription data;
+
+
+DATA all_ipt_sum;
+	SET all_ipt_sum;
+	IF ADMDATE>=index_date;
+RUN;
+PROC sql;
+	CREATE table ipt_record as
+	SELECT a.enrolid as enrolid,
+			a.admdate as admdate,
+			a.disdate as disdate,
+			b.index_date as index_date
+	FROM all_ipt_sum a
+	INNER JOIN Matched_id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA ipt_record;
+	SET ipt_record;
+	KEEP enrolid ADMDATE DAYSUPP index_date;
+	DAYSUPP=disdate-admdate+1;
+	RENAME admdate=SVCDATE;
+RUN;
+
+DATA Drug_persistence;
+	SET pres_record ipt_record;
+	KEEP enrolid SVCDATE DAYSUPP index_date;
+	IF SVCDATE=. THEN DELETE;
+RUN;
+
+*Assessment of drug persistence;
+
+proc sort data=Drug_persistence;by enrolid SVCDATE;run;
+data pers;
+ set Drug_persistence;
+ by enrolid SVCDATE;
+ lstsply=SVCDATE+DAYSUPP;
+ gap=SVCDATE-lag(lstsply);
+ if first.enrolid=1 then epsd=1;
+ else if gap>=30 then epsd+1;/*to change the gap days allowed*/
+ format lstsply mmddyy10.;
+run;
+proc sql;
+	create table gap as
+	select distinct enrolid, 
+		max(epsd) as epsd
+ 	from pers
+ 	group by enrolid;
+quit;
+proc freq data=gap;tables epsd;run;
+proc sql;
+ create table persis as
+ select distinct enrolid, 
+	max(lstsply) as lstsply format mmddyy10.,
+ 	min((max(lstsply)-index_date), 365) as days_therapy /*days to discountinuation*/
+ from pers  where epsd=1
+ group by enrolid;
+quit;
+proc freq data=persis;tables days_therapy;run; 
+DATA workingD.persis_30;
+	SET persis;
+RUN;
+
+*evaluation of the adherence rates;
+proc sort data=Drug_persistence;
+by enrolid SVCDATE;
+run;
+proc transpose data = Drug_persistence out=fill_dates (drop=_name_) prefix = SVCDATE;
+by enrolid;
+var SVCDATE;
+run;
+proc transpose data = Drug_persistence out=days_supply (drop=_name_) prefix = DAYSUPP;
+by enrolid;
+var DAYSUPP;
+run;
+data both;
+merge fill_dates days_supply;
+by enrolid;
+run; 
+
+
+PROC sql;
+	CREATE table both as
+	SELECT a.*,
+			b.index_date-7 as start_dt,
+			b.index_date+365 as end_dt
+	FROM both a
+	INNER JOIN Matched_id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+data pdc;
+set both;
+array daydummy(373) day1-day373;
+array filldates(*) SVCDATE1 - SVCDATE100;
+array days_supply(*) DAYSUPP1-DAYSUPP100;
+ do ii=1 to 373; daydummy(ii)=0;end;
+ do ii=1 to 373;
+ do i = 1 to dim(filldates) while (filldates(i) ne .);
+ if filldates(i)<= start_dt + ii -1 <= filldates(i)+days_supply(i)-1
+ then daydummy(ii)=1;
+ end;
+ end;
+drop i ii;
+dayscovered=sum(of day8 - day97);label dayscovered='Total Days Covered';
+p_dayscovered=dayscovered/90;label p_dayscovered='Proportion of Days Covered';
+run;
+DATA workingD.pdc_90;
+	SET pdc;
+RUN;
+
+
+PROC sql;
+	CREATE table Matched_id_list1 as
+	SELECT a.*,
+			b.days_therapy as days_therapy_30
+	FROM Matched_id_list a
+	LEFT JOIN workingD.persis_30 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table Matched_id_list2 as
+	SELECT a.*,
+			b.p_dayscovered as pdc_90
+	FROM Matched_id_list1 a
+	LEFT JOIN workingD.pdc_90 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table Matched_id_list3 as
+	SELECT a.*,
+			b.p_dayscovered as pdc_180
+	FROM Matched_id_list2 a
+	LEFT JOIN workingD.pdc_180 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+proc univariate data=workingD.pdc_365;
+var p_dayscovered;
+histogram;
+run;
+proc TTEST data=Matched_id_list3;
+CLASS SCD_status;
+var pdc_90 pdc_180;
+run;
+
+DATA Matched_id_list4;
+	SET Matched_id_list3;
+	pdc_90_cat=0;
+	IF pdc_90>=0.80 THEN pdc_90_cat=1;
+	pdc_180_cat=0;
+	IF pdc_180>=0.80 THEN pdc_180_cat=1;
+	persis_cat=0;
+	IF days_therapy_30>=90 THEN persis_cat=1;
+RUN;
+
+PROC FREQ DATA=Matched_id_list4;
+TABLE 	SCD_status*pdc_90_cat 
+		SCD_status*pdc_180_cat
+		SCD_status*persis_cat
+		/chisq nocol norow nopercent;
+RUN;
+
+PROC TTEST DATA=workingD.Matched_analytical_1_Jan;
+CLASS SCD_status;
+VAR pdc_90 pdc_180 pdc_365;
+RUN;
+
+
+
+DATA workingD.Matched_analytical_4_Jan;
+	SET Matched_id_list4;
+RUN;
+
+
+
+PROC sql;
+	CREATE table Matched_id_list6 as
+	SELECT a.*,
+			b.days_therapy as days_persis_90
+	FROM Matched_id_list5 a
+	LEFT JOIN workingD.persis_90 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA matched_id_list;
+	SET matched_id_list4;
+	enroll_time=last_enroll_date-index_date;
+	VTE_recur_date_7=min(VTE_recur_date_7-index_date, 180);
+	f_stat_persis=0;
+	IF VTE_recur_date_7<=enroll_time THEN f_stat_persis=1;
+	IF VTE_recur_date_7<=enroll_time THEN lenfol_persis=VTE_recur_date_7;
+	IF VTE_recur_date_7>enroll_time THEN  lenfol_persis=min(180,enroll_time);
+	IF VTE_recur_date_7=180  THEN f_stat_persis=0;
+	IF VTE_recur_date_7=. THEN f_stat_persis=0;
+	IF VTE_recur_date_7=. THEN lenfol_persis=min(180,enroll_time);
+	IF SCD_status=1;
+	IF age in (0:39) THEN 		agecate = 1 ;
+	IF age in (40:59) THEN		agecate = 2 ;
+	IF age in (59:199) THEN 		agecate = 3 ;
+RUN;
+
+DATA matched_id_list;
+	SET matched_id_list4;
+	enroll_time=last_enroll_date-index_date;
+	Discontinue_date=min(days_therapy_30, 365);
+	f_stat_persis=0;
+	IF Discontinue_date<=enroll_time THEN f_stat_persis=1;
+	IF Discontinue_date<=enroll_time THEN lenfol_persis=Discontinue_date;
+	IF Discontinue_date>enroll_time THEN  lenfol_persis=enroll_time;
+	IF Discontinue_date=365  THEN f_stat_persis=0;
+RUN;
+
+
+ods graphics on;
+PROC LIFETEST DATA=matched_id_list;
+TIME lenfol_persis*f_stat_persis(0); 
+STRATA pdc_90_cat;RUN;
+
+
+
+
+%CIF(DATA=matched_id_list,TIME=lenfol_persis,STATUS=f_stat_persis,EVENT=1,CENSORED=0,GROUP=SCD_status,OPTIONS=NOTEST);
+
+ods graphics on;
+proc phreg data=matched_id_list  plots(overlay=stratum)=cif;
+class pdc_90_cat(ref='1') agecate sex(ref='1') VTE_type_cat CCI_cat AC_type;
+model lenfol_persis*f_stat_persis(0)=pdc_90_cat agecate sex VTE_type_cat CCI_cat 
+		AC_type/eventcode=1;
+run;
+ods graphics off;
+
+proc phreg data=matched_id_list;
+CLASS SCD_status(ref='0') persis_30_cat (ref='0') sex (ref='1') VTE_type_cat case_type_final(ref='0') AC_type CCI_cat(ref='0'); 
+model lenfol_persis*f_stat_persis(0)=SCD_status persis_30_cat sex age case_type_final VTE_type_cat LOS_index_VTE_event CCI_cat
+		AC_type;
+BASELINE out=temp4 survival=survival;
+SYMBOL l=1 i=join v=dot;
+PROC GPLOT DATA=temp4; PLOT lenfol_persis*f_stat_persis(0)= SCD_status persis_30_cat sex age case_type_final VTE_type_cat LOS_index_VTE_event CCI_cat
+		AC_type; 
+RUN;
+
+proc logistic data= matched_id_list;
+	CLASS SCD_status(ref='0') sex (ref='1') VTE_type_cat index_year case_type_final AC_type CCI_cat(ref='0'); 
+	model pdc_90_cat(ref='0')= SCD_status sex age index_year case_type_final VTE_type_cat LOS_index_VTE_event CCI_cat
+		AC_type/link=glogit;
+RUN;
+
+*Select all ER visits information;
+DATA opt;
+	SET workingD.opt;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0637','0981') THEN ER=1;
+	ELSE IF STDPROV in ('220','428') THEN ER=1;
+	ELSE IF STDPLAC in ('23') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120','10220','10320','10420','10520',
+						'12220','20120','20220','21120','21220','22120','22320',
+						'30120','30220','30320','30420','30520','30620',
+						'31120','31220','31320','31420','31520','31620') THEN ER=1;
+	IF ER=1;
+RUN;
+
+DATA all_record;
+	SET workingD.ipt opt;
+RUN;
+
+
+PROC sql;
+	CREATE table all_record1 as
+	SELECT a.*,
+			b.ini_AC_date as ini_AC_date
+	FROM all_record a
+	LEFT JOIN matched_id_list7 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA all_record2;
+	SET all_record1;
+	IF SVCDATE ^=. AND SVCDATE<ini_AC_date THEN DELETE;
+	IF DISDATE ^=. AND DISDATE<ini_AC_date THEN DELETE;
+RUN;
+
+DATA all_record3;
+	SET all_record2;
+	KEEP enrolid SVCDATE DISDATE DX1-DX15;
+	IF SVCDATE=. THEN SVCDATE=DISDATE;
+RUN;
+*select major bleeding events;
+
+DATA all_record4;
+	SET all_record3;
+	case=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('430', '431', '4320', '4321', '432.9', '5310', '5312', '5314', '5316', '5320', '5322', '5324', '5326', '5330', '5332', '5334', '5336', '5340', '5342', '5344', '5346', '5780', '5781', '5789', '5693', '5781', '5789',
+'I60', 'I61', 'I620', 'I621', 'I629', 'K920', 'K921', 'I850', 'I9820', 'I983', 
+'K2210', 'K2212', 'K2214', 'K2216', 'K250', 'K252', 'K254', 'K256', 'K260', 'K262', 'K264', 'K266', 'K270', 'K272', 'K274', 'K276', 'K280', 'K282', 'K284', 'K286', 'K290', 
+'K6380', 'K3180', 'K5520', 'K625', 'K922',
+'N020', 'N021', 'N022', 'N023', 'N024', 'N025', 'N026', 'N027', 'N028', 'N029', 'K661', 'N938', 'N939', 'N950', 
+'R041', 'R042', 'R048', 'R049', 'R310', 'R311', 'R318', 'R58', 'D683', 'H356', 'H431', 'H450', 'M250') then case=1;
+		end;
+	IF case=1;
+RUN;
+* select dates of major bleedings;
+PROC sql;
+	CREATE table all_record5 as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as bleeding_date
+	FROM all_record4
+	GROUP BY enrolid ;
+QUIT;
+
+PROC SQL;
+	CREATE TABLE workingD.bleeding_analytical_4_jan as
+	SELECT a.*,
+			b.bleeding_date as bleeding_date
+	FROM matched_id_list4 a
+	LEFT JOIN all_record5 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA matched_id_list;
+	SET workingD.bleeding_analytical_4_jan;;
+	enroll_time=last_enroll_date-index_date;
+	bleeding_date=min(bleeding_date-index_date, 180);
+	f_stat_persis=0;
+	IF bleeding_date<=enroll_time THEN f_stat_persis=1;
+	IF bleeding_date<=enroll_time THEN lenfol_persis=bleeding_date;
+	IF bleeding_date>enroll_time THEN  lenfol_persis=enroll_time;
+	IF bleeding_date=180  THEN f_stat_persis=0;
+RUN;
