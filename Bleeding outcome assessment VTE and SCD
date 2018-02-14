@@ -1,0 +1,362 @@
+*Assessment of bleeding over the follow-up period;
+*Assess presence of primary discharge records of bleeding;
+LIBNAME workingD "C:\Users\ZHOUJX4\Documents\Jifang Zhou VTE SCD";
+DATA id_list;
+SET workingD.feb_13_id_list;
+DATA bleeding_ipt;
+SET post_records;
+IF DISDATE=. THEN DELETE;
+RUN;
+*Primary diagnosis only;
+DATA bleeding_ipt_all;
+set bleeding_ipt;
+array icd {*} dx1;
+do i = 1 to dim(icd);
+if icd{i} in: ("430", "431","4320","4321","4329","5310","5312","5314","5316","5320","5322","5324","5326","5330","5332","5334","5336","5340","5342","5344",
+"5346","53501","53511","53521","53531","53541","53551","53561","53783","4560","45620","5307","53082","5780","4552","4555","4558","56202","56203","56212","56213",
+"56881","5693","56985","5781","5789","59381","5997","6238","6262","6266","4230","4590","56881","7191","7847","7848","7863") then case = 1;
+end;
+if case = 1;
+run; 
+PROC SQL;
+	CREATE TABLE bleeding_list1 as
+	SELECT 	min(enrolid) as enrolid,
+		1 as bleeding_status,
+		min(DISDATE) as bleeding_date
+	FROM bleeding_ipt_all
+	GROUP BY enrolid;
+QUIT;
+*Assessment of Trauma related;
+DATA bleeding_trauma_all;
+set bleeding_ipt;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ("80","810","812","813","818","819","820","821","822","823","824","827","828","829","8060","8062","806",
+"8074","808","812","820","821","828","860","8620","8621","8628","8629","8630","8631","8632","8633","8634",
+"8635","8638","8639","8641","8651","866","867","8730","8731","8750","8751","9024","90255","90256","90281",
+"90282","925","926","927","928","929","9584","9585","9587","9967","99811","99812","9982","E805","E870",
+"E881","E882","E883","E922","E923","E955","E960","E965","E970","E985") then case = 1;
+end;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ("62000","62005","62010") then case = 1;
+end;
+if case = 1;
+run; 
+PROC SQL;
+	CREATE TABLE trauma_list as
+	SELECT 	min(enrolid) as enrolid,
+		1 as trauma_status,
+		min(DISDATE) as trauma_date
+	FROM bleeding_trauma_all
+	GROUP BY enrolid;
+QUIT;
+
+*Assessment of bleeding ;
+PROC SQL;
+	CREATE TABLE trauma_bleeding_list as
+	SELECT 	a.*,
+			b.trauma_date
+	FROM bleeding_list1 a
+	LEFT JOIN trauma_list b
+	On a.enrolid=b.enrolid;
+QUIT;
+DATA temp;
+SET trauma_bleeding_list;
+lag_time1=trauma_date-bleeding_date;
+IF -7<=lag_time1<=7 THEN DELETE;
+RUN;
+
+*Assessment of secondary diagnosis and bleeding with transfusions;
+DATA bleeding_second;
+set bleeding_ipt;
+array icd {*} dx1-dx2;
+do i = 1 to dim(icd);
+if icd{i} in: ("5311","5313","5315","5319","5321","5323","5325","5327","5331","5333","5335","5337","5339","5341",
+"5343","5345","5347","5349","53500","53510","53520","53530","53540","53550","53560","455","56200",
+"56201","56210","56211","5301","2800","2851","2859","79092") then case = 1;
+end;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('36430'	'P9011' 'P9016' 'P9021' 'P9022' 'P9038' 'P9039' 'P9040' 'P9051' 'P9054' 'P9057' 'P9058') then transfusion = 1;
+end;
+array icdx {*} dx1-dx15;
+do i = 1 to dim(icdx);
+if icdx{i} in: ('990') then transfusion = 1;
+end;
+IF REVCODE in: ('038','039') then transfusion = 1;
+IF case=1 AND transfusion = 1;
+run; 
+
+*Adding back bleeding events to the id_list;
+PROC SQL;
+CREATE table id_list1 as
+SELECT a.*,
+	b.bleeding_status,
+	b.bleeding_date
+FROM id_list a
+LEFT JOIN temp b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+*Assessing VTE events again;
+DATA id_list2;
+SET id_list1;
+DROP VTE_recur_7 VTE_recur_date_7;
+RUN;
+
+*SELECT ER visists and inpatient admission records;
+DATA VTE_recur_records;
+SET post_records;
+IF DISDATE ^=. THEN ipt=1;
+IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0981') THEN ER=1;
+	ELSE IF STDPLAC in ('23','220','428') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120', '10420','10320','10220','12220','20220','10520','20120','21120','21220','22320',
+						'22120','30220','30120','30420','30320','30520','30620','31120','31420','31320','31520',
+						'31220','31620') THEN ER=1;
+IF ipt=1 OR ER=1;
+RUN;
+
+DATA VTE_records;
+	SET VTE_recur_records;
+	array icd {*} dx1-dx2;
+	do i = 1 to dim(icd);
+	if icd{i} in: ('6732',
+				'41511','41519',
+				'4532','4538','45389','45111','45119','45181',
+				'4534','45341','45342',
+				'67133','67144',
+				'45183','45189',
+				'45382','48383','45384','45385','45386','45387',
+				'I26','O882',
+				'I80','I81',
+				'I820','I821','I822','I823','I828','I829',
+				'O082','O223','O229','O871','O882') then case = 1;
+	end;
+	IF case=1;
+RUN;
+DATA VTE_records;
+	SET VTE_records;
+IF SVCDATE ^=. THEN VTE_recur_DATE=SVCDATE;
+IF DISDATE ^=. THEN VTE_recur_DATE=DISDATE;
+RUN;
+
+
+PROC SQL;
+	CREATE TABLE id_list_VTE_recur as
+	SELECT min(enrolid) as enrolid,
+		min(VTE_recur_DATE) as VTE_recur_DATE,
+		1 as VTE_recur_7
+	FROM VTE_records
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE table id_list3 as
+SELECT a.*,
+	b.VTE_recur_7,
+	b.VTE_recur_DATE
+FROM id_list2 a
+LEFT JOIN id_list_VTE_recur b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list4;
+	SET id_list3;
+	IF VTE_recur_7=. THEN VTE_recur_7=0;
+	IF bleeding_status=. THEN bleeding_status=0;
+RUN;
+
+PROC FREQ DATA=id_list4;
+	TABLE 	SCD_Status*VTE_recur_7 
+			SCD_Status*bleeding_status 
+			SCD_Status*AC_type*VTE_recur_7
+SCD_Status*AC_type*bleeding_status/nopercent nocol norow chisq;
+RUN;
+IF first_AC ^=second_AC THEN drug_end=ini_AC_date+Switch_time;
+IF first_AC =second_AC THEN drug_end=ini_AC_date+days_therapy_30;
+drug_end+7,
+DATA id_list5;
+SET workingD.id_list_final;
+
+VTE_time=min(VTE_recur_DATE,last_enroll_date,  365+index_date);
+fstat=0;
+IF VTE_time=VTE_recur_DATE AND VTE_recur_DATE ^=. THEN fstat=1;
+lenfol=VTE_time-7-index_date;
+IF 	age<=46		THEN age_cat=0;
+ELSE IF age>=47 	THEN age_cat=1;
+IF age>=18;
+IF plantyp=. THEN plantyp=10;
+pers_90_cat=0;
+pers_180_cat=0;
+pers_358_cat=0;
+IF days_therapy_30>=90 THEN pers_90_cat=1;
+IF days_therapy_30>=180 THEN pers_180_cat=1;
+IF days_therapy_30>=358 THEN pers_358_cat=1;
+pdc_90_cat=0;
+IF pdc_90>=0.80 THEN pdc_90_cat=1;
+RUN;
+DATA id_list5;
+SET workingD.id_list_final;
+VTE_time=min(bleeding_date,last_enroll_date, 365+index_date);
+fstat=0;
+IF VTE_time=bleeding_date AND bleeding_date ^=. THEN fstat=1;
+lenfol=VTE_time-7-index_date;
+IF 	age<=46		THEN age_cat=0;
+ELSE IF age>=47 	THEN age_cat=1;
+IF age>=18;
+IF plantyp=. THEN plantyp=10;
+RUN;
+PROC FREQ DATA=id_list5;
+	TABLE 	pers_358_cat* SCD_Status
+			/nopercent nocol norow chisq;
+RUN;
+
+hip_fracture_status Trauma_status
+PROC MEANS DATA=workingD.id_list_final MEDIAN ;
+	CLASS 	SCD_Status;
+	VAR age;
+RUN;
+
+PROC TTEST DATA=id_list5;
+	CLASS 	SCD_Status;
+	VAR pdc_90 pdc_180 pdc_359;
+RUN;
+
+PROC LIFETEST DATA=id_list5 NOTABLE;
+TIME lenfol*fstat(0); 
+STRATA AC_type;RUN;
+
+DATA id_list6;
+SET workingD.id_list4;
+bleeding_time=min(last_enroll_date, bleeding_date, 365+index_date);
+fstat=0;
+IF bleeding_time=bleeding_date AND bleeding_date ^=. THEN fstat=1;
+lenfol=bleeding_time-7-index_date;
+RUN;
+
+PROC FREQ DATA=id_list6;
+	TABLE 	SCD_Status*fstat 
+			SCD_Status*AC_type*fstat
+AC_type*fstat/nopercent nocol norow chisq;
+RUN;
+
+PROC LIFETEST DATA=id_list6 NOTABLE plots=(lls);
+TIME lenfol*fstat(0); 
+STRATA SCD_Status;RUN;
+DATA temp;
+SET id_list5;
+IF sex=2;
+RUN;
+proc phreg data=id_list5; 
+CLASS sex (ref='1') case_type_final(ref='0') ;
+model lenfol*fstat(0)=	SCD_status sex age AC_type CCI_obs case_type_final 
+						LOS_index_VTE_event number_adm_prior number_er_prior
+						Central_catheter_status hospi_status
+						Hypertension_status COPD_status chronic_kidney_disease_status pers_90_cat=1;
+BASELINE out=temp4 survival=survival;
+SYMBOL l=1 i=join v=dot;
+RUN;
+proc phreg data=temp; 
+CLASS sex age_cat region index_year case_type_final;
+model lenfol*fstat(0)=	SCD_status sex age AC_type region index_year case_type_final
+						LOS_index_VTE_event Central_catheter_status hospi_status
+						Hypertension_status COPD_status chronic_kidney_disease_status;
+BASELINE out=temp4 survival=survival;
+SYMBOL l=1 i=join v=dot;
+RUN;
+
+proc logistic data= id_list5;
+	CLASS age_cat(ref='0') sex (ref='1') sex age_cat region index_year case_type_final (ref='0'); 
+	model pers_90_cat(ref='1')= SCD_status sex age AC_type CCI_obs case_type_final 
+						Central_catheter_status hospi_status
+						Hypertension_status COPD_status chronic_kidney_disease_status/link=glogit;
+RUN;
+
+
+PROC SQL;
+CREATE table temp1 as
+SELECT sum(lenfol)/365.25 as total_fol
+FROM id_list5 a
+GROUP BY AC_type;
+QUIT;
+proc univariate data=id_list5;
+var age;
+histogram;
+run;
+DATA temp;
+SET workingD.id_list_final;
+IF days_therapy_30>=358;
+pdc_90_cat=0;
+IF pdc_359>=0.80 THEN pdc_90_cat=1;
+RUN;
+PROC TTEST DATA=temp;
+	CLASS 	SCD_Status;
+	VAR pdc_359;
+RUN;
+
+PROC FREQ DATA=temp;
+	TABLE pdc_90_cat*SCD_Status/nocol norow nopercent chisq;
+RUN;
+
+*Assessment of surgery recent 30 days;
+DATA surgery_recent;
+set pre_records_30;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ("35081","35521", "35533", "35548", "35549", "35551", "35556", "35558", 
+"35565", "35566", "35571", "35582", "35583", "35585", "35587", "35621", "35623", "35646", 
+"35651", "35654", "35656", "35661", "35665", "35666", "35671", "37799","35301", "35390",
+"44140", "44141", "44143", "44144", "44145", "44146", "44147", "44150", "44151", "44152",
+"44153", "44155", "44156", "44160", "44204", "47600", "47605", "47610", "47562", "47563",
+"47564", "49310", "49311", "56340", "56341", "56342", "32440", "32442", "32445", "32480", 
+"32482", "32484", "32485", "32486", "32488", "32490", "32500", "32501", "27130", "27131", "27132", "27134") then case = 1;
+end;
+IF case=1;
+run; 
+
+PROC SQL;
+	CREATE TABLE surgery_list as
+	SELECT 	min(enrolid) as enrolid,
+		1 as surgery_status
+	FROM surgery_recent
+	GROUP BY enrolid;
+QUIT;
+
+*Assessment of recent hospitalization;
+DATA hospi_recent;
+set pre_records_30;
+IF DISDATE ^=.;
+RUN;
+PROC SQL;
+	CREATE TABLE hospi_list as
+	SELECT 	min(enrolid) as enrolid,
+		1 as hospi_status
+	FROM hospi_recent
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE table id_list7 as
+SELECT a.*,
+	b.surgery_status
+FROM id_list5 a
+LEFT JOIN surgery_list b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC SQL;
+CREATE table id_list8 as
+SELECT a.*,
+	b.hospi_status
+FROM id_list7 a
+LEFT JOIN hospi_list b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA workingD.id_list_final;
+SET id_list8;
+IF hospi_status=. THEN hospi_status=0;
+IF surgery_status=. THEN surgery_status=0;
+RUN;
