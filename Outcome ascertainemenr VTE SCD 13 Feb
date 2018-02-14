@@ -1,0 +1,411 @@
+LIBNAME workingD "C:\Users\ZHOUJX4\Documents\Jifang Zhou VTE SCD";
+
+DATA id_list;
+SET workingD.id_list_11_feb;
+RUN;
+
+PROC SQL;
+	CREATE table id_list1 as
+	SELECT 	a.*,
+			b.p_dayscovered as pdc_90
+	FROM	id_list a
+	LEFT JOIN workingD.pdc_90 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_list2 as
+	SELECT 	a.*,
+			b.p_dayscovered as pdc_180
+	FROM	id_list1 a
+	LEFT JOIN workingD.pdc_180 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_list3 as
+	SELECT 	a.*,
+			b.p_dayscovered as pdc_359
+	FROM	id_list2 a
+	LEFT JOIN workingD.pdc_359 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_list4 as
+	SELECT 	a.*,
+			b.days_therapy as days_therapy_30
+	FROM	id_list3 a
+	LEFT JOIN workingD.persis_30 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_list5 as
+	SELECT 	a.*,
+			b.days_therapy as days_therapy_60
+	FROM	id_list4 a
+	LEFT JOIN workingD.persis_60 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_list6 as
+	SELECT 	a.*,
+			b.days_therapy as days_therapy_90
+	FROM	id_list5 a
+	LEFT JOIN workingD.persis_90 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list_12_feb_pdc_adh;
+	SET id_list6;
+	IF days_therapy_30>=358 THEN days_therapy_30=358;
+	IF days_therapy_60>=358 THEN days_therapy_60=358;
+	IF days_therapy_90>=358 THEN days_therapy_90=358;
+	pdc_359=pdc_359*359/358;
+	pdc_90_cat=0;
+	pdc_180_cat=0;
+	pdc_359_cat=0;
+	IF pdc_90>=0.8 THEN pdc_90_cat=1;
+	IF pdc_180>=0.8 THEN pdc_180_cat=1;
+	IF pdc_359>=0.8 THEN pdc_359_cat=1;
+RUN;
+
+PROC FREQ DATA=id_list_12_feb_pdc_adh;
+TABLE SCD_status*pdc_90_cat/chisq;
+RUN;
+
+DATA all_records;
+SET workingD.ipt workingD.opt;
+RUN;
+DATA pre_records_180;
+SET all_records;
+IF SVCDATE ^=. AND SVCDATE<index_date-180 THEN DELETE;
+IF SVCDATE ^=. AND SVCDATE>=index_date THEN DELETE;
+IF DISDATE ^=. AND DISDATE<index_date-180 THEN DELETE;
+IF DISDATE ^=. AND DISDATE>=index_date THEN DELETE;
+RUN;
+DATA pre_records_90;
+SET all_records;
+IF SVCDATE ^=. AND SVCDATE<index_date-90 THEN DELETE;
+IF SVCDATE ^=. AND SVCDATE>=index_date THEN DELETE;
+IF DISDATE ^=. AND DISDATE<index_date-90 THEN DELETE;
+IF DISDATE ^=. AND DISDATE>=index_date THEN DELETE;
+RUN;
+DATA pre_records_30;
+SET all_records;
+IF SVCDATE ^=. AND SVCDATE<index_date-30 THEN DELETE;
+IF SVCDATE ^=. AND SVCDATE>=index_date THEN DELETE;
+IF DISDATE ^=. AND DISDATE<index_date-30 THEN DELETE;
+IF DISDATE ^=. AND DISDATE>=index_date THEN DELETE;
+RUN;
+DATA post_records;
+SET all_records;
+IF SVCDATE ^=. AND SVCDATE<=index_date+7 THEN DELETE;
+IF SVCDATE ^=. AND SVCDATE>index_date+365 THEN DELETE;
+IF DISDATE ^=. AND DISDATE<=index_date+7 THEN DELETE;
+IF DISDATE ^=. AND DISDATE>index_date+365 THEN DELETE;
+RUN;
+
+*Assessment of AF in these patients;
+DATA pre_AF;
+set pre_records_180;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('42731',	'I480','I481','I482') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+	CREATE TABLE temp as
+	SELECT 	min(enrolid) as enrolid,
+		1 as AF_status
+	FROM pre_AF
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE table id_list7 as
+SELECT a.*,
+	b.AF_status as AF_status
+FROM id_list_12_feb_pdc_adh a
+LEFT JOIN temp b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+*Assessment of malignancies in these patients;
+DATA opt_ipt_cancer;
+set pre_records_180;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('14','15','16','17','18','19','20','C0','C1','C2','C3','C4','C5','C6','C7','C8','C90','C91','C92','C93',
+				'C94','C95','C96') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+	CREATE TABLE temp as
+	SELECT 	min(enrolid) as enrolid,
+		1 as cancer_status
+	FROM opt_ipt_cancer
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE table id_list8 as
+SELECT a.*,
+	b.cancer_status as malignancy_status
+FROM id_list7 a
+LEFT JOIN temp b
+ON a.enrolid = b.enrolid;
+QUIT;
+
+*Hypertension;
+DATA all_dx_list;
+	SET pre_records_180;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('401','402','403','404','405','I10','I11','I12','I13','I15') then case=1;
+		end;
+		if case=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE WorkingD.Hypertension_ID as
+SELECT min (enrolid) as enrolid,
+	1 as Hypertension_status
+FROM all_dx_list
+GROUP BY enrolid;
+QUIT;
+*COPD;
+DATA all_dx_list;
+	SET pre_records_180;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('49','501','502','503','504','505','5064','1278','1279',
+						'J40','J41','J42','J43','J44','J45','J46','J47',
+						'J60','J61','J62','J63','J64','J65','J66','J67','J684', 'J701', 'J703') then case=1;
+		end;
+		if case=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE WorkingD.COPD_ID as
+SELECT min (enrolid) as enrolid,
+	1 as COPD_status
+FROM all_dx_list
+GROUP BY enrolid;
+QUIT;
+
+*DM2;
+DATA all_dx_list;
+	SET pre_records_180;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('250','E10','E11','E12','E13','E14') then case=1;
+		end;
+		if case=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE WorkingD.DM2_ID as
+SELECT min (enrolid) as enrolid,
+	1 as DM2_status
+FROM all_dx_list
+GROUP BY enrolid;
+QUIT;
+*Chronic heart failure;
+DATA all_dx_list;
+	SET pre_records_180;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('39891', '40211', '40291', '40411', '40413',
+ 						'40491', '40493', '428',
+						'I099', 'I110', 'I130', 'I132', 'I255', 'I420', 'I425','I426','I427','I428','I429',
+						'I43', 'I50', 'P290') then case=1;
+		end;
+		if case=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE WorkingD.CHF_ID as
+SELECT min (enrolid) as enrolid,
+	1 as CHF_status
+FROM all_dx_list
+GROUP BY enrolid;
+QUIT;
+*Chronic liver disease;
+DATA all_dx_list;
+	SET pre_records_180;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('5712', '5714', '5715', '5716',
+						'5722','5723','5724', '5728','4560','4561','45620','45621',
+						'K703','K732','K738', 'K739','K730',
+						'K740','K743','K744','K745','K7460','K7469','K754',
+						'K7210','K7290', 'K7291','K766','K767','I8501', 'I8500','I8510','I8511') then case=1;
+		end;
+		if case=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE WorkingD.Chronic_liver_disease_ID as
+SELECT min (enrolid) as enrolid,
+	1 as Chronic_liver_disease_status
+FROM all_dx_list
+GROUP BY enrolid;
+QUIT;
+*Chronic kidney disease;
+DATA all_dx_list;
+	SET pre_records_180;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('585', '586', '403',	'N18', 'N19', 'I120', 'I129') then case=1;
+		end;
+		if case=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE WorkingD.Chronic_kidney_disease_ID as
+SELECT min (enrolid) as enrolid,
+	1 as chronic_kidney_disease_status
+FROM all_dx_list
+GROUP BY enrolid;
+QUIT;
+*Pregnancy;
+DATA all_dx_list;
+	SET pre_records_180;
+	case=0;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('63','64','65','66','67', 'V22', 'V23', 'V24', 'V27',
+						'O', 'Z33','Z34','Z35','Z36','Z37','Z38','Z39') then case=1;
+		end;
+		if case=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE workingD.Pregnancy_ID as
+SELECT min (enrolid) as enrolid,
+	1 as Pregnancy_status
+FROM all_dx_list
+GROUP BY enrolid;
+QUIT;
+*Adding back the chronic condition lists;
+PROC SQL;
+CREATE TABLE id_list9 as
+SELECT a.*,
+	b.Pregnancy_status
+FROM id_list8 a
+LEFT JOIN WorkingD.Pregnancy_ID b
+ON a.enrolid=b.enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list10 as
+SELECT a.*,
+	b.hypertension_status
+FROM id_list9 a
+LEFT JOIN WorkingD.hypertension_id b
+ON a.enrolid=b.enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list11 as
+SELECT a.*,
+	b.copd_status
+FROM id_list10 a
+LEFT JOIN WorkingD.copd_id b
+ON a.enrolid=b.enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list12 as
+SELECT a.*,
+	b.dm2_status
+FROM id_list11 a
+LEFT JOIN WorkingD.dm2_id b
+ON a.enrolid=b.enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list13 as
+SELECT a.*,
+	b.chf_status
+FROM id_list12 a
+LEFT JOIN WorkingD.chf_id b
+ON a.enrolid=b.enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list14 as
+SELECT a.*,
+	b.chronic_liver_disease_status
+FROM id_list13 a
+LEFT JOIN WorkingD.chronic_liver_disease_id b
+ON a.enrolid=b.enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list15 as
+SELECT a.*,
+	b.chronic_kidney_disease_status
+FROM id_list14 a
+LEFT JOIN WorkingD.chronic_kidney_disease_id b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA id_list16;
+	SET id_list15;
+	IF chronic_kidney_disease_status=. 				THEN chronic_kidney_disease_status=0;
+	IF chronic_liver_disease_status=. 				THEN chronic_liver_disease_status=0;
+	IF chf_status=. 								THEN chf_status=0;
+	IF dm2_status=. 								THEN dm2_status=0;
+	IF copd_status=. 								THEN copd_status=0;
+	IF hypertension_status=. 						THEN hypertension_status=0;
+	IF Pregnancy_status=. 							THEN Pregnancy_status=0;
+	IF malignancy_status=. 							THEN malignancy_status=0;
+	IF AF_status=. 									THEN AF_status=0;
+RUN;
+
+PROC FREQ DATA=id_list16;
+	TABLE 	SCD_Status*chronic_kidney_disease_status 
+			SCD_Status*chronic_liver_disease_status 
+			SCD_Status*chf_status
+SCD_Status*dm2_status
+SCD_Status*copd_status
+SCD_Status*hypertension_status
+SCD_Status*Pregnancy_status
+SCD_Status*malignancy_status
+SCD_Status*AF_status
+SCD_Status*VTE_type_cat
+SCD_Status*CCI_cat/nopercent nocol norow chisq;
+RUN;
+PROC FREQ DATA=id_list16;
+TABLE 	SCD_Status*AC_type/nopercent nocol norow chisq;
+RUN;
+
+PROC SQL;
+CREATE TABLE insurance_list as
+SELECT min(enrolid) as enrolid,
+		min (plantyp) as plantyp
+FROM All_records
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE id_list17 as
+SELECT a.*,
+	b.plantyp
+FROM id_list16 a
+LEFT JOIN insurance_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE id_list18 as
+SELECT a.*,
+	b.chronic_kidney_disease_status
+FROM id_list17 a
+LEFT JOIN WorkingD.chronic_kidney_disease_id b
+ON a.enrolid=b.enrolid;
+QUIT;
+
