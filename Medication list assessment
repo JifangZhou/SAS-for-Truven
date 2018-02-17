@@ -1,0 +1,174 @@
+DATA all_drug;
+SET workingD.drug;
+RUN;
+LIBNAME Redbook 'C:\Users\jzhou86\Documents';
+
+
+PROC SQL;
+	CREATE TABLE temp as
+	SELECT 	a.*,
+		b.index_date
+	FROM all_drug a
+	Inner Join workingD.final_vte_recur b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA pre_drug_180;
+SET temp;
+IF SVCDATE ^=. AND SVCDATE<index_date-180 THEN DELETE;
+IF SVCDATE ^=. AND SVCDATE>=index_date THEN DELETE;
+RUN;
+
+DATA redbook;
+	SET redbook.redbook;
+RUN;
+
+* Prepare the NDC files for medications;
+*Antiplatelet;
+DATA Antiplatelet_asa_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Aspirin' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Aspirin';
+RUN;
+
+DATA Antiplatelet_all_NDC;
+	SET redbook;
+	WHERE 	((GENNME contains 'Aspirin') OR 
+			(GENNME contains 'Dipyridamole') OR 
+			(GENNME contains 'Ticlopidine') OR 
+			(GENNME contains 'Clopidogrel'))AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+RUN;
+*Oral contraceptive or hormone replacement therapy;
+DATA contraceptiv_HRT_all_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Estradiol') OR (GENNME contains 'estradiol') OR (THRCLDS contains 'Estrogens & Comb, NEC');
+	IF ROACD='PO';
+RUN;
+*hydroxyurea;
+DATA hydroxyurea_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Hydroxyurea');
+RUN;
+*NSAIDs:;
+DATA NSAIDs_all_NDC;
+	SET redbook;
+	WHERE 	((GENNME contains 'Diclofenac') OR 
+			(GENNME contains 'Bromfenac') OR 
+			(GENNME contains 'Diflunisal') OR 
+			(GENNME contains 'Etodolac') OR 
+			(GENNME contains 'Fenoprofen') OR 
+			(GENNME contains 'Flurbiprofen') OR 
+			(GENNME contains 'Ibuprofen') OR
+			(GENNME contains 'Indomethacin') OR 
+			(GENNME contains 'Ketoprofen') OR 
+			(GENNME contains 'Ketorolac') OR 
+			(GENNME contains 'Meclofenamate') OR 
+			(GENNME contains 'Mefenamic') OR 
+			(GENNME contains 'Meloxicam') OR 
+			(GENNME contains 'Nabumetone') OR 
+			(GENNME contains 'Naproxen') OR 
+			(GENNME contains 'Oxaprozin') OR 
+			(GENNME contains 'Phenylbutazone') OR 
+			(GENNME contains 'Piroxicam') OR 
+			(GENNME contains 'Sulindac') OR 
+			(GENNME contains 'Tolmetin'))AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	IF ROACD='PO';
+RUN;
+*Opiate analgesics:;
+DATA Opiate_all_NDC;
+	SET redbook;
+	WHERE 	((GENNME contains 'Buprenorphine') OR 
+			(GENNME contains 'Butorphanol') OR 
+			(GENNME contains 'Codeine') OR 
+			(GENNME contains 'Hydrocodone') OR 
+			(GENNME contains 'Hydromorphone') OR 
+			(GENNME contains 'Levorphanol') OR 
+			(GENNME contains 'Meperidine') OR
+			(GENNME contains 'Methadone') OR 
+			(GENNME contains 'Morphine') OR 
+			(GENNME contains 'Nalbuphine') OR 
+			(GENNME contains 'Oxycodone') OR 
+			(GENNME contains 'Oxymorphone') OR 
+			(GENNME contains 'Pentazocine') OR 
+			(GENNME contains 'Propoxyphene') OR 
+			(GENNME contains 'Tapentadol') OR 
+			(GENNME contains 'Tramadol'))AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	IF ROACD='PO';
+RUN;
+
+PROC sql;
+	CREATE table temp as
+	SELECT a.*
+	FROM pre_drug_180 a
+	INNER JOIN Opiate_all_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table Opiate_list as
+	SELECT distinct enrolid,
+		1 as prior_Opiate
+	FROM temp;
+QUIT;
+
+
+PROC SQL;
+CREATE TABLE id_list2 as
+SELECT a.*,
+	b.prior_Opiate
+FROM workingD.final_vte_recur a
+LEFT JOIN Opiate_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list3 as
+SELECT a.*,
+	b.prior_Antiplatelet
+FROM id_list2 a
+LEFT JOIN Antiplatelet_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list4 as
+SELECT a.*,
+	b.prior_contraceptiv
+FROM id_list3 a
+LEFT JOIN Contraceptiv_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list5 as
+SELECT a.*,
+	b.prior_Hydroxyurea
+FROM id_list4 a
+LEFT JOIN Hydroxyurea_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE id_list6 as
+SELECT a.*,
+	b.prior_Nsaids
+FROM id_list5 a
+LEFT JOIN Nsaids_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA workingD.id_list_17_Feb;
+	SET id_list6;
+	IF prior_Nsaids=. THEN prior_Nsaids=0;
+	IF prior_Hydroxyurea=. THEN prior_Hydroxyurea=0;
+	IF prior_contraceptiv=. THEN prior_contraceptiv=0;
+	IF prior_Antiplatelet=. THEN prior_Antiplatelet=0;
+	IF prior_Opiate=. THEN prior_Opiate=0;
+RUN;
+PROC FREQ DATA=workingD.id_list_17_Feb;
+TABLES SCD_Status*prior_Nsaids 
+	SCD_Status*prior_Hydroxyurea
+	SCD_Status*prior_contraceptiv
+	SCD_Status*prior_Antiplatelet
+	SCD_Status*prior_Opiate/nocol norow nopercent chisq;
+RUN;
