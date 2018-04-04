@@ -1,0 +1,105 @@
+libname sasfile 'C:\Users\jzhou86\Documents\SCD Project\SCD and chronic disease\NHANES\SAS file';
+libname xptfile xport 'C:\Users\jzhou86\Documents\SCD Project\SCD and chronic disease\NHANES\Glu_H.xpt' access=readonly;
+
+proc copy inlib=xptfile outlib=sasfile;
+
+run;
+
+DATA demo_f;
+	SET sasfile.demo_h;
+	IF RIDRETH1=4;
+DATA diq_f;
+	SET sasfile.diq_h;
+DATA glu_f;
+	SET sasfile.glu_h;
+RUN;
+
+PROC SQL;
+CREATE TABLE demo_f_DIQ as
+	SELECT a.*,
+			b.DIQ010
+	FROM demo_f a
+	LEFT JOIN diq_f b
+	ON a.SEQN=b.SEQN;
+QUIT;
+PROC SQL;
+CREATE TABLE demo_f_DIQ_Glu as
+	SELECT a.*,
+			b.LBXGLU,
+			b.LBDGLUSI
+	FROM demo_f_DIQ a
+	LEFT JOIN glu_f b
+	ON a.SEQN=b.SEQN;
+QUIT;
+
+DATA demo_f_DIQ_Glu;
+	SET demo_f_DIQ_Glu;
+	KEEP SEQN RIAGENDR RIDAGEYR DIQ010 LBXGLU LBDGLUSI case age_cat;
+	case=0;
+	IF DIQ010=1 OR LBXGLU>=126 OR LBDGLUSI>=7 THEN case=1;
+	IF RIDAGEYR<20 THEN DELETE;
+		IF RIDAGEYR<=44 THEN age_cat=1;
+	ELSE IF RIDAGEYR<=64 THEN age_cat=2;
+	ELSE IF RIDAGEYR>64 THEN age_cat=3;
+RUN;
+
+*start matching process;
+PROC SQL;
+CREATE table controls_id
+ as select
+ a.enrolid as study_id,
+ b.SEQN as control_id,
+ a.age as study_age,
+ b.RIDAGEYR as control_age,
+ a.rand_num as rand_num,
+ a.SCD_case
+ from analytical_file_2014 a, demo_f_DIQ_Glu b
+ where (a.age_cat=b.age_cat and
+ a.sex=b.RIAGENDR); 
+QUIT;
+
+proc sort data=controls_id nodupkey;
+ by control_id rand_num;
+ run;
+
+proc sort data=controls_id ;
+ by study_id rand_num;
+ run;
+data controls_id2 not_enough;
+set controls_id;
+ by study_id ;
+ retain num;
+ if first.study_id then num=1;
+ if num le 5 then do;
+ output controls_id2;
+ num=num+1;
+ end;
+ if last.study_id then do;
+ if num le 2 then output not_enough;
+ end;
+ run;
+
+* Now merge back the dm2 status of the controls back to the file;
+PROC SQL;
+CREATE TABLE controls_id2_Glu as
+	SELECT a.*,
+			b.case as control_case
+	FROM controls_id2 a
+	LEFT JOIN demo_f_DIQ_Glu b
+	ON a.control_id=b.SEQN;
+QUIT;
+
+
+
+PROC FREQ DATA=controls_id2_Glu;
+	TABLE control_case;
+RUN;
+
+PROC FREQ DATA=controls_id2_Glu;
+	TABLE scd_case*control_case/chisq;
+RUN;
+
+proc freq data=analytical_file_2014;
+tables scd_case/ nocum norow binomial;
+exact binomial;
+run; 
