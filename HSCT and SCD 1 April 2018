@@ -1,0 +1,275 @@
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\Raw Data';
+
+
+DATA inpt_sum;
+SET Myfile.scd_ccaei_09 Myfile.scd_ccaei_10 Myfile.scd_ccaei_11 Myfile.scd_ccaei_12 Myfile.scd_ccaei_13
+	Myfile.scd_mdcri_09 Myfile.scd_mdcri_10 Myfile.scd_mdcri_11 Myfile.scd_mdcri_12 Myfile.scd_mdcri_13
+	Myfile.scd_ccaei_142  
+	Myfile.scd_mdcri_142;
+DATA outpt_svc;
+SET	Myfile.scd_ccaeo_09 Myfile.scd_ccaeo_10 Myfile.scd_ccaeo_11 Myfile.scd_ccaeo_12 Myfile.scd_ccaeo_13
+	Myfile.scd_mdcro_09 Myfile.scd_mdcro_10 Myfile.scd_mdcro_11 Myfile.scd_mdcro_12 Myfile.scd_mdcro_13
+	Myfile.scd_ccaeo_142 
+	Myfile.scd_mdcro_142;
+DATA drug_pres;
+SET	Myfile.scd_ccaed_09 Myfile.scd_ccaed_10 Myfile.scd_ccaed_11 Myfile.scd_ccaed_12 Myfile.scd_ccaed_13
+	Myfile.scd_mdcrd_09 Myfile.scd_mdcrd_10 Myfile.scd_mdcrd_11 Myfile.scd_mdcrd_12 Myfile.scd_mdcrd_13
+	Myfile.scd_ccaed_142  
+	Myfile.scd_mdcrd_142;
+DATA inpt_svc;
+SET	Myfile.scd_ccaes_09 Myfile.scd_ccaes_10 Myfile.scd_ccaes_11 Myfile.scd_ccaes_12 Myfile.scd_ccaes_13
+	Myfile.scd_mdcrs_09 Myfile.scd_mdcrs_10 Myfile.scd_mdcrs_11 Myfile.scd_mdcrs_12 Myfile.scd_mdcrs_13
+	Myfile.scd_ccaes_142 
+	Myfile.scd_mdcrs_142;
+DATA Myfileance_all;
+SET	Myfile.scd_ccaet_09 Myfile.scd_ccaet_10 Myfile.scd_ccaet_11 Myfile.scd_ccaet_12 Myfile.scd_ccaet_13
+	Myfile.scd_mdcrt_09 Myfile.scd_mdcrt_10 Myfile.scd_mdcrt_11 Myfile.scd_mdcrt_12 Myfile.scd_mdcrt_13
+	Myfile.scd_ccaet_142 
+	Myfile.scd_mdcrt_142;
+RUN;
+
+DATA all_record;
+	SET outpt_svc
+		inpt_sum
+		inpt_svc;
+RUN;
+
+data  id_list;
+set myfile.hsct_hu_final_cohort;
+run; 
+
+DATA ipt_all;
+	SET inpt_sum;
+	Total_inpt=TOTNET;
+	TOT_OOP=TOTCOINS+TOTDED+TOTCOPAY;
+RUN;
+PROC SQL;
+CREATE TABLE inpt_list as
+	SELECT a.*,
+			b.index_date as index_date
+	FROM ipt_all a
+	INNER JOIN id_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE opt_list as
+	SELECT a.*,
+			b.index_date as index_date
+	FROM outpt_svc a
+	INNER JOIN id_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+DATA opt_list;
+	SET opt_list;
+	TOT_OOP=COINS+DEDUCT+COPAY;
+RUN;
+
+%macro pso (time);
+
+DATA inpt_list1;
+	SET inpt_list;
+	IF (index_date+180*(&time.-1)<=DISDATE<index_date+180*&time.);
+RUN;
+
+DATA opt_list1;
+	SET opt_list;
+	IF (index_date+180*(&time.-1)<SVCDATE<=index_date+180*&time.);
+RUN;
+
+
+PROC SQL;
+CREATE TABLE ipt_list_Q&time. as
+	SELECT min(enrolid) as enrolid,
+			sum(TOTNET) as ipt_Q&time.,
+			sum(TOT_OOP) as ipt_oop_Q&time.
+	FROM inpt_list1 
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE opt_list_Q&time. as
+	SELECT min(enrolid) as enrolid,
+			sum(NETPAY) as opt_Q&time.,
+			sum(TOT_OOP) as opt_oop_Q&time.
+	FROM opt_list1 
+	GROUP BY enrolid;
+QUIT;
+%MEND;
+
+%pso(1);
+%pso(2);
+%pso(3);
+%pso(4);
+%pso(5);
+%pso(6);
+%pso(7);
+%pso(8);
+%pso(9);
+%pso(10);
+%pso(11);
+%pso(12);
+
+
+
+PROC SQL;
+CREATE TABLE id_list8 as
+	SELECT a.*,
+			b.*
+	FROM id_list3 a
+	LEFT JOIN ipt_list_Q12 b
+	ON a.enrolid=b.enrolid;
+QUIT;
+DATA id_list9;
+	SET id_list8;
+	IF DTEND-index_date>=180 THEN Q1_eligible=1;
+	IF DTEND-index_date>=360 THEN Q2_eligible=1;
+	IF DTEND-index_date>=540 THEN Q3_eligible=1;
+	IF DTEND-index_date>=720 THEN Q4_eligible=1;
+	IF DTEND-index_date>=900 THEN Q5_eligible=1;
+	IF DTEND-index_date>=1080 THEN Q6_eligible=1;
+	IF DTEND-index_date>=1260 THEN Q7_eligible=1;
+	IF DTEND-index_date>=1440 THEN Q8_eligible=1;
+	IF DTEND-index_date>=1620 THEN Q9_eligible=1;
+	IF DTEND-index_date>=1800 THEN Q10_eligible=1;
+	IF DTEND-index_date>=1980 THEN Q11_eligible=1;
+	IF DTEND-index_date>=2160 THEN Q12_eligible=1;
+	IF Q1_eligible=. THEN ipt_Q1=.;
+	IF Q1_eligible=. THEN ipt_oop_Q1=.;
+	IF Q1_eligible=. THEN opt_Q1=.;
+	IF Q1_eligible=. THEN opt_oop_Q1=.;
+	IF Q2_eligible=. THEN ipt_Q2=.;
+	IF Q2_eligible=. THEN ipt_oop_Q2=.;
+	IF Q2_eligible=. THEN opt_Q2=.;
+	IF Q2_eligible=. THEN opt_oop_Q2=.;
+	IF Q3_eligible=. THEN ipt_Q3=.;
+	IF Q3_eligible=. THEN ipt_oop_Q3=.;
+	IF Q3_eligible=. THEN opt_Q3=.;
+	IF Q3_eligible=. THEN opt_oop_Q3=.;
+	IF Q4_eligible=. THEN ipt_Q4=.;
+	IF Q4_eligible=. THEN ipt_oop_Q4=.;
+	IF Q4_eligible=. THEN opt_Q4=.;
+	IF Q4_eligible=. THEN opt_oop_Q4=.;
+	IF Q5_eligible=. THEN ipt_Q5=.;
+	IF Q5_eligible=. THEN ipt_oop_Q5=.;
+	IF Q5_eligible=. THEN opt_Q5=.;
+	IF Q5_eligible=. THEN opt_oop_Q5=.;
+	IF Q6_eligible=. THEN ipt_Q6=.;
+	IF Q6_eligible=. THEN ipt_oop_Q6=.;
+	IF Q6_eligible=. THEN opt_Q6=.;
+	IF Q6_eligible=. THEN opt_oop_Q6=.;
+	IF Q7_eligible=. THEN ipt_Q7=.;
+	IF Q7_eligible=. THEN ipt_oop_Q7=.;
+	IF Q7_eligible=. THEN opt_Q7=.;
+	IF Q7_eligible=. THEN opt_oop_Q7=.;
+	IF Q8_eligible=. THEN ipt_Q8=.;
+	IF Q8_eligible=. THEN ipt_oop_Q8=.;
+	IF Q8_eligible=. THEN opt_Q8=.;
+	IF Q8_eligible=. THEN opt_oop_Q8=.;
+	IF Q9_eligible=. THEN ipt_Q9=.;
+	IF Q9_eligible=. THEN ipt_oop_Q9=.;
+	IF Q9_eligible=. THEN opt_Q9=.;
+	IF Q9_eligible=. THEN opt_oop_Q9=.;
+	IF Q10_eligible=. THEN ipt_Q10=.;
+	IF Q10_eligible=. THEN ipt_oop_Q10=.;
+	IF Q10_eligible=. THEN opt_Q10=.;
+	IF Q10_eligible=. THEN opt_oop_Q10=.;
+	IF Q11_eligible=. THEN ipt_Q11=.;
+	IF Q11_eligible=. THEN ipt_oop_Q11=.;
+	IF Q11_eligible=. THEN opt_Q11=.;
+	IF Q11_eligible=. THEN opt_oop_Q11=.;
+	IF Q12_eligible=. THEN ipt_Q12=.;
+	IF Q12_eligible=. THEN ipt_oop_Q12=.;
+	IF Q12_eligible=. THEN opt_Q12=.;
+	IF Q12_eligible=. THEN opt_oop_Q12=.;
+	IF Q1_eligible=1 AND  ipt_Q1=. THEN ipt_Q1=0;
+	IF Q1_eligible=1 AND ipt_oop_Q1=. THEN ipt_oop_Q1=0;
+	IF Q1_eligible=1 AND opt_Q1=. THEN opt_Q1=0;
+	IF Q1_eligible=1 AND opt_oop_Q1=. THEN opt_oop_Q1=0;
+	IF Q2_eligible=1 AND ipt_Q2=. THEN ipt_Q2=0;
+	IF Q2_eligible=1 AND ipt_oop_Q2=. THEN ipt_oop_Q2=0;
+	IF Q2_eligible=1 AND opt_Q2=. THEN opt_Q2=0;
+	IF Q2_eligible=1 AND opt_oop_Q2=. THEN opt_oop_Q2=0;
+	IF Q3_eligible=1 AND ipt_Q3=. THEN ipt_Q3=0;
+	IF Q3_eligible=1 AND ipt_oop_Q3=. THEN ipt_oop_Q3=0;
+	IF Q3_eligible=1 AND opt_Q3=. THEN opt_Q3=0;
+	IF Q3_eligible=1 AND opt_oop_Q3=. THEN opt_oop_Q3=0;
+	IF Q4_eligible=1 AND ipt_Q4=. THEN ipt_Q4=0;
+	IF Q4_eligible=1 AND ipt_oop_Q4=. THEN ipt_oop_Q4=0;
+	IF Q4_eligible=1 AND opt_Q4=. THEN opt_Q4=0;
+	IF Q4_eligible=1 AND opt_oop_Q4=. THEN opt_oop_Q4=0;
+	IF Q5_eligible=1 AND ipt_Q5=. THEN ipt_Q5=0;
+	IF Q5_eligible=1 AND ipt_oop_Q5=. THEN ipt_oop_Q5=0;
+	IF Q5_eligible=1 AND opt_Q5=. THEN opt_Q5=0;
+	IF Q5_eligible=1 AND opt_oop_Q5=. THEN opt_oop_Q5=0;
+	IF Q6_eligible=1 AND ipt_Q6=. THEN ipt_Q6=0;
+	IF Q6_eligible=1 AND ipt_oop_Q6=. THEN ipt_oop_Q6=0;
+	IF Q6_eligible=1 AND opt_Q6=. THEN opt_Q6=0;
+	IF Q6_eligible=1 AND opt_oop_Q6=. THEN opt_oop_Q6=0;
+	IF Q7_eligible=1 AND ipt_Q7=. THEN ipt_Q7=0;
+	IF Q7_eligible=1 AND ipt_oop_Q7=. THEN ipt_oop_Q7=0;
+	IF Q7_eligible=1 AND opt_Q7=. THEN opt_Q7=0;
+	IF Q7_eligible=1 AND opt_oop_Q7=. THEN opt_oop_Q7=0;
+	IF Q8_eligible=1 AND ipt_Q8=. THEN ipt_Q8=0;
+	IF Q8_eligible=1 AND ipt_oop_Q8=. THEN ipt_oop_Q8=0;
+	IF Q8_eligible=1 AND opt_Q8=. THEN opt_Q8=0;
+	IF Q8_eligible=1 AND opt_oop_Q8=. THEN opt_oop_Q8=0;
+	IF Q9_eligible=1 AND ipt_Q9=. THEN ipt_Q9=0;
+	IF Q9_eligible=1 AND ipt_oop_Q9=. THEN ipt_oop_Q9=0;
+	IF Q9_eligible=1 AND opt_Q9=. THEN opt_Q9=0;
+	IF Q9_eligible=1 AND opt_oop_Q9=. THEN opt_oop_Q9=0;
+	IF Q10_eligible=1 AND ipt_Q10=. THEN ipt_Q10=0;
+	IF Q10_eligible=1 AND ipt_oop_Q10=. THEN ipt_oop_Q10=0;
+	IF Q10_eligible=1 AND opt_Q10=. THEN opt_Q10=0;
+	IF Q10_eligible=1 AND opt_oop_Q10=. THEN opt_oop_Q10=0;
+	IF Q11_eligible=1 AND ipt_Q11=. THEN ipt_Q11=0;
+	IF Q11_eligible=1 AND ipt_oop_Q11=. THEN ipt_oop_Q11=0;
+	IF Q11_eligible=1 AND opt_Q11=. THEN opt_Q11=0;
+	IF Q11_eligible=1 AND opt_oop_Q11=. THEN opt_oop_Q11=0;
+	IF Q12_eligible=1 AND ipt_Q12=. THEN ipt_Q12=0;
+	IF Q12_eligible=1 AND ipt_oop_Q12=. THEN ipt_oop_Q12=0;
+	IF Q12_eligible=1 AND opt_Q12=. THEN opt_Q12=0;
+	IF Q12_eligible=1 AND opt_oop_Q12=. THEN opt_oop_Q12=0;
+RUN;
+
+proc glm data=id_list9;
+  class hsct;
+  model ipt_Q1 ipt_Q2 ipt_Q3 ipt_Q4 ipt_Q5 ipt_Q6 ipt_Q7 ipt_Q8 ipt_Q9 ipt_Q10 ipt_Q11= hsct;
+  repeated ipt_Q 11 / printe;
+run;
+
+proc glm data=id_list9;
+  class hsct sex;
+  model opt_Q1 opt_Q2 opt_Q3 opt_Q4 opt_Q5 opt_Q6 opt_Q7 opt_Q8 opt_Q9 opt_Q10 opt_Q11= hsct sex age;
+  repeated opt_Q 11 / printe;
+run;
+DATA id_list10;
+	SET id_list9;
+	IF hsct=1 AND HU_pres=1 THEN DELETE;
+	age=YEAR(index_date)-DOBYR;
+RUN;
+	KEEP enrolid hsct sex age opt_Q1 opt_Q2 opt_Q3 opt_Q4 opt_Q5 opt_Q6 opt_Q7 opt_Q8 opt_Q9 opt_Q10 opt_Q11 opt_Q12;
+	PROC MEANS DATA=id_list10;
+	class hsct;
+	VAR opt_Q1 opt_Q2 opt_Q3 opt_Q4 opt_Q5 opt_Q6 opt_Q7 opt_Q8 opt_Q9 opt_Q10 opt_Q11 opt_Q12
+		ipt_Q1 ipt_Q2 ipt_Q3 ipt_Q4 ipt_Q5 ipt_Q6 ipt_Q7 ipt_Q8 ipt_Q9 ipt_Q10 ipt_Q11 ipt_Q12;
+	RUN;
+
+proc transpose data=id_list10 out=long;
+  by enrolid hsct age sex;
+run;
+data long;
+  set long (rename=(col1=cost) );
+  time = substr(_NAME_, 6, 1 )+0;
+  drop _name_;
+  IF cost=. THEN DELETE;
+run;
+
+proc mixed data=long;
+  class hsct sex time;
+  model cost = hsct sex age time hsct*time;
+  repeated time / subject=enrolid type=ar(1);
+run;
+
+	PROC FREQ DATA=id_list9;
+	TABLE hsct*HU_pres;
+	RUN;
