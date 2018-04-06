@@ -1,0 +1,526 @@
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\Raw Data';
+
+
+DATA inpt_sum;
+SET Myfile.scd_ccaei_09 Myfile.scd_ccaei_10 Myfile.scd_ccaei_11 Myfile.scd_ccaei_12 Myfile.scd_ccaei_13
+	Myfile.scd_mdcri_09 Myfile.scd_mdcri_10 Myfile.scd_mdcri_11 Myfile.scd_mdcri_12 Myfile.scd_mdcri_13
+	Myfile.scd_ccaei_142  
+	Myfile.scd_mdcri_142;
+DATA outpt_svc;
+SET	Myfile.scd_ccaeo_09 Myfile.scd_ccaeo_10 Myfile.scd_ccaeo_11 Myfile.scd_ccaeo_12 Myfile.scd_ccaeo_13
+	Myfile.scd_mdcro_09 Myfile.scd_mdcro_10 Myfile.scd_mdcro_11 Myfile.scd_mdcro_12 Myfile.scd_mdcro_13
+	Myfile.scd_ccaeo_142 
+	Myfile.scd_mdcro_142;
+DATA drug_pres;
+SET	Myfile.scd_ccaed_09 Myfile.scd_ccaed_10 Myfile.scd_ccaed_11 Myfile.scd_ccaed_12 Myfile.scd_ccaed_13
+	Myfile.scd_mdcrd_09 Myfile.scd_mdcrd_10 Myfile.scd_mdcrd_11 Myfile.scd_mdcrd_12 Myfile.scd_mdcrd_13
+	Myfile.scd_ccaed_142  
+	Myfile.scd_mdcrd_142;
+DATA inpt_svc;
+SET	Myfile.scd_ccaes_09 Myfile.scd_ccaes_10 Myfile.scd_ccaes_11 Myfile.scd_ccaes_12 Myfile.scd_ccaes_13
+	Myfile.scd_mdcrs_09 Myfile.scd_mdcrs_10 Myfile.scd_mdcrs_11 Myfile.scd_mdcrs_12 Myfile.scd_mdcrs_13
+	Myfile.scd_ccaes_142 
+	Myfile.scd_mdcrs_142;
+DATA Myfileance_all;
+SET	Myfile.scd_ccaet_09 Myfile.scd_ccaet_10 Myfile.scd_ccaet_11 Myfile.scd_ccaet_12 Myfile.scd_ccaet_13
+	Myfile.scd_mdcrt_09 Myfile.scd_mdcrt_10 Myfile.scd_mdcrt_11 Myfile.scd_mdcrt_12 Myfile.scd_mdcrt_13
+	Myfile.scd_ccaet_142 
+	Myfile.scd_mdcrt_142;
+RUN;
+
+DATA all_record;
+	SET outpt_svc
+		inpt_sum
+		inpt_svc;
+RUN;
+
+*Add DTSTART date to the service records and prescription records;
+DATA id_list;
+	SET myfile.id_list_rx_considered;
+RUN;
+
+PROC sql;
+	CREATE table all_record_baseline as
+	SELECT a.*,
+		b.DTSTART as start_enroll_date
+	FROM all_record a
+	LEFT JOIN id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+* extraction of baseline variables;
+DATA all_record_base;
+set all_record_baseline;
+if (svcdate>=start_enroll_date AND svcdate<start_enroll_date+180) OR (disdate>=start_enroll_date AND disdate<start_enroll_date+180);
+RUN;
+
+DATA all_record_follow;
+set all_record_baseline;
+if (svcdate>=start_enroll_date+180) OR (disdate>=start_enroll_date+180);
+RUN;
+
+PROC sql;
+	CREATE table all_rx_baseline as
+	SELECT a.*,
+		b.DTSTART as start_enroll_date
+	FROM drug_pres a
+	LEFT JOIN id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA all_rx_base;
+set all_rx_baseline;
+if svcdate>=start_enroll_date AND svcdate<start_enroll_date+180;
+RUN;
+
+DATA all_rx_follow;
+set all_rx_baseline;
+if svcdate>=start_enroll_date+180;
+RUN;
+
+*Assessment of diabetes time and prescriptions;
+DATA dm2_list_baseline;
+set all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: (	'25000','25010','25020','25030','25040','25050','25060','25070','25080','25090',
+				'25002','25012','25022','25032','25042','25052','25062','25072','25082','25092') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE dm2_list_baseline as
+SELECT min(enrolid) as enrolid,
+	1 as dm2_dx_baseline,
+	min(SVCDATE) as dm2_dx_base_opt_date_min,
+	min(DISDATE) as dm2_dx_base_ipt_date_min,
+	max(SVCDATE) as dm2_dx_base_opt_date_max,
+	max(DISDATE) as dm2_dx_base_ipt_date_max
+FROM dm2_list_baseline
+GROUP BY enrolid;
+QUIT;
+
+*Assessment of diabetes time and prescriptions;
+DATA dm2_list_follow;
+set all_record_follow;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('25000','25010','25020','25030','25040','25050','25060','25070','25080','25090',
+				'25002','25012','25022','25032','25042','25052','25062','25072','25082','25092') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE dm2_list_follow as
+SELECT min(enrolid) as enrolid,
+	1 as dm2_dx_follow,
+	min(SVCDATE) as dm2_dx_follow_opt_date_min,
+	min(DISDATE) as dm2_dx_follow_ipt_date_min,
+	max(SVCDATE) as dm2_dx_follow_opt_date_max,
+	max(DISDATE) as dm2_dx_follow_ipt_date_max
+FROM dm2_list_follow
+GROUP BY enrolid;
+QUIT;
+*Assessment of diabetes medication uses in baseline and follow-up periods;
+DATA dm2_pres_list;
+	SET myfile.redbook_oral_lipid_list;
+RUN;
+PROC sql;
+	CREATE table dm2_pres as
+	SELECT a.*
+	FROM all_rx_base a
+	INNER JOIN dm2_pres_list b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table dm2_pres_base as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) as dm2_rx_base_date
+	FROM dm2_pres
+	GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table dm2_pres as
+	SELECT a.*
+	FROM all_rx_follow a
+	INNER JOIN dm2_pres_list b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table dm2_pres_follow as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) as dm2_rx_follow_date
+	FROM dm2_pres
+	GROUP BY enrolid;
+QUIT;
+*Assessment of insulin uses in baseline and follow-up periods;
+DATA dm2_pres_list;
+	SET myfile.redbook_insulin_list;
+RUN;
+PROC sql;
+	CREATE table dm2_pres as
+	SELECT a.*
+	FROM all_rx_base a
+	INNER JOIN dm2_pres_list b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table insulin_base as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) as insulin_base_date
+	FROM dm2_pres
+	GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table dm2_pres as
+	SELECT a.*
+	FROM all_rx_follow a
+	INNER JOIN dm2_pres_list b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table insulin_follow as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) as insulin_follow_date
+	FROM dm2_pres
+	GROUP BY enrolid;
+QUIT;
+
+
+*Merge back the dx diagnosis data;
+DATA id_list1;
+	SET id_list;
+	DROP dx_num index_date1 index_date2 index_date3 index_date4 index_date last_date dm2_pres_count pres_dm2_date dm2 index_dm2_1 index_dm2_2 index_dm2 dm2_case
+			pre_exist_DM fstat prevalent_DM time_dm2 follow_dm2_date time lenfol_time metS_hpn metS_lipid metS_obesity metS_glucose metS
+			dm2_dx_baseline dm2_dx_base_opt_date dm2_dx_base_ipt_date dm2_dx_follow dm2_dx_follow_opt_date dm2_dx_follow_ipt_date dm2_rx_base_date dm2_rx_follow_date
+			impaired_glucose_baseline obesity_baseline_baseline hpn_rx_baseline lipid_rx_baseline baseline_hypertension baseline_lipid;
+RUN;
+
+PROC sql;
+	CREATE table id_list7 as
+	SELECT a.*,
+		b.*
+	FROM id_list6 a
+	LEFT JOIN insulin_follow b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*Define baseine obesity and metS;
+PROC sql;
+	CREATE table lipid_pres as
+	SELECT a.*
+	FROM all_rx_base a
+	INNER JOIN myfile.redbook_oral_lipid_list b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table lipid_pres as
+	SELECT min(enrolid) as enrolid,
+		1 as lipid_rx_baseline
+	FROM lipid_pres
+	GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table hpn_pres as
+	SELECT a.*
+	FROM all_rx_base a
+	INNER JOIN myfile.redbook_oral_hpn_list b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table hpn_pres as
+	SELECT min(enrolid) as enrolid,
+		1 as hpn_rx_baseline
+	FROM hpn_pres
+	GROUP BY enrolid;
+QUIT;
+*baseline obsesity;
+DATA obesity_baseline;
+set all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2780', '2781', '27801', '27800', 'V77') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE obesity_baseline as
+SELECT min(enrolid) as enrolid,
+	1 as obesity_baseline
+FROM obesity_baseline
+GROUP BY enrolid;
+QUIT;
+
+*impaired glucose;
+DATA impaired_glucose_baseline;
+set all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('250', '7902', '79021', '79022', '79029') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE impaired_glucose_baseline as
+SELECT min(enrolid) as enrolid,
+	1 as impaired_glucose_baseline
+FROM impaired_glucose_baseline
+GROUP BY enrolid;
+QUIT;
+*baseline hypertension;
+DATA hypertension_baseline;
+set all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('401', '4010', '4011', '4019', '4020', '4021', '4029', 
+				'4030', '4031', '4039', '404', '4040', '4041', '4049', 
+				'2780', '27800', '27801', '27802', '2781', 'V778', '7831', '27802') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE hypertension_baseline as
+SELECT min(enrolid) as enrolid,
+	1 as hypertension_baseline
+FROM hypertension_baseline
+GROUP BY enrolid;
+QUIT;
+*baseline dyslipidemia;
+DATA lipid_baseline;
+set all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2720', '2721', '2722', '2724', '2725', '2729') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE lipid_baseline as
+SELECT min(enrolid) as enrolid,
+	1 as lipid_baseline
+FROM lipid_baseline
+GROUP BY enrolid;
+QUIT;
+*Merge back the lists;
+
+PROC sql;
+	CREATE table id_list13 as
+	SELECT a.*,
+		b.*
+	FROM id_list12 a
+	LEFT JOIN lipid_baseline b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list14;
+	SET id_list13;
+	IF obesity_baseline=. THEN obesity_baseline=0;
+	IF impaired_glucose_baseline=. THEN impaired_glucose_baseline=0;
+	IF hypertension_baseline=. THEN hypertension_baseline=0;
+	IF lipid_baseline=. THEN lipid_baseline=0;
+RUN;
+*Identify the type 1 DM;
+DATA T1DM;
+set all_record;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('25001','25011','25021','25031','25041','25051','25061','25071','25081','25091',
+				'25003','25013','25023','25033','25043','25053','25063','25073','25083','25093') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE T1DM as
+SELECT min(enrolid) as enrolid,
+	1 as T1DM
+FROM T1DM
+GROUP BY enrolid;
+QUIT;
+
+*Identify the gestational DM;
+DATA gestational_DM;
+set all_record;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('6488') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE gestational_DM as
+SELECT min(enrolid) as enrolid,
+	1 as gestational_DM
+FROM gestational_DM
+GROUP BY enrolid;
+QUIT;
+*Merge back type 1 DM and gestational DM;
+PROC sql;
+	CREATE table id_list16 as
+	SELECT a.*,
+		b.*
+	FROM id_list15 a
+	LEFT JOIN gestational_DM b
+	ON a.enrolid = b.enrolid;
+QUIT;
+DATA id_list17;
+	SET id_list16;
+	IF age>=20;
+	IF T1DM=1 THEN DELETE;
+	IF gestational_DM=1 THEN DELETE;
+	RUN;
+
+DATA id_list18;
+	SET id_list17;
+	Eligible_2009=0;
+	Eligible_2010=0;
+	Eligible_2011=0;
+	Eligible_2012=0;
+	Eligible_2013=0;
+	Eligible_2014=0;
+	IF DTSTART<=17898 AND DTEND>=18262 THEN Eligible_2009=1;
+	IF DTSTART<=18263 AND DTEND>=18627 THEN Eligible_2010=1;
+	IF DTSTART<=18628 AND DTEND>=18992 THEN Eligible_2011=1;
+	IF DTSTART<=18993 AND DTEND>=19358 THEN Eligible_2012=1;
+	IF DTSTART<=19359 AND DTEND>=19723 THEN Eligible_2013=1;
+	IF DTSTART<=19724 AND DTEND>=20088 THEN Eligible_2014=1;
+	age=YEAR(DTSTART)-DOBYR;	
+	IF age<=4 	THEN age_cat=1;
+	ELSE IF age<=9 	THEN age_cat=2;
+	ELSE IF age<=14 	THEN age_cat=3;
+	ELSE IF age<=19 	THEN age_cat=4;
+	ELSE IF age<=24 	THEN age_cat=5;
+	ELSE IF age<=29 	THEN age_cat=6;
+	ELSE IF age<=34 	THEN age_cat=7;
+	ELSE IF age<=39 	THEN age_cat=8;
+	ELSE IF age<=44 	THEN age_cat=9;
+	ELSE IF age<=49 	THEN age_cat=10;
+	ELSE IF age<=54 	THEN age_cat=11;
+	ELSE IF age<=59 	THEN age_cat=12;
+	ELSE IF age<=64 	THEN age_cat=13;
+	ELSE IF age<=69 	THEN age_cat=14;
+	ELSE IF age<=74 	THEN age_cat=15;
+	ELSE IF age<=79 	THEN age_cat=16;
+	ELSE IF age<=84 	THEN age_cat=17;
+	ELSE IF age>=85 	THEN age_cat=18;
+RUN;
+DATA myfile.id_list19;
+	SET id_list18;
+	DM_case=0;
+	IF (dm2_dx_base_ipt_date_min^=. OR dm2_dx_follow_ipt_date_min^=.) THEN DM_case=1;
+	IF (dm2_dx_base_ipt_date_min^=. OR dm2_dx_follow_ipt_date_min^=.) THEN DM_date_ipt=min(dm2_dx_base_ipt_date_min,dm2_dx_follow_ipt_date_min);
+	IF max(dm2_dx_base_opt_date_max,dm2_dx_follow_opt_date_max)-min(dm2_dx_base_opt_date_min,dm2_dx_follow_opt_date_min)>=30 THEN DM_case=1;
+	IF max(dm2_dx_base_opt_date_max,dm2_dx_follow_opt_date_max)-min(dm2_dx_base_opt_date_min,dm2_dx_follow_opt_date_min)>=30 THEN 
+	DM_date_opt=min(dm2_dx_base_opt_date_min,dm2_dx_follow_opt_date_min);
+	IF (dm2_rx_base_date^=. OR dm2_rx_follow_date^=. ) THEN DM_case=1;
+	IF (dm2_rx_base_date^=. OR dm2_rx_follow_date^=. ) THEN DM_date_rx=min(dm2_rx_base_date, dm2_rx_follow_date);
+	IF DM_case=1 THEN DM_date_final=min(DM_date_ipt, DM_date_opt,DM_date_rx);
+	pre_exist_DM=0;
+	IF  DM_case=1 AND (dm2_dx_baseline ^=. OR dm2_rx_base_date ^=.) THEN pre_exist_DM=1;
+	fstat=0;
+	prevalent_DM=0;
+	IF DM_case=1 THEN prevalent_DM=1;
+	IF (pre_exist_DM=0 AND prevalent_DM=1) THEN time_dm2=DM_date_final-DTSTART-180;
+	IF time_dm2 ^=. THEN follow_dm2_date=DM_date_final;
+	incident_dm2_2009=0;
+	incident_dm2_2010=0;
+	incident_dm2_2011=0;
+	incident_dm2_2012=0;
+	incident_dm2_2013=0;
+	incident_dm2_2014=0;
+	IF (year(follow_dm2_date)=2009 AND pre_exist_DM=0 AND prevalent_DM=1) THEN incident_dm2_2009=1;
+	IF (year(follow_dm2_date)=2010 AND pre_exist_DM=0 AND prevalent_DM=1)THEN incident_dm2_2010=1;
+	IF (year(follow_dm2_date)=2011 AND pre_exist_DM=0 AND prevalent_DM=1)THEN incident_dm2_2011=1;
+	IF (year(follow_dm2_date)=2012 AND pre_exist_DM=0 AND prevalent_DM=1)THEN incident_dm2_2012=1;
+	IF (year(follow_dm2_date)=2013 AND pre_exist_DM=0 AND prevalent_DM=1)THEN incident_dm2_2013=1;
+	IF (year(follow_dm2_date)=2014 AND pre_exist_DM=0 AND prevalent_DM=1)THEN incident_dm2_2014=1;
+	prevalent_dm2_2009=0;
+	prevalent_dm2_2010=0;
+	prevalent_dm2_2011=0;
+	prevalent_dm2_2012=0;
+	prevalent_dm2_2013=0;
+	prevalent_dm2_2014=0;
+	IF incident_dm2_2009=1 OR YEAR(DM_date_final)=2009 THEN prevalent_dm2_2009=1;
+	IF max(prevalent_dm2_2009,incident_dm2_2010)=1 THEN prevalent_dm2_2010=1;
+	IF max(prevalent_dm2_2009,incident_dm2_2010,incident_dm2_2011)=1 THEN prevalent_dm2_2011=1;
+	IF max(prevalent_dm2_2009,incident_dm2_2010,incident_dm2_2011,incident_dm2_2012)=1 THEN prevalent_dm2_2012=1;
+	IF max(prevalent_dm2_2009,incident_dm2_2010,incident_dm2_2011,incident_dm2_2012,incident_dm2_2013)=1 THEN prevalent_dm2_2013=1;
+	IF max(prevalent_dm2_2009,incident_dm2_2010,incident_dm2_2011,incident_dm2_2012,incident_dm2_2013,incident_dm2_2014)=1 THEN prevalent_dm2_2014=1;
+	time=min(DTEND-DTSTART-180, time_dm2);
+	IF time=time_dm2 THEN fstat=1;
+	lenfol_time=time/365.25;
+metS_hpn=0;
+IF hpn_rx_baseline=1 OR hypertension_baseline=1 THEN metS_hpn=1;
+metS_lipid=0;
+IF lipid_rx_baseline=1 OR lipid_baseline=1 THEN metS_lipid=1;
+metS_obesity=0;
+IF obesity_baseline=1 THEN metS_obesity=1;
+metS_glucose=0;
+IF impaired_glucose_baseline=1 THEN metS_glucose=1; 
+metS=0;
+IF sum(metS_hpn, metS_lipid, metS_obesity, metS_glucose)>=3 THEN metS=1;
+index_year=YEAR(DTSTART);
+
+RUN;
+IF prevalent_DM=1;
+IF pre_exist_DM=0 AND 
+IF pre_exist_DM=0;
+
+
+
+IF prevalent_DM=1;
+
+
+PROC FREQ DATA=myfile.id_list19;
+	TABLE Osteomyelitis*prevalent_DM/nopercent nocol norow chisq;
+RUN;
+
+PROC MEANS DATA=myfile.id_list19 MEAN MEDIAN;
+	CLASS prevalent_DM;
+	VAR age;
+RUN;
+DATA analytical_cohort;
+	SET myfile.id_list19;
+	IF pre_exist_DM=1 THEN DELETE;
+	index_year=YEAR(DTSTART);
+	IF age<=44 	THEN age_cat=1;
+	ELSE IF age<=64 	THEN age_cat=2;
+	ELSE IF age>=65 	THEN age_cat=3;
+RUN;
+PROC sql;
+	CREATE table temp as
+	SELECT min(age_cat) as age_cat,
+		sum(lenfol_time) as lenfol_time,
+		sum(fstat) as fstat
+	FROM analytical_cohort
+	GROUP BY age_cat;
+QUIT;
+
+PROC PRINT DATA=temp;
+RUN;
+PROC PHREG DATA=analytical_cohort; 
+class sex (ref="1") CCI_cat (ref="0") ;
+model lenfol_time*fstat(0)=age sex CCI_cat hypertension_baseline lipid_baseline baseline_COPD impaired_glucose_baseline baseline_cancer obesity_baseline
+				 VOC CKD ACS Pneumonia Stroke;
+baseline out=temp1 survival=survival;
+SYMBOL l=1 i=join v=dot;
+RUN;
+
+PROC LIFETEST DATA=analytical_cohort;
+TIME lenfol_time*fstat(0); 
+RUN;
