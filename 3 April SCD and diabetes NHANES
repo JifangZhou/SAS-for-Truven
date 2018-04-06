@@ -1,0 +1,213 @@
+libname sasfile 'C:\Users\jzhou86\Documents\SCD Project\SCD and chronic disease\NHANES\SAS file';
+libname xptfile xport 'C:\Users\jzhou86\Documents\SCD Project\SCD and chronic disease\NHANES\DIQ_F.xpt' access=readonly;
+proc copy inlib=xptfile outlib=sasfile;
+run;
+libname xptfile xport 'C:\Users\jzhou86\Documents\SCD Project\SCD and chronic disease\NHANES\DEMO_F.xpt' access=readonly;
+proc copy inlib=xptfile outlib=sasfile;
+run;
+libname xptfile xport 'C:\Users\jzhou86\Documents\SCD Project\SCD and chronic disease\NHANES\Glu_F.xpt' access=readonly;
+proc copy inlib=xptfile outlib=sasfile;
+run;
+libname xptfile xport 'C:\Users\jzhou86\Documents\SCD Project\SCD and chronic disease\NHANES\TCHOL_F.xpt' access=readonly;
+proc copy inlib=xptfile outlib=sasfile;
+run;
+libname xptfile xport 'C:\Users\jzhou86\Documents\SCD Project\SCD and chronic disease\NHANES\TRIGLY_F.xpt' access=readonly;
+proc copy inlib=xptfile outlib=sasfile;
+run;
+libname xptfile xport 'C:\Users\jzhou86\Documents\SCD Project\SCD and chronic disease\NHANES\BPX_F.xpt' access=readonly;
+proc copy inlib=xptfile outlib=sasfile;
+run;
+libname xptfile xport 'C:\Users\jzhou86\Documents\SCD Project\SCD and chronic disease\NHANES\BPQ_F.xpt' access=readonly;
+proc copy inlib=xptfile outlib=sasfile;
+run;
+
+DATA demo_f;
+	SET sasfile.demo_f;
+	IF RIDRETH1=4;
+DATA diq_f;
+	SET sasfile.diq_f;
+DATA glu_f;
+	SET sasfile.glu_f;
+DATA tchol_f;
+	SET sasfile.tchol_f;
+DATA trigly_f;
+	SET sasfile.trigly_f;
+DATA bpx_f;
+	SET sasfile.bpx_f;
+DATA bpq_f;
+	SET sasfile.bpq_f;
+RUN;
+*Add self-reported diabtes and glucose level;
+PROC SQL;
+CREATE TABLE demo_f_DIQ as
+	SELECT a.*,
+			b.DIQ010
+	FROM demo_f a
+	LEFT JOIN diq_f b
+	ON a.SEQN=b.SEQN;
+QUIT;
+PROC SQL;
+CREATE TABLE demo_f_DIQ_Glu as
+	SELECT a.*,
+			b.LBXGLU,
+			b.LBDGLUSI
+	FROM demo_f_DIQ a
+	LEFT JOIN glu_f b
+	ON a.SEQN=b.SEQN;
+QUIT;
+*Add self-reported hypertension and blood pressure level;
+PROC SQL;
+CREATE TABLE demo_f_DIQ_HBP as
+	SELECT a.*,
+			b.BPQ020,
+			b.BPQ050A
+	FROM demo_f_DIQ_Glu a
+	LEFT JOIN bpq_f b
+	ON a.SEQN=b.SEQN;
+QUIT;
+PROC SQL;
+CREATE TABLE demo_f_DIQ_HBP_final as
+	SELECT a.*,
+			b.BPXSY1,
+			b.BPXSY2,
+			b.BPXSY3,
+			b.BPXDI1,
+			b.BPXDI2,
+			b.BPXDI3
+	FROM demo_f_DIQ_HBP a
+	LEFT JOIN bpx_f b
+	ON a.SEQN=b.SEQN;
+QUIT;
+*Add self-reported dyslipidemia and LDL and TC level;
+PROC SQL;
+CREATE TABLE demo_f_DIQ_LIPID as
+	SELECT a.*,
+			b.BPQ080,
+			b.BPQ100D,
+			b.BPQ090D
+	FROM demo_f_DIQ_HBP_final a
+	LEFT JOIN bpq_f b
+	ON a.SEQN=b.SEQN;
+QUIT;
+PROC SQL;
+CREATE TABLE demo_f_DIQ_Lipid_trigly as
+	SELECT a.*,
+			b.LBDLDL,
+			b.LBXTR
+	FROM demo_f_DIQ_LIPID a
+	LEFT JOIN TRIGLY_f b
+	ON a.SEQN=b.SEQN;
+QUIT;
+PROC SQL;
+CREATE TABLE demo_f_DIQ_Lipid_final as
+	SELECT a.*,
+			b.LBXTC
+	FROM demo_f_DIQ_Lipid_trigly a
+	LEFT JOIN tchol_f b
+	ON a.SEQN=b.SEQN;
+QUIT;
+
+
+DATA sasfile.all_f_final;
+	SET demo_f_DIQ_Lipid_final;
+	dm_case=0;
+	IF DIQ010=1 OR LBXGLU>=126 OR LBDGLUSI>=7 THEN dm_case=1;
+	hbp_case=0;
+	IF BPQ050A=1 OR mean(BPXSY1,BPXSY2,BPXSY3)>=140 OR mean(BPXDI1,BPXDI2,BPXDI3)>=90 THEN hbp_case=1;
+	lipid_case=0;
+	IF BPQ100D=1 OR (LBXTC>=200 AND LBXTC^=.) OR (LBDLDL>=100 AND LBDLDL^=.) OR (LBXTR>=150 AND LBXTR^=.) THEN lipid_case=1;
+	dm_hbp_case=0;
+	IF dm_case=1 AND hbp_case=1 THEN dm_hbp_case=1;
+	dm_lipid_case=0;
+	IF dm_case=1 AND lipid_case=1 THEN dm_lipid_case=1;
+	dm_hbp_or_lipid_case=0;
+	IF dm_case=1 AND (hbp_case=1 OR lipid_case=1) THEN dm_hbp_or_lipid_case=1;
+	dm_hbp_and_lipid_case=0;
+	IF dm_case=1 AND (hbp_case=1 AND lipid_case=1) THEN dm_hbp_and_lipid_case=1;
+	age=RIDAGEYR;
+		IF 	 age<=24 THEN age_cat=1;
+	ELSE IF age<=29 THEN age_cat=2;
+	ELSE IF age<=34 THEN age_cat=3;
+	ELSE IF age<=39 THEN age_cat=4;
+	ELSE IF age<=44 THEN age_cat=5;
+	ELSE IF age<=49 THEN age_cat=6;
+	ELSE IF age<=54 THEN age_cat=7;
+	ELSE IF age<=59 THEN age_cat=8;
+	ELSE IF age<=64 THEN age_cat=9;
+	ELSE IF age<=69 THEN age_cat=10;
+	ELSE IF age<=74 THEN age_cat=11;
+	ELSE IF age<=79 THEN age_cat=12;
+	ELSE IF age<=84 THEN age_cat=13;
+	ELSE IF age>=85 THEN age_cat=14;
+	IF age<20 THEN DELETE;
+RUN;
+
+PROC FREQ DATA=sasfile.all_f_final;
+	TABLE dm_case dm_lipid_case dm_hbp_case dm_hbp_and_lipid_case dm_hbp_or_lipid_case hbp_case lipid_case;
+RUN;
+
+
+*start matching process;
+PROC SQL;
+CREATE table controls_id
+ as select
+ a.enrolid as study_id,
+ b.SEQN as control_id,
+ a.age as study_age,
+ b.RIDAGEYR as control_age,
+ a.rand_num as rand_num,
+ a.SCD_case
+ from Analytical_file_2009 a, sasfile.all_f_final b
+ where (a.age_cat=b.age_cat and
+ a.sex=b.RIAGENDR); 
+QUIT;
+
+proc sort data=controls_id nodupkey;
+ by control_id rand_num;
+ run;
+
+proc sort data=controls_id ;
+ by study_id;
+ run;
+data controls_id2 not_enough;
+set controls_id;
+ by study_id ;
+ retain num;
+ if first.study_id then num=1;
+ if num le 5 then do;
+ output controls_id2;
+ num=num+1;
+ end;
+ if last.study_id then do;
+ if num le 5 then output not_enough;
+ end;
+ run;
+
+* Now merge back the dm2 status of the controls back to the file;
+PROC SQL;
+CREATE TABLE myfile.controls_id_2009_all as
+	SELECT a.*,
+			b.dm_case as dm_case,
+			b.hbp_case as hbp_case,
+			b.lipid_case as lipid_case,
+			b.dm_hbp_case as dm_hbp_case,
+			b.dm_lipid_case as dm_lipid_case,
+			b.dm_hbp_or_lipid_case as dm_hbp_or_lipid_case,
+			b.dm_hbp_and_lipid_case as dm_hbp_and_lipid_case
+	FROM controls_id2 a
+	LEFT JOIN sasfile.all_f_final b
+	ON a.control_id=b.SEQN;
+QUIT;
+
+PROC FREQ DATA=myfile.controls_id_2009_all;
+	TABLE dm_case dm_lipid_case dm_hbp_case dm_hbp_and_lipid_case dm_hbp_or_lipid_case hbp_case lipid_case;
+RUN;
+
+PROC FREQ DATA=controls_id2_Glu;
+	TABLE scd_case*control_case/chisq;
+RUN;
+
+proc freq data=analytical_file_2014;
+tables scd_case/ nocum norow binomial;
+exact binomial;
+run; 
