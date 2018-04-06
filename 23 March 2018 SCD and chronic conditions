@@ -1,0 +1,84 @@
+DATA analytical_file;
+	SET myfile.scd_chronic_23_mar;
+	IF Eligible_2014=1;
+RUN;
+
+PROC FREQ DATA=analytical_file;
+TABLE incident_dm2_2014/chisq nocol norow nopercent;
+RUN;
+
+*Assessment of concomittant hypersion and lipid disorders;
+%macro pso (time);
+DATA analytical_file;
+	SET myfile.id_list19;
+	IF Eligible_20&time.=1;
+	case=0;
+	IF prevalent_dm2_20&time. =1 AND both_20&time. =1 THEN case=1;
+RUN;
+PROC FREQ DATA=analytical_file;
+TABLE case/chisq nocol norow nopercent;
+RUN;
+%MEND;
+
+%pso(09);
+%pso(10);
+%pso(11);
+%pso(12);
+%pso(13);
+%pso(14);
+both_20&time.=1 AND ;
+
+
+DATA analytical_file;
+	SET myfile.id_list19;
+	IF Eligible_2009=1;
+	case=0;
+	IF prevalent_dm2_2009 =1 THEN case=1;
+	IF case=1;
+RUN;
+PROC FREQ DATA=analytical_file;
+TABLE age_cat*sex/chisq nocol norow nopercent;
+RUN;
+
+
+DATA id_list;
+	SET myfile.analytical_23_mar_final;
+	pre_exist_DM=0;
+	IF baseline_dm2_rx ^=. OR baseline_dm2_dx ^=. THEN pre_exist_DM=1;
+	fstat=0;
+	IF (pre_exist_DM=0 AND prevalent_DM=1) THEN time_dm2=follow_dm2_date-DTSTART-180;
+	time=min(DTEND-DTSTART-180, time_dm2);
+	IF time=time_dm2 THEN fstat=1;
+	lenfol_time=time/365.25;
+	age=YEAR(DTSTART)-DOBYR;
+	IF pre_exist_DM=0;
+	IF age<=4 	THEN age_cat=1;
+	ELSE IF age<=9 	THEN age_cat=2;
+	ELSE IF age<=14 	THEN age_cat=3;
+	ELSE IF age<=19 	THEN age_cat=4;
+	ELSE IF age<=24 	THEN age_cat=5;
+	ELSE IF age<=29 	THEN age_cat=6;
+	ELSE IF age<=34 	THEN age_cat=7;
+	ELSE IF age<=39 	THEN age_cat=8;
+	ELSE IF age<=44 	THEN age_cat=9;
+	ELSE IF age<=49 	THEN age_cat=10;
+	ELSE IF age<=54 	THEN age_cat=11;
+	ELSE IF age<=59 	THEN age_cat=12;
+	ELSE IF age<=64 	THEN age_cat=13;
+	ELSE IF age<=69 	THEN age_cat=14;
+	ELSE IF age<=74 	THEN age_cat=15;
+	ELSE IF age<=79 	THEN age_cat=16;
+	ELSE IF age<=84 	THEN age_cat=17;
+	ELSE IF age>=85 	THEN age_cat=18;
+RUN;
+
+PROC FREQ DATA=id_list;
+	TABLE fstat*prevalent_DM/nopercent nocol norow chisq;
+RUN;
+
+PROC PHREG DATA=id_list; 
+class sex CCI_cat (ref="0") ;
+model lenfol_time*fstat(0)=age sex CCI_cat baseline_hypertension baseline_lipid baseline_cancer VOC Avascular_necrosis Pulmonary_hypertension CKD ACS Pneumonia Stroke baseline_mets mets_obesity;
+baseline out=temp1 survival=survival;
+SYMBOL l=1 i=join v=dot;
+RUN;
