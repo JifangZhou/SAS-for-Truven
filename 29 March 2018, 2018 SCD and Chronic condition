@@ -1,0 +1,142 @@
+LIBNAME myfile "C:\Users\jzhou86\Documents\SCD Project\Raw Data";
+
+*Cut thecohorts into year by year cohorts and calculate the time trends;
+%macro pso (time);
+DATA analytical_file_20&time.;
+	SET myfile.id_list19;
+	KEEP enrolid index_year scd_case DOBYR SEX new age age_cat rand_num;
+	IF Eligible_20&time.=1;
+	scd_case=0;
+	IF prevalent_dm2_20&time. =1  THEN scd_case=1;
+	index_year=20&time.;
+	age=index_year-DOBYR;
+	IF 	 age<=24 THEN age_cat=1;
+	ELSE IF age<=29 THEN age_cat=2;
+	ELSE IF age<=34 THEN age_cat=3;
+	ELSE IF age<=39 THEN age_cat=4;
+	ELSE IF age<=44 THEN age_cat=5;
+	ELSE IF age<=49 THEN age_cat=6;
+	ELSE IF age<=54 THEN age_cat=7;
+	ELSE IF age<=59 THEN age_cat=8;
+	ELSE IF age<=64 THEN age_cat=9;
+	ELSE IF age<=69 THEN age_cat=10;
+	ELSE IF age<=74 THEN age_cat=11;
+	ELSE IF age<=79 THEN age_cat=12;
+	ELSE IF age<=84 THEN age_cat=13;
+	ELSE IF age>=85 THEN age_cat=14;
+	rand_num=uniform(0);
+   new = input(sex, 1.);
+   drop sex;
+   rename new=sex;
+RUN;
+%MEND;
+
+%pso(09);
+%pso(10);
+%pso(11);
+%pso(12);
+%pso(13);
+%pso(14);
+AND (lipid_20&time. =1 OR hpn_20&time. =1)
+**Cut the cohorts into year by year cohorts and calculate the time trends for incidence;
+%macro pso (time);
+DATA analytical_file_20&time.;
+	SET myfile.id_list19;
+	KEEP enrolid index_year case DOBYR SEX age DTSTART fol_time DM_date_final;
+	IF Eligible_20&time.=1;
+	case=0;
+	IF incident_dm2_20&time. =1 THEN case=1;
+	index_year=20&time.;
+	age=20&time.-DOBYR;
+	IF pre_exist_DM =1 THEN DELETE;
+RUN;
+
+%MEND;
+
+%pso(09);
+%pso(10);
+%pso(11);
+%pso(12);
+%pso(13);
+%pso(14);
+ 
+DATA temp;
+SET analytical_file_2009 analytical_file_2010 analytical_file_2011 analytical_file_2012 analytical_file_2013 analytical_file_2014;
+IF index_year=2009 THEN year=1;
+IF index_year=2010 THEN year=2;
+IF index_year=2011 THEN year=3;
+IF index_year=2012 THEN year=4;
+IF index_year=2013 THEN year=5;
+IF index_year=2014 THEN year=6;
+IF age<=44 THEN age_cat=1;
+ELSE IF age<=64 THEN age_cat=2;
+ELSE IF age>=65 THEN age_cat=3;
+IF sex=1 AND age<=24 THEN wei=0.048326179;
+ELSE IF sex=1 AND age<=29 THEN wei=0.049429847;
+ELSE IF sex=1 AND age<=34 THEN wei=0.044151239;
+ELSE IF sex=1 AND age<=39 THEN wei=0.044789014;
+ELSE IF sex=1 AND age<=44 THEN wei=0.046010286;
+ELSE IF sex=1 AND age<=49 THEN wei=0.050171657;
+ELSE IF sex=1 AND age<=54 THEN wei=0.048362365;
+ELSE IF sex=1 AND age<=59 THEN wei=0.042147448;
+ELSE IF sex=1 AND age<=64 THEN wei=0.034679597;
+ELSE IF sex=1 AND age<=69 THEN wei=0.025655755;
+ELSE IF sex=1 AND age<=74 THEN wei=0.01837788;
+ELSE IF sex=1 AND age<=79 THEN wei=0.013660152;
+ELSE IF sex=1 AND age<=84 THEN wei=0.010891936;
+ELSE IF sex=1 AND age>=85 THEN wei=0.007377387;
+
+IF sex=2 AND age<=24 THEN wei=0.047358208;
+ELSE IF sex=2 AND age<=29 THEN wei=0.047606986;
+ELSE IF sex=2 AND age<=34 THEN wei=0.044648794;
+ELSE IF sex=2 AND age<=39 THEN wei=0.045168965;
+ELSE IF sex=2 AND age<=44 THEN wei=0.04698278;
+ELSE IF sex=2 AND age<=49 THEN wei=0.051723124;
+ELSE IF sex=2 AND age<=54 THEN wei=0.050519945;
+ELSE IF sex=2 AND age<=59 THEN wei=0.044571899;
+ELSE IF sex=2 AND age<=64 THEN wei=0.038700748;
+ELSE IF sex=2 AND age<=69 THEN wei=0.028717981;
+ELSE IF sex=2 AND age<=74 THEN wei=0.022041695;
+ELSE IF sex=2 AND age<=79 THEN wei=0.018821156;
+ELSE IF sex=2 AND age<=84 THEN wei=0.015265898;
+ELSE IF sex=2 AND age>=85 THEN wei=0.013850127;
+RUN;
+	
+   proc genmod data=temp;
+   	class sex enrolid age_cat/param=glm;
+    model case = year sex age_cat/ dist   = poisson;
+	repeated subject=enrolid; 
+weight wei;
+   run;
+AND lipid_20&time. =1 
+OR lipid_20&time. =1)
+AND both_20&time. =1
+AND hpn_20&time. =1
+age sex
+AND (lipid_20&time. =1 OR lipid_20&time. =1) 
+	weight wei;
+DATA cohort_cif;
+SET analytical_cohort;
+IF age<=44 THEN age_cat=1;
+ELSE IF age<=64 THEN age_cat=2;
+ELSE IF age>=65 THEN age_cat=3;
+RUN;
+
+
+%CIF(DATA=cohort_cif,TIME=lenfol_time,STATUS=fstat,EVENT=1,CENSORED=0,GROUP=age_cat,OPTIONS=NOTEST);
+
+ods graphics on;
+proc phreg data=cohort_cif  plots(overlay=stratum)=cif;
+class age_cat;
+model lenfol_time*fstat(0)=age_cat /eventcode=1;
+run;
+ods graphics off;
+
+LIBNAME myfile "C:\Users\jzhou86\Documents\SCD Project\SCD and DVT\SCD DVT working directory";
+DATA id_list;
+	SET myfile.id_list_17_feb;
+RUN;
+
+PROC MEANS DATA=id_list MEDIAN P25 P75;
+VAR lenfol;
+RUN;
