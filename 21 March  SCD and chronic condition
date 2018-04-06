@@ -1,0 +1,733 @@
+*Assessment of year enrollment;
+DATA list_2014;
+SET all_record;
+IF year(SVCDATE)=2014 OR year(DISDATE)=2014;
+RUN;
+
+*Assessment of DM2+lipid and hpn diagnosis;
+DATA HPN_list;
+set list_2014;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('401','402','403','404','405') then case = 1;
+end;
+if case = 1;
+run; 
+DATA lipid_list;
+set list_2014;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2720','2721','2722','2723','2724') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE HPN_list as
+SELECT min(enrolid) as enrolid,
+	1 as HPN_2014
+FROM HPN_list
+GROUP BY enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE lipid_list as
+SELECT min(enrolid) as enrolid,
+	1 as lipid_2014
+FROM lipid_list
+GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table id_list16 as
+	SELECT a.*,
+		b.*
+	FROM id_list15 a
+	LEFT JOIN HPN_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list17 as
+	SELECT a.*,
+		b.*
+	FROM id_list16 a
+	LEFT JOIN lipid_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*extraction of baseline covariates;
+*Add the enrollment start dates to the records;
+PROC sql;
+	CREATE table all_record_baseline as
+	SELECT a.*,
+		b.DTSTART as start_enroll_date
+	FROM all_record a
+	LEFT JOIN myfile.SCD_chronic_20_mar b
+	ON a.enrolid = b.enrolid;
+QUIT;
+* extraction of baseline variables;
+DATA all_record_base;
+set all_record_baseline;
+if (svcdate>=start_enroll_date AND svcdate<start_enroll_date+180) OR (disdate>=start_enroll_date AND disdate<start_enroll_date+180);
+RUN;
+*Assessment of baseline conditions;
+*Iron_overload;
+DATA temp;
+	SET all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2750') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Iron_overload
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file1 as
+	SELECT a.*,
+			b.Iron_overload
+	FROM myfile.SCD_chronic_20_mar_1 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*Veno-occlusive crisis;
+DATA temp;
+	SET all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('28242', '28262', '28264', '28269') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as VOC
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file2 as
+	SELECT a.*,
+			b.*
+	FROM id_file1 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*Avascular necrosis;
+DATA temp;
+	SET all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('73340','73341','73342','73343','73344', '73349') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Avascular_necrosis
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file3 as
+	SELECT a.*,
+			b.*
+	FROM id_file2 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*Osteomyelitis;
+DATA temp;
+	SET all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('7300', '7301', '7302') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Osteomyelitis
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file4 as
+	SELECT a.*,
+			b.*
+	FROM id_file3 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*Dactylitis;
+DATA temp;
+	SET all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('7301', '0955', '0155') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Dactylitis
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file5 as
+	SELECT a.*,
+			b.*
+	FROM id_file4 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*Leg ulcers;
+DATA temp;
+	SET all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('70710') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Leg_ulcers
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file6 as
+	SELECT a.*,
+			b.*
+	FROM id_file5 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*Hypersplenism;
+DATA temp;
+	SET all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2894') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Hypersplenism
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file7 as
+	SELECT a.*,
+			b.*
+	FROM id_file6 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*Splenic sequestration;
+DATA temp;
+	SET all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('28952') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Splenic_sequestration
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file8 as
+	SELECT a.*,
+			b.*
+	FROM id_file7 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*Splenomegaly;
+DATA temp;
+	SET all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('7590', '7892') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Splenomegaly
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file9 as
+	SELECT a.*,
+			b.*
+	FROM id_file8 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*Retinal disease;
+DATA temp;
+	SET all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('3629') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Retinal_disease
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file10 as
+	SELECT a.*,
+			b.*
+	FROM id_file9 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*Gallstones;
+DATA temp;
+	SET all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('574', '57510') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Gallstones
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file11 as
+	SELECT a.*,
+			b.*
+	FROM id_file10 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*Stroke;
+DATA temp;
+	SET all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('430', '431', '432', '43301', '43311', '43321', '43331', '43341', '43351', '43361', '43371', '43381', '43391', '434', '436') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Stroke
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file12 as
+	SELECT a.*,
+			b.*
+	FROM id_file11 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*Pneumonia;
+DATA temp;
+	SET all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('480','481','482','483','484','485','486','487','488') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Pneumonia
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file13 as
+	SELECT a.*,
+			b.*
+	FROM id_file12 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*Acute chest syndrome;
+DATA temp;
+	SET all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('5173') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as ACS
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file14 as
+	SELECT a.*,
+			b.*
+	FROM id_file13 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*Chronic renal disease;
+DATA temp;
+	SET all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('5851','5852','5853','7910') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as CKD
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file15 as
+	SELECT a.*,
+			b.*
+	FROM id_file14 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*Pulmonary hypertension;
+DATA temp;
+	SET all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('4150', '4160', '4168') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Pulmonary_hypertension
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file16 as
+	SELECT a.*,
+			b.*
+	FROM id_file15 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*baseline_hypertension;
+DATA temp;
+	SET all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('401','402','403','404','405') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as baseline_hypertension
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file17 as
+	SELECT a.*,
+			b.*
+	FROM id_file16 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*baseline_lipid;
+DATA temp;
+	SET all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2720','2721','2722','2723','2724') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as baseline_lipid
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file18 as
+	SELECT a.*,
+			b.*
+	FROM id_file17 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*baseline_CPOD;
+DATA temp;
+	SET all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('490','491','492','493','494','495','496',
+						'500','501','502','503','504','505',
+						'4168','4169','5064','5191') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as baseline_COPD
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file19 as
+	SELECT a.*,
+			b.*
+	FROM id_file18 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*baseline_CHF;
+DATA temp;
+	SET all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('39891','4254','4255','4257','4258','4259','428') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as baseline_CHF
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file20 as
+	SELECT a.*,
+			b.*
+	FROM id_file19 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*baseline_cancer;
+DATA temp;
+	SET all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('14', '15', '16', '17', '18', '19', '200', '201' ,'202', '203', 
+						'204','205','206','207','208') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as baseline_cancer
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file21 as
+	SELECT a.*,
+			b.*
+	FROM id_file20 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*Add CCI score;
+PROC SQL;
+CREATE TABLE id_file22 as
+SELECT a.*,
+	b.CCI as CCI
+FROM id_file21 a
+LEFT JOIN Xx b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA myfile.scd_chronic_20_mar_2;
+	SET id_file22;
+	IF CCI=. THEN CCI=0;
+	IF CCI=0 THEN CCI_cat=0;
+	ELSE IF CCI<=1 THEN CCI_cat=1;
+	ELSE IF CCI>=2 THEN CCI_cat=2;
+	IF Iron_overload=. THEN  Iron_overload=0;
+	IF VOC=. THEN  VOC=0;
+	IF Avascular_necrosis=. THEN  Avascular_necrosis=0;
+	IF Osteomyelitis=. THEN  Osteomyelitis=0;
+	IF Dactylitis=. THEN  Dactylitis=0;
+	IF Leg_ulcers=. THEN  Leg_ulcers=0;
+	IF Hypersplenism=. THEN  Hypersplenism=0;
+	IF Splenic_sequestration=. THEN  Splenic_sequestration=0;
+	IF Splenomegaly=. THEN  Splenomegaly=0;
+	IF Retinal_disease=. THEN  Retinal_disease=0;
+	IF Gallstones=. THEN  Gallstones=0;
+	IF Stroke=. THEN  Stroke=0;
+	IF Pneumonia=. THEN  Pneumonia=0;
+	IF ACS=. THEN  ACS=0;
+	IF CKD=. THEN  CKD=0;
+	IF Pulmonary_hypertension=. THEN  Pulmonary_hypertension=0;
+	IF baseline_hypertension=. THEN  baseline_hypertension=0;
+	IF baseline_lipid=. THEN  baseline_lipid=0;
+	IF baseline_COPD=. THEN  baseline_COPD=0;
+	IF baseline_CHF=. THEN  baseline_CHF=0;
+	IF baseline_cancer=. THEN  baseline_cancer=0;
+RUN;
+
+DATA scd_chronic_21_mar;
+	SET myfile.scd_chronic_20_mar_2;
+	fstat=0;
+	IF max(incident_dm2_2009,incident_dm2_2010,incident_dm2_2011,incident_dm2_2012,incident_dm2_2013,incident_dm2_2014)=1 THEN time_dm2=index_dm2-DTSTART-180;
+	time=min(DTEND-DTSTART-180, time_dm2);
+	IF time=time_dm2 THEN fstat=1;
+	IF time<180 THEN DELETE;
+	lenfol_time=time/365.25;
+	age=YEAR(DTSTART)-DOBYR;
+	prevalent_DM=0;
+	IF max(prevalent_dm2_2009,prevalent_dm2_2010,prevalent_dm2_2011,prevalent_dm2_2012,prevalent_dm2_2013,prevalent_dm2_2014)=1 THEN prevalent_DM=1;
+	IF age<=4 	THEN age_cat=1;
+	ELSE IF age<=9 	THEN age_cat=2;
+	ELSE IF age<=14 	THEN age_cat=3;
+	ELSE IF age<=19 	THEN age_cat=4;
+	ELSE IF age<=24 	THEN age_cat=5;
+	ELSE IF age<=29 	THEN age_cat=6;
+	ELSE IF age<=34 	THEN age_cat=7;
+	ELSE IF age<=39 	THEN age_cat=8;
+	ELSE IF age<=44 	THEN age_cat=9;
+	ELSE IF age<=49 	THEN age_cat=10;
+	ELSE IF age<=54 	THEN age_cat=11;
+	ELSE IF age<=59 	THEN age_cat=12;
+	ELSE IF age<=64 	THEN age_cat=13;
+	ELSE IF age<=69 	THEN age_cat=14;
+	ELSE IF age<=74 	THEN age_cat=15;
+	ELSE IF age<=79 	THEN age_cat=16;
+	ELSE IF age<=84 	THEN age_cat=17;
+	ELSE IF age>=85 	THEN age_cat=18;
+
+RUN;
+PROC FREQ DATA=scd_chronic_21_mar;
+TABLE age_cat*sex/chisq nocol norow nopercent;
+RUN;
+	
+PROC FREQ DATA=scd_chronic_21_mar;
+	TABLE Osteomyelitis*prevalent_DM/nopercent nocol norow chisq;
+RUN;
+PROC MEANS DATA=scd_chronic_21_mar MEAN MEDIAN;
+	CLASS prevalent_DM;
+	VAR age;
+RUN;
+PROC TTESTQ DATA=scd_chronic_21_mar;
+	CLASS prevalent_DM;
+	VAR age;
+RUN;
+
+ods graphics on;
+proc lifetest data=scd_chronic_21_mar method=km notable plots=(survival(atrisk) logsurv lls) outsurv=out1 ;
+time lenfol_time*fstat(0);
+strata baseline_lipid;
+run;
+
+PROC PHREG DATA=scd_chronic_21_mar; 
+class sex CCI_cat (ref="0");
+model lenfol_time*fstat(0)=age sex CCI_cat baseline_hypertension baseline_lipid baseline_cancer VOC Avascular_necrosis Pulmonary_hypertension CKD ACS Pneumonia Stroke;
+baseline out=temp1 survival=survival;
+SYMBOL l=1 i=join v=dot;
+PROC GPLOT DATA=temp1; PLOT survival*lenfol_time=age sex CCI_cat baseline_hypertension baseline_lipid baseline_cancer VOC Avascular_necrosis Pulmonary_hypertension CKD ACS Pneumonia Stroke; 
+RUN;
+
+ods graphics on;
+proc phreg data=scd_chronic_21_mar  plots(overlay=stratum)=cif;
+class Sex;
+model lenfol_time*fstat(0)=sex age/eventcode=1;
+run;
+ods graphics off;
+
+PROC SQL;
+	CREATE table temp as
+	SELECT count(enrolid) as number,
+			sum(lenfol_time) as number2
+	FROM scd_chronic_21_mar
+	GROUP BY age_cat;
+QUIT;
+
+proc transpose data=temp
+               out=temp_transposed;
+run;
+
+proc print data=temp_transposed noobs;
+   title 'The Output Data Set';
+run;
