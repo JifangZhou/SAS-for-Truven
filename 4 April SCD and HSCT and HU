@@ -1,0 +1,78 @@
+data  id_list1;
+set myfile.hu_hsct_id_list_2april;
+run; 
+
+DATA all_record;
+	SET outpt_svc
+		inpt_sum
+		inpt_svc;
+RUN;
+
+PROC sql;
+	CREATE table all_record_baseline as
+	SELECT a.*,
+		b.index_date as index_date
+	FROM all_record a
+	INNER JOIN id_list1 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+* extraction of baseline variables;
+DATA all_record_base;
+set all_record_baseline;
+if (svcdate>=index_date-180 AND svcdate<index_date) OR (disdate>=index_date-180 AND disdate<index_date);
+RUN;
+
+DATA all_record_follow;
+set all_record_baseline;
+if (svcdate>=index_date) OR (disdate>=index_date);
+RUN;
+
+*Assessment of diabetes time and prescriptions;
+DATA dm2_list_baseline;
+set all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: (	'250') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE dm2_list as
+SELECT min(enrolid) as enrolid,
+	1 as dm_baseline
+FROM dm2_list_baseline
+GROUP BY enrolid;
+QUIT;
+
+DATA HPN_list;
+set all_record_baseline;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('401','402','403','404','405') then case = 1;
+end;
+if case = 1;
+run; 
+DATA lipid_list;
+set all_record_baseline;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2720','2721','2722','2723','2724') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE HPN_list as
+SELECT min(enrolid) as enrolid,
+	1 as HPN_baseline
+FROM HPN_list
+GROUP BY enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE lipid_list as
+SELECT min(enrolid) as enrolid,
+	1 as lipid_baseline
+FROM lipid_list
+GROUP BY enrolid;
+QUIT;
