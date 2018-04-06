@@ -1,0 +1,538 @@
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\Raw Data';
+
+
+DATA inpt_sum;
+SET Myfile.scd_ccaei_09 Myfile.scd_ccaei_10 Myfile.scd_ccaei_11 Myfile.scd_ccaei_12 Myfile.scd_ccaei_13
+	Myfile.scd_mdcri_09 Myfile.scd_mdcri_10 Myfile.scd_mdcri_11 Myfile.scd_mdcri_12 Myfile.scd_mdcri_13
+	Myfile.scd_ccaei_142  
+	Myfile.scd_mdcri_142;
+DATA outpt_svc;
+SET	Myfile.scd_ccaeo_09 Myfile.scd_ccaeo_10 Myfile.scd_ccaeo_11 Myfile.scd_ccaeo_12 Myfile.scd_ccaeo_13
+	Myfile.scd_mdcro_09 Myfile.scd_mdcro_10 Myfile.scd_mdcro_11 Myfile.scd_mdcro_12 Myfile.scd_mdcro_13
+	Myfile.scd_ccaeo_142 
+	Myfile.scd_mdcro_142;
+DATA drug_pres;
+SET	Myfile.scd_ccaed_09 Myfile.scd_ccaed_10 Myfile.scd_ccaed_11 Myfile.scd_ccaed_12 Myfile.scd_ccaed_13
+	Myfile.scd_mdcrd_09 Myfile.scd_mdcrd_10 Myfile.scd_mdcrd_11 Myfile.scd_mdcrd_12 Myfile.scd_mdcrd_13
+	Myfile.scd_ccaed_142  
+	Myfile.scd_mdcrd_142;
+DATA inpt_svc;
+SET	Myfile.scd_ccaes_09 Myfile.scd_ccaes_10 Myfile.scd_ccaes_11 Myfile.scd_ccaes_12 Myfile.scd_ccaes_13
+	Myfile.scd_mdcrs_09 Myfile.scd_mdcrs_10 Myfile.scd_mdcrs_11 Myfile.scd_mdcrs_12 Myfile.scd_mdcrs_13
+	Myfile.scd_ccaes_142 
+	Myfile.scd_mdcrs_142;
+DATA Myfileance_all;
+SET	Myfile.scd_ccaet_09 Myfile.scd_ccaet_10 Myfile.scd_ccaet_11 Myfile.scd_ccaet_12 Myfile.scd_ccaet_13
+	Myfile.scd_mdcrt_09 Myfile.scd_mdcrt_10 Myfile.scd_mdcrt_11 Myfile.scd_mdcrt_12 Myfile.scd_mdcrt_13
+	Myfile.scd_ccaet_142 
+	Myfile.scd_mdcrt_142;
+RUN;
+
+DATA all_record;
+	SET outpt_svc
+		inpt_sum
+		inpt_svc;
+RUN;
+
+data  id_list1;
+set all_record;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('28241','28242','28261','28262','28263','28264','28268','28269') then scd = 1;
+end;
+if scd = 1;
+run; 
+
+PROC SQL;
+	CREATE TABLE id_list1 as
+	SELECT min(enrolid) as enrolid,
+		count(scd) as dx_num,
+		min(SVCDATE) as index_date1,
+		min(ADMDATE) as index_date2,
+		max(SVCDATE) as index_date3,
+		max(ADMDATE) as index_date4,
+		min(DOBYR) as DOBYR
+	FROM id_list1
+	GROUP BY enrolid;
+QUIT;
+
+DATA id_list1;
+	SET id_list1;
+	index_date=min(index_date1,index_date2);
+	last_date=max(index_date3,index_date4);
+	IF last_date-index_date>=30;
+RUN;
+LIBNAME Redbook 'C:\Users\jzhou86\Documents\SCD Project';
+DATA redbook;
+	SET Redbook.redbook;
+RUN;
+
+DATA Myfile.redbook_insulin_list;
+	SET redbook;
+	IF THERCLS=172 or THERCLS=173 or THERCLS=174;
+	IF ROADS="Injection" or ROADS="Subcutaneous";
+RUN;
+
+DATA Myfile.redbook_oral_dm2_list;
+	SET redbook;
+	IF THERCLS=173 or THERCLS=174;
+	IF ROADS="Oral";
+RUN;
+
+DATA Myfile.redbook_oral_lipid_list;
+	SET redbook;
+	IF THERCLS=53;
+	IF ROADS="Oral";
+RUN;
+
+DATA Myfile.redbook_oral_hpn_list;
+	SET redbook;
+	IF THERCLS=120 OR 
+THERCLS=121 OR 
+THERCLS=122 OR 
+THERCLS=123 OR 
+THERCLS=124 OR 
+THERCLS=125 OR 
+THERCLS=52 OR 
+THERCLS=47 OR 
+THERCLS=50 OR 
+THERCLS=51 OR 
+THERCLS=54;
+	IF ROADS="Oral";
+RUN;
+*Add the time of enrollment history;
+PROC SQL;
+	CREATE TABLE id_insur as
+	SELECT min(enrolid) as enrolid,
+		min(DTSTART) as DTSTART,
+		max(DTEND) as DTEND,
+		max(REGION) as REGION,
+		max(SEX) as SEX,
+		min(Plantyp) as Plantyp
+	FROM Myfileance_all
+	GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table id_list2 as
+	SELECT a.*,
+		b.*
+	FROM id_list1 a
+	LEFT JOIN id_insur b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+
+*Selection of dm2 id list;
+DATA redbook_dm2_list;
+	SET Myfile.redbook_insulin_list Myfile.redbook_oral_dm2_list;
+RUN;
+PROC sql;
+	CREATE table dm2_pres as
+	SELECT a.*
+	FROM drug_pres a
+	INNER JOIN redbook_dm2_list b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table dm2_pres as
+	SELECT min(enrolid) as enrolid,
+		count(SVCDATE) as dm2_pres_count,
+		min(SVCDATE) as pres_dm2_date
+	FROM dm2_pres
+	GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table id_list3 as
+	SELECT a.*,
+		b.*
+	FROM id_list2 a
+	LEFT JOIN dm2_pres b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*Add the diagnosis codes to the id_list;
+DATA dm2_list;
+set all_record;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('250') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE dm2_list as
+SELECT min(enrolid) as enrolid,
+	1 as dm2,
+	min(SVCDATE) as index_dm2_1,
+	min(DISDATE) as index_dm2_2
+FROM dm2_list
+GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table id_list4 as
+	SELECT a.*,
+		b.*
+	FROM id_list3 a
+	LEFT JOIN dm2_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+* Assess each year's eligibility of the patients;
+DATA id_list5;
+	SET id_list4;
+	Eligible_2009=0;
+	Eligible_2010=0;
+	Eligible_2011=0;
+	Eligible_2012=0;
+	Eligible_2013=0;
+	Eligible_2014=0;
+	IF DTSTART<=17898 AND DTEND>=18262 THEN Eligible_2009=1;
+	IF DTSTART<=18263 AND DTEND>=18627 THEN Eligible_2010=1;
+	IF DTSTART<=18628 AND DTEND>=18992 THEN Eligible_2011=1;
+	IF DTSTART<=18993 AND DTEND>=19358 THEN Eligible_2012=1;
+	IF DTSTART<=19359 AND DTEND>=19723 THEN Eligible_2013=1;
+	IF DTSTART<=19724 AND DTEND>=20088 THEN Eligible_2014=1;
+	index_dm2=min(index_dm2_1, index_dm2_2);
+	IF pres_dm2_date>=index_dm2 AND pres_dm2_date ^=. THEN dm2_case=1;
+	incident_dm2_2009=0;
+	incident_dm2_2010=0;
+	incident_dm2_2011=0;
+	incident_dm2_2012=0;
+	incident_dm2_2013=0;
+	incident_dm2_2014=0;
+	IF year(index_dm2)=2009 THEN incident_dm2_2009=1;
+	IF year(index_dm2)=2010 THEN incident_dm2_2010=1;
+	IF year(index_dm2)=2011 THEN incident_dm2_2011=1;
+	IF year(index_dm2)=2012 THEN incident_dm2_2012=1;
+	IF year(index_dm2)=2013 THEN incident_dm2_2013=1;
+	IF year(index_dm2)=2014 THEN incident_dm2_2014=1;
+	prevalent_dm2_2009=0;
+	prevalent_dm2_2010=0;
+	prevalent_dm2_2011=0;
+	prevalent_dm2_2012=0;
+	prevalent_dm2_2013=0;
+	prevalent_dm2_2014=0;
+	IF incident_dm2_2009=1 THEN prevalent_dm2_2009=1;
+	IF max(incident_dm2_2009,incident_dm2_2010)=1 THEN prevalent_dm2_2010=1;
+	IF max(incident_dm2_2009,incident_dm2_2010,incident_dm2_2011)=1 THEN prevalent_dm2_2011=1;
+	IF max(incident_dm2_2009,incident_dm2_2010,incident_dm2_2011,incident_dm2_2012)=1 THEN prevalent_dm2_2012=1;
+	IF max(incident_dm2_2009,incident_dm2_2010,incident_dm2_2011,incident_dm2_2012,incident_dm2_2013)=1 THEN prevalent_dm2_2013=1;
+	IF max(incident_dm2_2009,incident_dm2_2010,incident_dm2_2011,incident_dm2_2012,incident_dm2_2013,incident_dm2_2014)=1 THEN prevalent_dm2_2014=1;
+	IF index_dm2-DTSTART<=180 THEN incident_dm2_2009=0;
+	IF index_dm2-DTSTART<=180 THEN incident_dm2_2010=0;
+	IF index_dm2-DTSTART<=180 THEN incident_dm2_2011=0;
+	IF index_dm2-DTSTART<=180 THEN incident_dm2_2012=0;
+	IF index_dm2-DTSTART<=180 THEN incident_dm2_2013=0;
+	IF index_dm2-DTSTART<=180 THEN incident_dm2_2014=0;
+	RUN;
+
+
+
+PROC FREQ DATA=id_list5;
+TABLE incident_dm2_2009 incident_dm2_2010 incident_dm2_2011 incident_dm2_2012 incident_dm2_2013 incident_dm2_2014/chisq nocol norow nopercent;
+RUN;
+
+PROC FREQ DATA=id_list5;
+TABLE prevalent_dm2_2009*Eligible_2009 
+prevalent_dm2_2010*Eligible_2010 
+prevalent_dm2_2011*Eligible_2011 
+prevalent_dm2_2012*Eligible_2012 
+prevalent_dm2_2013*Eligible_2013 
+prevalent_dm2_2014*Eligible_2014/chisq nocol norow nopercent;
+RUN;
+	IF prevalent_dm2_2014=1;
+DATA cohort_2010;
+	SET id_list5;
+	IF Eligible_2014 =1;
+
+	age_dx=2014-DOBYR;
+	IF age_dx<=4 	THEN age_cat=1;
+	ELSE IF age_dx<=9 	THEN age_cat=2;
+	ELSE IF age_dx<=14 	THEN age_cat=3;
+	ELSE IF age_dx<=19 	THEN age_cat=4;
+	ELSE IF age_dx<=24 	THEN age_cat=5;
+	ELSE IF age_dx<=29 	THEN age_cat=6;
+	ELSE IF age_dx<=34 	THEN age_cat=7;
+	ELSE IF age_dx<=39 	THEN age_cat=8;
+	ELSE IF age_dx<=44 	THEN age_cat=9;
+	ELSE IF age_dx<=49 	THEN age_cat=10;
+	ELSE IF age_dx<=54 	THEN age_cat=11;
+	ELSE IF age_dx<=59 	THEN age_cat=12;
+	ELSE IF age_dx<=64 	THEN age_cat=13;
+	ELSE IF age_dx<=69 	THEN age_cat=14;
+	ELSE IF age_dx<=74 	THEN age_cat=15;
+	ELSE IF age_dx<=79 	THEN age_cat=16;
+	ELSE IF age_dx<=84 	THEN age_cat=17;
+	ELSE IF age_dx>=85 	THEN age_cat=18;
+RUN;
+
+PROC FREQ DATA=cohort_2010;
+TABLE age_cat*sex/chisq nocol norow nopercent;
+RUN;
+
+
+
+DATA myfile.SCD_chronic_20_mar_1;
+	SET id_list17;
+	IF HPN_2014=. THEN HPN_2014=0;
+	IF HPN_2013=. THEN HPN_2013=0;
+	IF HPN_2012=. THEN HPN_2012=0;
+	IF HPN_2011=. THEN HPN_2011=0;
+	IF HPN_2010=. THEN HPN_2010=0;
+	IF HPN_2009=. THEN HPN_2009=0;
+	IF LIPID_2014=. THEN LIPID_2014=0;
+	IF LIPID_2013=. THEN LIPID_2013=0;
+	IF LIPID_2012=. THEN LIPID_2012=0;
+	IF LIPID_2011=. THEN LIPID_2011=0;
+	IF LIPID_2010=. THEN LIPID_2010=0;
+	IF LIPID_2009=. THEN LIPID_2009=0;
+	IF HPN_2014=1 and LIPID_2014=1 THEN both_2014=1;
+	IF HPN_2013=1 and LIPID_2013=1 THEN both_2013=1;
+	IF HPN_2012=1 and LIPID_2012=1 THEN both_2012=1;
+	IF HPN_2011=1 and LIPID_2011=1 THEN both_2011=1;
+	IF HPN_2010=1 and LIPID_2010=1 THEN both_2010=1;
+	IF HPN_2009=1 and LIPID_2009=1 THEN both_2009=1;
+RUN;
+
+DATA cohort_2010;
+	SET myfile.SCD_chronic_20_mar;
+	IF Eligible_2009 =1;
+	IF prevalent_dm2_2009=1;
+	IF HPN_2014=1 and LIPID_2014=1 THEN both_2014=1;
+	IF HPN_2013=1 and LIPID_2013=1 THEN both_2013=1;
+	IF HPN_2012=1 and LIPID_2012=1 THEN both_2012=1;
+	IF HPN_2011=1 and LIPID_2011=1 THEN both_2011=1;
+	IF HPN_2010=1 and LIPID_2010=1 THEN both_2010=1;
+	IF HPN_2009=1 and LIPID_2009=1 THEN both_2009=1;
+RUN;
+
+PROC FREQ DATA=cohort_2010;
+TABLE LIPID_2009 HPN_2009 both_2009/chisq nocol norow nopercent;
+RUN;
+
+
+
+
+
+*Selection of dyslipidemia patients;
+PROC sql;
+	CREATE table lipid_pres as
+	SELECT a.*
+	FROM drug_pres a
+	INNER JOIN redbook_oral_lipid_list b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table lipid_pres as
+	SELECT min(enrolid) as enrolid,
+		count(SVCDATE) as lipid_pres_count
+	FROM lipid_pres
+	GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table id_list3 as
+	SELECT a.*,
+		b.lipid_pres_count as lipid_pres_count
+	FROM id_list2 a
+	LEFT JOIN lipid_pres b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*Selection of hpn patients;
+PROC sql;
+	CREATE table hpn_pres as
+	SELECT a.*
+	FROM drug_pres a
+	INNER JOIN redbook_oral_hpn_list b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table hpn_pres as
+	SELECT min(enrolid) as enrolid,
+		count(SVCDATE) as hpn_pres_count
+	FROM hpn_pres
+	GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table id_list4 as
+	SELECT a.*,
+		b.hpn_pres_count as hpn_pres_count
+	FROM id_list3 a
+	LEFT JOIN hpn_pres b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+
+
+
+DATA HPN_list;
+set all_record;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('401','402','403','404','405') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE HPN_list as
+SELECT min(enrolid) as enrolid,
+	1 as HPN
+FROM HPN_list
+GROUP BY enrolid;
+QUIT;
+
+DATA lipid_list;
+set all_record;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2720','2721','2722','2723','2724') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE lipid_list as
+SELECT min(enrolid) as enrolid,
+	1 as lipid
+FROM lipid_list
+GROUP BY enrolid;
+QUIT;
+*Merge back the chronic condition Dx id lists;
+PROC sql;
+	CREATE table id_list5 as
+	SELECT a.*,
+		b.lipid as baseline_lipid
+	FROM id_list4 a
+	LEFT JOIN lipid_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list6 as
+	SELECT a.*,
+		b.HPN as baseline_hpn
+	FROM id_list5 a
+	LEFT JOIN HPN_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+	
+DATA temp;
+	SET id_list7;
+	IF baseline_hpn=1 AND baseline_dm2=1;
+RUN;
+
+*Assessment of year enrollment;
+DATA list_2009;
+SET all_record;
+IF year(SVCDATE)=2009 OR year(DISDATE)=2009;
+RUN;
+*Assessment of enrolid;
+
+PROC SQL;
+CREATE TABLE id_list_2009 as
+SELECT min(enrolid) as enrolid,
+	1 as enrol_2009
+FROM list_2009
+GROUP BY enrolid;
+QUIT;
+
+*Assessment of DM2 diagnosis;
+DATA dm2_list_2009;
+set list_2009;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('250') then case = 1;
+end;
+if case = 1;
+run; 
+PROC SQL;
+CREATE TABLE id_dm2_2009 as
+SELECT min(enrolid) as enrolid,
+	1 as enrol_2009
+FROM dm2_list_2009
+GROUP BY enrolid;
+QUIT;
+
+*Assessment of DM2diagnosis time;
+PROC SQL;
+CREATE TABLE dm2_list_id as
+SELECT min(enrolid) as enrolid,
+	min(SVCDATE) as index_dm_1,
+	min(DISDATE) as index_dm_2
+FROM dm2_list
+GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+CREATE TABLE all_list_id as
+SELECT min(enrolid) as enrolid,
+	min(DOBYR) as DOBYR,
+	min(SEX) as SEX,
+	min(region) as region
+FROM all_record
+GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table id_list8 as
+	SELECT a.*,
+		b.DOBYR as DOBYR,
+		b.SEX as SEX,
+		b.region as region
+	FROM id_list7 a
+	LEFT JOIN all_list_id b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table id_list9 as
+	SELECT a.*,
+		b.index_dm_1 as index_dm_1,
+		b.index_dm_2 as index_dm_2
+	FROM id_list8 a
+	LEFT JOIN dm2_list_id b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA myfile.id_list_17_Mar;
+	SET id_list9;
+	DM_dx_date=min(index_dm_1, index_dm_2);
+	age_dx=YEAR(DM_dx_date)-DOBYR;
+	IF DM_dx_date=. THEN age_dx=YEAR(index_date)-DOBYR;
+	IF 		age_dx=0 		THEN age_cat=0;
+	ELSE IF age_dx<=4 	THEN age_cat=1;
+	ELSE IF age_dx<=9 	THEN age_cat=2;
+	ELSE IF age_dx<=14 	THEN age_cat=3;
+	ELSE IF age_dx<=19 	THEN age_cat=4;
+	ELSE IF age_dx<=24 	THEN age_cat=5;
+	ELSE IF age_dx<=29 	THEN age_cat=6;
+	ELSE IF age_dx<=34 	THEN age_cat=7;
+	ELSE IF age_dx<=39 	THEN age_cat=8;
+	ELSE IF age_dx<=44 	THEN age_cat=9;
+	ELSE IF age_dx<=49 	THEN age_cat=10;
+	ELSE IF age_dx<=54 	THEN age_cat=11;
+	ELSE IF age_dx<=59 	THEN age_cat=12;
+	ELSE IF age_dx<=64 	THEN age_cat=13;
+	ELSE IF age_dx<=69 	THEN age_cat=14;
+	ELSE IF age_dx<=74 	THEN age_cat=15;
+	ELSE IF age_dx<=79 	THEN age_cat=16;
+	ELSE IF age_dx<=84 	THEN age_cat=17;
+	ELSE IF age_dx>=85 	THEN age_cat=18;
+	IF baseline_dm2=. THEN baseline_dm2=0;
+RUN;
+
+DATA temp;
+	SET myfile.id_list_17_Mar;
+RUN;
+
+PROC FREQ DATA=temp;
+TABLE region*baseline_dm2/chisq nocol norow nopercent;
+RUN;
