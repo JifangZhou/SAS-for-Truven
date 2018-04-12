@@ -1,0 +1,552 @@
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\Raw Data';
+*read all files;
+DATA inpt_sum;
+SET Myfile.scd_ccaei_09 Myfile.scd_ccaei_10 Myfile.scd_ccaei_11 Myfile.scd_ccaei_12 Myfile.scd_ccaei_13
+	Myfile.scd_mdcri_09 Myfile.scd_mdcri_10 Myfile.scd_mdcri_11 Myfile.scd_mdcri_12 Myfile.scd_mdcri_13
+	Myfile.scd_ccaei_142  
+	Myfile.scd_mdcri_142;
+DATA outpt_svc;
+SET	Myfile.scd_ccaeo_09 Myfile.scd_ccaeo_10 Myfile.scd_ccaeo_11 Myfile.scd_ccaeo_12 Myfile.scd_ccaeo_13
+	Myfile.scd_mdcro_09 Myfile.scd_mdcro_10 Myfile.scd_mdcro_11 Myfile.scd_mdcro_12 Myfile.scd_mdcro_13
+	Myfile.scd_ccaeo_142 
+	Myfile.scd_mdcro_142;
+DATA drug_pres;
+SET	Myfile.scd_ccaed_09 Myfile.scd_ccaed_10 Myfile.scd_ccaed_11 Myfile.scd_ccaed_12 Myfile.scd_ccaed_13
+	Myfile.scd_mdcrd_09 Myfile.scd_mdcrd_10 Myfile.scd_mdcrd_11 Myfile.scd_mdcrd_12 Myfile.scd_mdcrd_13
+	Myfile.scd_ccaed_142  
+	Myfile.scd_mdcrd_142;
+DATA inpt_svc;
+SET	Myfile.scd_ccaes_09 Myfile.scd_ccaes_10 Myfile.scd_ccaes_11 Myfile.scd_ccaes_12 Myfile.scd_ccaes_13
+	Myfile.scd_mdcrs_09 Myfile.scd_mdcrs_10 Myfile.scd_mdcrs_11 Myfile.scd_mdcrs_12 Myfile.scd_mdcrs_13
+	Myfile.scd_ccaes_142 
+	Myfile.scd_mdcrs_142;
+DATA Myfileance_all;
+SET	Myfile.scd_ccaet_09 Myfile.scd_ccaet_10 Myfile.scd_ccaet_11 Myfile.scd_ccaet_12 Myfile.scd_ccaet_13
+	Myfile.scd_mdcrt_09 Myfile.scd_mdcrt_10 Myfile.scd_mdcrt_11 Myfile.scd_mdcrt_12 Myfile.scd_mdcrt_13
+	Myfile.scd_ccaet_142 
+	Myfile.scd_mdcrt_142;
+RUN;
+
+DATA  id_list;
+SET myfile.id_list_hu_hsct_pediatric;
+KEEP enrolid DOBYR hsct index_date DTSTART DTEND age sex CCI_cat ACS Pneumonia ipt_number opt_number er_number transfusion_number Iron_overload Pulmonary_hypertension ACS_Pneumonia Stroke;
+	age=YEAR(index_date)-DOBYR;
+		ACS_Pneumonia=0;
+	IF ACS=1 OR Pneumonia=1 THEN ACS_Pneumonia=1;
+run; 
+
+DATA all_record;
+	SET outpt_svc
+		inpt_sum
+		inpt_svc;
+RUN;*Assessment of post transplant/HU initiation health service utilization;
+
+
+*Number of ipt over the periods;
+data  id_list;
+set myfile.pre_data_hsct_hu_6_april;
+run; 
+
+DATA ipt_all;
+	SET inpt_sum;
+	Total_plan=TOTNET+TOTCOB;
+	TOT_OOP=TOTCOINS+TOTDED+TOTCOPAY;
+	Total_pay=Total_plan+TOT_OOP;
+	IF YEAR(DISDATE)=2009 THEN do;
+	Total_plan=Total_plan*1.1677;
+	TOT_OOP=TOT_OOP*1.1677;
+	Total_pay=Total_pay*1.1677;
+	END;
+	IF YEAR(DISDATE)=2010 THEN do;
+	Total_plan=Total_plan*1.1319;
+	TOT_OOP=TOT_OOP*1.1319;
+	Total_pay=Total_pay*1.1319;
+	END;
+	IF YEAR(DISDATE)=2011 THEN do;
+	Total_plan=Total_plan*1.0945;
+	TOT_OOP=TOT_OOP*1.0945;
+	Total_pay=Total_pay*1.0945;
+	END;
+	IF YEAR(DISDATE)=2012 THEN do;
+	Total_plan=Total_plan*1.0622;
+	TOT_OOP=TOT_OOP*1.0622;
+	Total_pay=Total_pay*1.0622;
+	END;
+	IF YEAR(DISDATE)=2011 THEN do;
+	Total_plan=Total_plan*1.0245;
+	TOT_OOP=TOT_OOP*1.0245;
+	Total_pay=Total_pay*1.0245;
+	END;
+RUN;
+PROC SQL;
+CREATE TABLE inpt_list as
+	SELECT a.*,
+			b.index_date as index_date
+	FROM ipt_all a
+	INNER JOIN id_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+PROC SQL;
+CREATE TABLE opt_list as
+	SELECT a.*,
+			b.index_date as index_date
+	FROM outpt_svc a
+	INNER JOIN id_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+DATA opt_list;
+	SET opt_list;
+	TOT_OOP=COINS+DEDUCT+COPAY;
+	Total_plan=NETPAY+COB;
+	Total_pay=Total_plan+TOT_OOP;
+	IF YEAR(SVCDATE)=2009 THEN do;
+	Total_plan=Total_plan*1.1677;
+	TOT_OOP=TOT_OOP*1.1677;
+	Total_pay=Total_pay*1.1677;
+	END;
+	IF YEAR(SVCDATE)=2010 THEN do;
+	Total_plan=Total_plan*1.1319;
+	TOT_OOP=TOT_OOP*1.1319;
+	Total_pay=Total_pay*1.1319;
+	END;
+	IF YEAR(SVCDATE)=2011 THEN do;
+	Total_plan=Total_plan*1.0945;
+	TOT_OOP=TOT_OOP*1.0945;
+	Total_pay=Total_pay*1.0945;
+	END;
+	IF YEAR(SVCDATE)=2012 THEN do;
+	Total_plan=Total_plan*1.0622;
+	TOT_OOP=TOT_OOP*1.0622;
+	Total_pay=Total_pay*1.0622;
+	END;
+	IF YEAR(SVCDATE)=2011 THEN do;
+	Total_plan=Total_plan*1.0245;
+	TOT_OOP=TOT_OOP*1.0245;
+	Total_pay=Total_pay*1.0245;
+	END;
+RUN;
+PROC SQL;
+CREATE TABLE pres_list as
+	SELECT a.*,
+			b.index_date as index_date
+	FROM drug_pres a
+	INNER JOIN id_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+DATA pres_list;
+	SET pres_list;
+	TOT_OOP=COINS+DEDUCT+COPAY;
+	Total_plan=NETPAY+COB;
+	Total_pay=Total_plan+TOT_OOP;
+	IF YEAR(SVCDATE)=2009 THEN do;
+	Total_plan=Total_plan*1.1677;
+	TOT_OOP=TOT_OOP*1.1677;
+	Total_pay=Total_pay*1.1677;
+	END;
+	IF YEAR(SVCDATE)=2010 THEN do;
+	Total_plan=Total_plan*1.1319;
+	TOT_OOP=TOT_OOP*1.1319;
+	Total_pay=Total_pay*1.1319;
+	END;
+	IF YEAR(SVCDATE)=2011 THEN do;
+	Total_plan=Total_plan*1.0945;
+	TOT_OOP=TOT_OOP*1.0945;
+	Total_pay=Total_pay*1.0945;
+	END;
+	IF YEAR(SVCDATE)=2012 THEN do;
+	Total_plan=Total_plan*1.0622;
+	TOT_OOP=TOT_OOP*1.0622;
+	Total_pay=Total_pay*1.0622;
+	END;
+	IF YEAR(SVCDATE)=2011 THEN do;
+	Total_plan=Total_plan*1.0245;
+	TOT_OOP=TOT_OOP*1.0245;
+	Total_pay=Total_pay*1.0245;
+	END;
+RUN;
+
+DATA svc_all;
+	SET outpt_svc inpt_svc;
+RUN;
+
+PROC SQL;
+CREATE TABLE svc_all as
+	SELECT a.*,
+			b.index_date as index_date
+	FROM svc_all a
+	INNER JOIN id_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+proc sort data=inpt_list;
+by enrolid ADMDATE;
+run;
+proc transpose data = inpt_list out=fill_dates (drop=_name_) prefix = SVCDATE;
+by enrolid;
+var ADMDATE;
+run;
+proc transpose data = inpt_list out=days_supply (drop=_name_) prefix = DAYSUPP;
+by enrolid;
+var DAYS;
+run;
+data both;
+merge fill_dates days_supply;
+by enrolid;
+run; 
+
+
+PROC sql;
+	CREATE table both as
+	SELECT a.*,
+			b.index_date as start_dt,
+			b.index_date+2160 as end_dt
+	FROM both a
+	INNER JOIN id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+data pdc;
+set both;
+array daydummy(2160) day1-day2160;
+array filldates(*) SVCDATE1 - SVCDATE880;
+array days_supply(*) DAYSUPP1-DAYSUPP880;
+ do ii=1 to 2160; daydummy(ii)=0;end;
+ do ii=1 to 2160;
+ do i = 1 to dim(filldates) while (filldates(i) ne .);
+ if filldates(i)<= start_dt + ii -1 <= filldates(i)+days_supply(i)-1
+ then daydummy(ii)=1;
+ end;
+ end;
+drop i ii;
+dayscovered=sum(of day61 - day90);label dayscovered='Total Days Covered';
+p_dayscovered=dayscovered/30;label p_dayscovered='Proportion of Days Covered';
+run;
+%macro pso (time);
+
+DATA inpt_list1;
+	SET inpt_list;
+	IF (index_date+30*(&time.-1)<=DISDATE<index_date+30*&time.);
+RUN;
+
+DATA opt_list1;
+	SET opt_list;
+	IF (index_date+30*(&time.-1)<SVCDATE<=index_date+30*&time.);
+RUN;
+
+DATA svc1;
+	SET svc_all;
+	IF (index_date+30*(&time.-1)<SVCDATE<=index_date+30*&time.);
+RUN;
+
+DATA pres_list1;
+	SET pres_list;
+	IF (index_date+30*(&time.-1)<SVCDATE<=index_date+30*&time.);
+RUN;
+
+*ipt costs;
+PROC SQL;
+CREATE TABLE ipt_list_Q&time. as
+	SELECT min(enrolid) as enrolid,
+			sum(Total_plan) as ipt_plan_Q&time.,
+			sum(TOT_OOP) as ipt_oop_Q&time.,
+			sum(Total_pay) as ipt_tot_Q&time.
+	FROM inpt_list1 
+	GROUP BY enrolid;
+QUIT;
+DATA ipt_list_Q&time.;
+	SET ipt_list_Q&time.;
+	IF ipt_plan_Q&time.=. OR ipt_plan_Q&time.<0 THEN ipt_plan_Q&time.=0;
+	IF ipt_oop_Q&time.=. OR ipt_oop_Q&time.<0 THEN ipt_oop_Q&time.=0;
+	IF ipt_tot_Q&time.=. OR ipt_tot_Q&time.<0 THEN ipt_tot_Q&time.=0;
+RUN;
+*er_cost, excluding non-ER opt;
+DATA er_list1;
+	SET opt_list1;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0637','0981') THEN ER=1;
+	ELSE IF STDPROV in ('220','428') THEN ER=1;
+	ELSE IF STDPLAC in ('23') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120','10220','10320','10420','10520',
+						'12220','20120','20220','21120','21220','22120','22320',
+						'30120','30220','30320','30420','30520','30620',
+						'31120','31220','31320','31420','31520','31620') THEN ER=1;
+	IF ER=1;
+RUN;
+PROC SQL;
+CREATE TABLE er_list_Q&time. as
+	SELECT min(enrolid) as enrolid,
+			sum(Total_plan) as er_plan_Q&time.,
+			sum(TOT_OOP) as er_oop_Q&time.,
+			sum(Total_pay) as er_tot_Q&time.
+	FROM er_list1 
+	GROUP BY enrolid;
+QUIT;
+DATA er_list_Q&time.;
+	SET er_list_Q&time.;
+	IF er_plan_Q&time.=. OR er_plan_Q&time.<0 THEN er_plan_Q&time.=0;
+	IF er_oop_Q&time.=. OR er_oop_Q&time.<0 THEN er_oop_Q&time.=0;
+	IF er_tot_Q&time.=. OR er_tot_Q&time.<0 THEN er_tot_Q&time.=0;
+RUN;
+*opt_cost, excluding ER;
+DATA opt_list2;
+	SET opt_list1;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0637','0981') THEN ER=1;
+	ELSE IF STDPROV in ('220','428') THEN ER=1;
+	ELSE IF STDPLAC in ('23') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120','10220','10320','10420','10520',
+						'12220','20120','20220','21120','21220','22120','22320',
+						'30120','30220','30320','30420','30520','30620',
+						'31120','31220','31320','31420','31520','31620') THEN ER=1;
+	IF ER=1 THEN DELETE;
+RUN;
+PROC SQL;
+CREATE TABLE opt_list_Q&time. as
+	SELECT min(enrolid) as enrolid,
+			sum(Total_plan) as opt_plan_Q&time.,
+			sum(TOT_OOP) as opt_oop_Q&time.,
+			sum(Total_pay) as opt_tot_Q&time.
+	FROM opt_list2 
+	GROUP BY enrolid;
+QUIT;
+DATA opt_list_Q&time.;
+	SET opt_list_Q&time.;
+	IF opt_plan_Q&time.=. OR opt_plan_Q&time.<0 THEN opt_plan_Q&time.=0;
+	IF opt_oop_Q&time.=. OR opt_oop_Q&time.<0 THEN opt_oop_Q&time.=0;
+	IF opt_tot_Q&time.=. OR opt_tot_Q&time.<0 THEN opt_tot_Q&time.=0;
+RUN;
+*pres_cost;
+PROC SQL;
+CREATE TABLE pres_list_Q&time. as
+	SELECT min(enrolid) as enrolid,
+			sum(Total_plan) as pres_plan_Q&time.,
+			sum(TOT_OOP) as pres_oop_Q&time.,
+			sum(Total_pay) as pres_tot_Q&time.
+	FROM pres_list1 
+	GROUP BY enrolid;
+QUIT;
+DATA pres_list_Q&time.;
+	SET pres_list_Q&time.;
+	IF pres_plan_Q&time.=. OR pres_plan_Q&time.<0 THEN pres_plan_Q&time.=0;
+	IF pres_oop_Q&time.=. OR pres_oop_Q&time.<0 THEN pres_oop_Q&time.=0;
+	IF pres_tot_Q&time.=. OR pres_tot_Q&time.<0 THEN pres_tot_Q&time.=0;
+RUN;
+
+%MEND;
+
+%pso(1);%pso(2);%pso(3);%pso(4);%pso(5);%pso(6);%pso(7);%pso(8);%pso(9);%pso(10);
+%pso(11);%pso(12);%pso(13);%pso(14);%pso(15);%pso(16);%pso(17);%pso(18);%pso(19);%pso(20);
+%pso(21);%pso(22);%pso(23);%pso(24);%pso(25);%pso(26);%pso(27);%pso(28);%pso(29);%pso(30);
+%pso(31);%pso(32);%pso(33);%pso(34);%pso(35);%pso(36);%pso(37);%pso(38);%pso(39);%pso(40);
+%pso(41);%pso(42);%pso(43);%pso(44);%pso(45);%pso(46);%pso(47);%pso(48);%pso(49);%pso(50);
+%pso(51);%pso(52);%pso(53);%pso(54);%pso(55);%pso(56);%pso(57);%pso(58);%pso(59);%pso(60);
+%pso(61);%pso(62);%pso(63);%pso(64);%pso(65);%pso(66);%pso(67);%pso(68);%pso(69);%pso(70);
+
+*compute the propensity score and the weights as wei;
+*creation of Propensity Scores;
+proc logistic data=id_list descending;
+class sex CCI_cat;
+model hsct = AGE sex CCI_cat ipt_number opt_number er_number transfusion_number Iron_overload Pulmonary_hypertension ACS_Pneumonia Stroke/
+ link=glogit rsquare;
+ output out = ps_los pred = ps xbeta=logit_ps;
+ /* Output the propensity score and the logit of the propensity
+score */
+run;
+
+DATA Ps_los_weight;
+	SET Ps_los;
+	Wei=hsct/ps+(1-hsct)/(1-ps);
+RUN;
+
+DATA id_list_temp;
+	SET Ps_los_weight;
+RUN;
+
+
+*Merge back for the cost estimates, adjust for enrollment status;
+%macro pso (time);
+DATA id_list_temp;
+	SET id_list_temp;
+	enroll_Q&time.=0;
+	IF (DTSTART<=index_date+30*(&time.-1)<=DTEND) AND (DTSTART<=index_date+30*&time.<=DTEND) THEN enroll_Q&time.=1;
+RUN;
+
+PROC SQL;
+CREATE TABLE id_list_temp as
+	SELECT a.*,
+			b.*
+	FROM id_list_temp a
+	LEFT JOIN ipt_list_Q&time. b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA id_list_temp;
+	SET id_list_temp;
+	IF enroll_Q&time.=0 THEN ipt_plan_Q&time.=.;
+	IF enroll_Q&time.=0 THEN ipt_oop_Q&time.=.;
+	IF enroll_Q&time.=0 THEN ipt_tot_Q&time.=.;
+	IF enroll_Q&time.=1 AND ipt_plan_Q&time.=. THEN ipt_plan_Q&time.=0;
+	IF enroll_Q&time.=1 AND ipt_oop_Q&time.=. THEN ipt_oop_Q&time.=0;
+	IF enroll_Q&time.=1 AND ipt_tot_Q&time.=. THEN ipt_tot_Q&time.=0;
+	IF enroll_Q&time.=1 THEN adj_ipt_plan_Q&time.=ipt_plan_Q&time.*wei;
+	IF enroll_Q&time.=1 THEN adj_ipt_oop_Q&time.=ipt_oop_Q&time.*wei;
+	IF enroll_Q&time.=1 THEN adj_ipt_tot_Q&time.=ipt_tot_Q&time.*wei;
+RUN;
+PROC SQL;
+CREATE TABLE id_list_temp as
+	SELECT a.*,
+			b.*
+	FROM id_list_temp a
+	LEFT JOIN er_list_Q&time. b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA id_list_temp;
+	SET id_list_temp;
+	IF enroll_Q&time.=0 THEN er_plan_Q&time.=.;
+	IF enroll_Q&time.=0 THEN er_oop_Q&time.=.;
+	IF enroll_Q&time.=0 THEN er_tot_Q&time.=.;
+	IF enroll_Q&time.=1 AND er_plan_Q&time.=. THEN er_plan_Q&time.=0;
+	IF enroll_Q&time.=1 AND er_oop_Q&time.=. THEN er_oop_Q&time.=0;
+	IF enroll_Q&time.=1 AND er_tot_Q&time.=. THEN er_tot_Q&time.=0;
+	IF enroll_Q&time.=1 THEN adj_er_plan_Q&time.=er_plan_Q&time.*wei;
+	IF enroll_Q&time.=1 THEN adj_er_oop_Q&time.=er_oop_Q&time.*wei;
+	IF enroll_Q&time.=1 THEN adj_er_tot_Q&time.=er_tot_Q&time.*wei;
+RUN;
+PROC SQL;
+CREATE TABLE id_list_temp as
+	SELECT a.*,
+			b.*
+	FROM id_list_temp a
+	LEFT JOIN opt_list_Q&time. b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA id_list_temp;
+	SET id_list_temp;
+	IF enroll_Q&time.=0 THEN opt_plan_Q&time.=.;
+	IF enroll_Q&time.=0 THEN opt_oop_Q&time.=.;
+	IF enroll_Q&time.=0 THEN opt_tot_Q&time.=.;
+	IF enroll_Q&time.=1 AND opt_plan_Q&time.=. THEN opt_plan_Q&time.=0;
+	IF enroll_Q&time.=1 AND opt_oop_Q&time.=. THEN opt_oop_Q&time.=0;
+	IF enroll_Q&time.=1 AND opt_tot_Q&time.=. THEN opt_tot_Q&time.=0;
+	IF enroll_Q&time.=1 THEN adj_opt_plan_Q&time.=opt_plan_Q&time.*wei;
+	IF enroll_Q&time.=1 THEN adj_opt_oop_Q&time.=opt_oop_Q&time.*wei;
+	IF enroll_Q&time.=1 THEN adj_opt_tot_Q&time.=opt_tot_Q&time.*wei;
+RUN;
+PROC SQL;
+CREATE TABLE id_list_temp as
+	SELECT a.*,
+			b.*
+	FROM id_list_temp a
+	LEFT JOIN pres_list_Q&time. b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA id_list_temp;
+	SET id_list_temp;
+	IF enroll_Q&time.=0 THEN pres_plan_Q&time.=.;
+	IF enroll_Q&time.=0 THEN pres_oop_Q&time.=.;
+	IF enroll_Q&time.=0 THEN pres_tot_Q&time.=.;
+	IF enroll_Q&time.=1 AND pres_plan_Q&time.=. THEN pres_plan_Q&time.=0;
+	IF enroll_Q&time.=1 AND pres_oop_Q&time.=. THEN pres_oop_Q&time.=0;
+	IF enroll_Q&time.=1 AND pres_tot_Q&time.=. THEN pres_tot_Q&time.=0;
+	IF enroll_Q&time.=1 THEN adj_pres_plan_Q&time.=pres_plan_Q&time.*wei;
+	IF enroll_Q&time.=1 THEN adj_pres_oop_Q&time.=pres_oop_Q&time.*wei;
+	IF enroll_Q&time.=1 THEN adj_pres_tot_Q&time.=pres_tot_Q&time.*wei;
+RUN;
+DATA id_list_temp;
+	SET id_list_temp;
+	acute_oop_Q&time.=ipt_oop_Q&time.+er_oop_Q&time.;
+	acute_tot_Q&time.=ipt_tot_Q&time.+er_tot_Q&time.;
+	total_oop_Q&time.=ipt_oop_Q&time.+er_oop_Q&time.+opt_oop_Q&time.+pres_oop_Q&time.;
+	total_tot_Q&time.=ipt_tot_Q&time.+er_tot_Q&time.+opt_tot_Q&time.+pres_tot_Q&time.;
+	adj_acute_oop_Q&time.=acute_oop_Q&time.*wei;
+	adj_acute_tot_Q&time.=acute_tot_Q&time.*wei;
+	adj_total_oop_Q&time.=total_oop_Q&time.*wei;
+	adj_total_tot_Q&time.=total_tot_Q&time.*wei;
+RUN;
+%MEND;
+
+%pso(1);%pso(2);%pso(3);%pso(4);%pso(5);%pso(6);%pso(7);%pso(8);%pso(9);%pso(10);
+%pso(11);%pso(12);%pso(13);%pso(14);%pso(15);%pso(16);%pso(17);%pso(18);%pso(19);%pso(20);
+%pso(21);%pso(22);%pso(23);%pso(24);%pso(25);%pso(26);%pso(27);%pso(28);%pso(29);%pso(30);
+%pso(31);%pso(32);%pso(33);%pso(34);%pso(35);%pso(36);%pso(37);%pso(38);%pso(39);%pso(40);
+%pso(41);%pso(42);%pso(43);%pso(44);%pso(45);%pso(46);%pso(47);%pso(48);%pso(49);%pso(50);
+%pso(51);%pso(52);%pso(53);%pso(54);%pso(55);%pso(56);%pso(57);%pso(58);%pso(59);%pso(60);
+%pso(61);%pso(62);%pso(63);%pso(64);%pso(65);%pso(66);%pso(67);%pso(68);%pso(69);%pso(70);
+
+DATA myfile.Cost_estimates_final_08_April;
+	SET id_list_temp;
+RUN;
+
+*inpatient numbers;
+DATA acute_all;
+	SET myfile.Cost_estimates_final_08_April;
+	KEEP enrolid
+acute_tot_Q1 acute_tot_Q2 acute_tot_Q3 acute_tot_Q4 acute_tot_Q5 acute_tot_Q6 acute_tot_Q7 acute_tot_Q8 acute_tot_Q9 acute_tot_Q10 
+acute_tot_Q11 acute_tot_Q12 acute_tot_Q13 acute_tot_Q14 acute_tot_Q15 acute_tot_Q16 acute_tot_Q17 acute_tot_Q18 acute_tot_Q19 acute_tot_Q20 
+acute_tot_Q21 acute_tot_Q22 acute_tot_Q23 acute_tot_Q24 acute_tot_Q25 acute_tot_Q26 acute_tot_Q27 acute_tot_Q28 acute_tot_Q29 acute_tot_Q30 
+acute_tot_Q31 acute_tot_Q32 acute_tot_Q33 acute_tot_Q34 acute_tot_Q35 acute_tot_Q36 acute_tot_Q37 acute_tot_Q38 acute_tot_Q39 acute_tot_Q40 
+acute_tot_Q41 acute_tot_Q42 acute_tot_Q43 acute_tot_Q44 acute_tot_Q45 acute_tot_Q46 acute_tot_Q47 acute_tot_Q48 acute_tot_Q49 acute_tot_Q50 
+acute_tot_Q51 acute_tot_Q52 acute_tot_Q53 acute_tot_Q54 acute_tot_Q55 acute_tot_Q56 acute_tot_Q57 acute_tot_Q58 acute_tot_Q59 acute_tot_Q60 
+acute_tot_Q61 acute_tot_Q62 acute_tot_Q63 acute_tot_Q64 acute_tot_Q65 acute_tot_Q66 acute_tot_Q67 acute_tot_Q68 acute_tot_Q69 acute_tot_Q70 ;
+RUN;
+proc sort data=acute_all;
+  by enrolid;
+run;
+proc transpose data=acute_all out=long_acute_all;
+  by enrolid;
+run;
+
+data long_acute_all1;
+  set long_acute_all (rename=(col1=all_tot));
+  time=input(substr(_name_, 12), 12.);
+  drop _name_;
+run; 
+
+data long_acute_all2;
+	SET long_acute_all1;
+	IF all_tot=. THEN DELETE;
+RUN;
+
+PROC SQL;
+	CREATE table long_acute_all3 as 
+	SELECT a.*,
+			b.*
+	FROM long_acute_all2 a
+	LEFT JOIN myfile.Cost_estimates_final_08_April b
+	ON a.enrolid = b.enrolid;
+QUIT;
+DATA long_acute_all3;
+	SET long_acute_all3;
+	age=YEAR(index_date)-DOBYR;
+RUN;
+*Assess the zero model;
+DATA temp;
+	SET long_acute_all3;
+	all_tot_case=1;
+	IF all_tot=0 THEN all_tot_case=0;
+RUN;
+proc logistic data=temp descending;
+class sex CCI_cat;
+model all_tot_case = Iron_overload;
+run;
+
+proc genmod data = long_acute_all3;
+	class sex CCI_cat;
+ model all_tot = hsct age sex CCI_cat/ link=log dist=Poisson;
+ estimate 'Beta' hsct 1 -1/ exp;
+run;
+
+PROC MEANS DATA=myfile.Cost_estimates_final_08_April;
+class hsct;
+VAR total_tot_Q1 total_tot_Q2 total_tot_Q3 total_tot_Q4 total_tot_Q5 total_tot_Q6 total_tot_Q7 total_tot_Q8 total_tot_Q9 total_tot_Q10 
+total_tot_Q11 total_tot_Q12 total_tot_Q13 total_tot_Q14 total_tot_Q15 total_tot_Q16 total_tot_Q17 total_tot_Q18 total_tot_Q19 total_tot_Q20 
+total_tot_Q21 total_tot_Q22 total_tot_Q23 total_tot_Q24 total_tot_Q25 total_tot_Q26 total_tot_Q27 total_tot_Q28 total_tot_Q29 total_tot_Q30 
+total_tot_Q31 total_tot_Q32 total_tot_Q33 total_tot_Q34 total_tot_Q35 total_tot_Q36 total_tot_Q37 total_tot_Q38 total_tot_Q39 total_tot_Q40 
+total_tot_Q41 total_tot_Q42 total_tot_Q43 total_tot_Q44 total_tot_Q45 total_tot_Q46 total_tot_Q47 total_tot_Q48 total_tot_Q49 total_tot_Q50 
+total_tot_Q51 total_tot_Q52 total_tot_Q53 total_tot_Q54 total_tot_Q55 total_tot_Q56 total_tot_Q57 total_tot_Q58 total_tot_Q59 total_tot_Q60 
+total_tot_Q61 total_tot_Q62 total_tot_Q63 total_tot_Q64 total_tot_Q65 total_tot_Q66 total_tot_Q67 total_tot_Q68 total_tot_Q69 total_tot_Q70 ;
+RUN;
