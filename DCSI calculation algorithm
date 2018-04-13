@@ -1,0 +1,132 @@
+********************Application of DM2 severity using ICD-9 in SCD patients with DM2***********;
+*********************Incorporation of ICD-9 codes and revision***************;
+*********************Based on Bessie Ann Young Article in AJMC*******************************;
+*********************Updated on 13 April 2018***********************************;
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\SCD Project\SCD and chronic disease\Dm2 and SCD treatment patterns\Rawdata';
+DATA id_list;
+	SET myfile.analytical_file_0412_dm2;
+RUN;
+
+DATA all_svc_list;
+	SET post_svc;
+RUN;
+* list all inpatient summary and outpatient service records;
+
+* start searching for items listed in DCS Index;
+/********** Retinopathy WEIGHT = 1 or 2 ****************/
+DATA all_svc_list;
+	SET all_svc_list;
+	Retinopathy=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('2505','36201','3621','36283','36253','36281', '36282') then Retinopathy=1;
+			else if icd{i} in: ('36202','361','369','37923') then Retinopathy=2;
+		end;
+RUN;
+
+ /********** Nephropathy ***** WEIGHT = 1 or 2 ****************************/
+DATA all_svc_list;
+	SET all_svc_list;
+	Nephropathy=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('2504','580','581','58181','582','583') then Nephropathy=1;
+			else if icd{i} in: ('585','586','5939') then Nephropathy=2;
+		end;
+RUN;
+ /********** Neuropathy ***** WEIGHT = 1 ****************************/
+DATA all_svc_list;
+	SET all_svc_list;
+	Neuropathy=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('3569', '2506','358.1','9510', '9511', '9513','354','355','7135','3572','59654','3370', '3371','5645','5363','4580') then Neuropathy=1;
+		end;
+RUN;
+     /********* CEREBROVASCULAR DISEASE ******* WEIGHT = 1 or 2 *******/
+DATA all_svc_list;
+	SET all_svc_list;
+	Cerebrovascular=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('435','440','411','413','414','4292') then Cerebrovascular=1;
+			else if icd{i} in: ('431', '433', '434', '436','410','4271', '4273','4274', '4275','412','428','44023', '44024','441') then Cerebrovascular=2;
+		end;
+RUN;
+     /********* Peripheral vascular disease ******* WEIGHT = 1 or 2 *******/
+DATA all_svc_list;
+	SET all_svc_list;
+	Peripheral=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('2507','4423','44381', '4439','8921','4439') then Peripheral=1;
+			else if icd{i} in: ('44422','7854','040','7071') then Peripheral=2;
+		end;
+RUN;
+     /********* Metabolic ******* WEIGHT = 2 *******/
+DATA all_svc_list;
+	SET all_svc_list;
+	Metabolic=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('2501','2502','2503') then Metabolic=2;
+		end;
+RUN;
+
+PROC SQL;
+CREATE TABLE XX as
+SELECT min(enrolid) as enrolid,
+		max(Retinopathy)+
+		max(Nephropathy)+
+		max(Cerebrovascular)+
+		max(Peripheral)+
+		max(Metabolic) as DCSI
+	FROM all_svc_list
+	GROUP BY enrolid;
+QUIT;
+
+PROC FREQ DATA=XX;
+TABLE DCSI;
+RUN;
+
+PROC SQL;
+CREATE TABLE id_list2 as
+SELECT a.*,
+	b.*
+FROM id_list a
+LEFT JOIN Xx b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA id_list2;
+	SET id_list2;
+	IF DCSI=. THEN DCSI=0;
+	IF DCSI=0 THEN DCSI_cat=0;
+	ELSE IF DCSI=1 THEN DCSI_cat=1;
+	ELSE IF DCSI=2 THEN DCSI_cat=2;
+	ELSE IF DCSI>=3 THEN DCSI_cat=3;
+	outcome=0;
+	IF DCSI>=1 THEN outcome=1;
+RUN;
+
+PROC FREQ DATA=id_list2;
+	TABLE DCSI_cat*SCD_status /nopercent nocol norow chisq;
+RUN;
+
+PROC TTEST DATA=id_list2;
+	CLASS SCD_status;
+	VAR DCSI;
+RUN;
+
+PROC MEANS DATA=id_list2;
+	VAR DCSI;
+RUN;
+
+DATA myfile.April_13_dm2_cohort_all;
+	SET id_list2;
+RUN;
+
+proc logistic data= id_list2;
+	CLASS  sex (ref='1') ; 
+	model outcome(ref='0')= age sex SCD_status baseline_hypertension baseline_COPD baseline_cancer VOC CKD pneumonia Stroke Gallstones/link=glogit;
+RUN;
