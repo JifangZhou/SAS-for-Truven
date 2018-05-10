@@ -1,0 +1,1173 @@
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\MM and VTE\Rawdata';
+
+DATA id_list;
+	SET myfile.id_list_base_AC_09_May;RUN;
+DATA all_record_follow_6m;
+set myfile.all_record_follow;
+IF (index_date<=svcdate<=index_date+180) OR (index_date<=disdate<=index_date+180);
+DATA drug_pres_follow_6m;
+set myfile.all_pres_follow;
+IF (index_date<=svcdate<=index_date+180);
+RUN;
+LIBNAME Redbook 'C:\Users\jzhou86\Documents\SCD Project';
+DATA redbook;
+	SET Redbook.redbook;
+RUN;
+*within 6 months post initiation of MM treatment;
+*LMWH;
+DATA LMWH_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Dalteparin') OR (GENNME contains 'Enoxaparin') OR (GENNME contains 'Tinzaparin');
+RUN;
+PROC sql;
+	CREATE table LMWH_pres as
+	SELECT a.*
+	FROM drug_pres_follow_6m a
+	INNER JOIN LMWH_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table LMWH_dispensed_list as
+	SELECT min(enrolid) as enrolid,
+		1 as LMWH_dispensed_post,
+		min(SVCDATE) as LMWH_dispensed_date
+	FROM LMWH_pres a
+	GROUP BY enrolid;
+QUIT;
+*LMWH injection;
+DATA LMWH_inject_list;
+	set all_record_follow_6m;
+	case=0;
+	array proc{*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J1644') then case=1;*case='UFH';
+	end;
+	array proca{*} proc1-proc15;
+		do i = 1 to dim(proca);
+		if proc{i} in: ('J1652') then case=2;*case='Fondaparinux';
+	end;
+	array procb{*} proc1-proc15;
+		do i = 1 to dim(procb);
+		if proc{i} in: ('J1645','J1650','J1655') then case=3;*case='LMWH';
+	end;
+	array procc{*} proc1-proc15;
+		do i = 1 to dim(procc);
+		if proc{i} in: ('C9121','J0883','J0884','J0583','J1945') then case=4;*case='DTI_inject';
+	end;
+	if case=3;
+run; 
+PROC sql;
+	CREATE table LMWH_inject_list as
+	SELECT min(enrolid) as enrolid,
+		1 as LMWH_inject_post,
+		min(SVCDATE) as LMWH_inject_date
+	FROM LMWH_inject_list
+	GROUP BY enrolid;
+QUIT;
+*Merge back the ESA list to the master file;
+PROC sql;
+	CREATE table id_list1 as
+	SELECT a.*,
+		b.*
+	FROM id_list a
+	LEFT JOIN LMWH_inject_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list2 as
+	SELECT a.*,
+		b.*
+	FROM id_list1 a
+	LEFT JOIN LMWH_dispensed_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*Antiplatelet;
+DATA Antiplatelet_all_NDC;
+	SET redbook;
+	WHERE 	((GENNME contains 'Aspirin') OR 
+			(GENNME contains 'Dipyridamole') OR 
+			(GENNME contains 'Ticlopidine') OR 
+			(GENNME contains 'Clopidogrel'))AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+RUN;
+PROC sql;
+	CREATE table Antiplatelet_all_pres as
+	SELECT a.*
+	FROM drug_pres_follow_6m a
+	INNER JOIN Antiplatelet_all_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table Antiplatelet_all_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Antiplatelet_all_post,
+		min(SVCDATE) as Antiplatelet_all_date
+	FROM Antiplatelet_all_pres a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list3 as
+	SELECT a.*,
+		b.*
+	FROM id_list2 a
+	LEFT JOIN Antiplatelet_all_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*Aspirin;
+DATA ASA_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Aspirin' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Aspirin';
+RUN;
+PROC sql;
+	CREATE table ASA_pres as
+	SELECT a.*
+	FROM drug_pres_follow_6m a
+	INNER JOIN ASA_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table ASA_list as
+	SELECT min(enrolid) as enrolid,
+		1 as ASA_post,
+		min(SVCDATE) as ASA_date
+	FROM ASA_pres a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list4 as
+	SELECT a.*,
+		b.*
+	FROM id_list3 a
+	LEFT JOIN ASA_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*Warfarin;
+DATA Warfarin_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Warfarin');
+RUN;
+PROC sql;
+	CREATE table Warfarin_pres as
+	SELECT a.*
+	FROM drug_pres_follow_6m a
+	INNER JOIN Warfarin_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table Warfarin_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Warfarin_post,
+		min(SVCDATE) as Warfarin_date
+	FROM Warfarin_pres a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list5 as
+	SELECT a.*,
+		b.*
+	FROM id_list4 a
+	LEFT JOIN Warfarin_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*Dabigatran;
+DATA Dabigatran_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Dabigatran');
+RUN;
+PROC sql;
+	CREATE table Dabigatran_pres as
+	SELECT a.*
+	FROM drug_pres_follow_6m a
+	INNER JOIN Dabigatran_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table Dabigatran_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Dabigatran_post,
+		min(SVCDATE) as Dabigatran_date
+	FROM Dabigatran_pres a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list6 as
+	SELECT a.*,
+		b.*
+	FROM id_list5 a
+	LEFT JOIN Dabigatran_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*Rivaroxaban;
+DATA Rivaroxaban_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Rivaroxaban');
+RUN;
+PROC sql;
+	CREATE table Rivaroxaban_pres as
+	SELECT a.*
+	FROM drug_pres_follow_6m a
+	INNER JOIN Rivaroxaban_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table Rivaroxaban_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Rivaroxaban_post,
+		min(SVCDATE) as Rivaroxaban_date
+	FROM Rivaroxaban_pres a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list7 as
+	SELECT a.*,
+		b.*
+	FROM id_list6 a
+	LEFT JOIN Rivaroxaban_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*Apixaban;
+DATA Apixaban_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Apixaban');
+RUN;
+PROC sql;
+	CREATE table Apixaban_pres as
+	SELECT a.*
+	FROM drug_pres_follow_6m a
+	INNER JOIN Apixaban_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table Apixaban_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Apixaban_post,
+		min(SVCDATE) as Apixaban_date
+	FROM Apixaban_pres a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list8 as
+	SELECT a.*,
+		b.*
+	FROM id_list7 a
+	LEFT JOIN Apixaban_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*Edoxaban;
+DATA Edoxaban_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Edoxaban');
+RUN;
+PROC sql;
+	CREATE table Edoxaban_pres as
+	SELECT a.*
+	FROM drug_pres_follow_6m a
+	INNER JOIN Edoxaban_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table Edoxaban_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Edoxaban_post,
+		min(SVCDATE) as Edoxaban_date
+	FROM Edoxaban_pres a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list9 as
+	SELECT a.*,
+		b.*
+	FROM id_list8 a
+	LEFT JOIN Edoxaban_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*UFH;
+DATA UFH_inject_list;
+	set all_record_follow_6m;
+	case=0;
+	array proc{*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J1644') then case=1;*case='UFH';
+	end;
+	array proca{*} proc1-proc15;
+		do i = 1 to dim(proca);
+		if proc{i} in: ('J1652') then case=2;*case='Fondaparinux';
+	end;
+	array procb{*} proc1-proc15;
+		do i = 1 to dim(procb);
+		if proc{i} in: ('J1645','J1650','J1655') then case=3;*case='LMWH';
+	end;
+	array procc{*} proc1-proc15;
+		do i = 1 to dim(procc);
+		if proc{i} in: ('C9121','J0883','J0884','J0583','J1945') then case=4;*case='DTI_inject';
+	end;
+	if case=1;
+run; 
+PROC sql;
+	CREATE table UFH_inject_list as
+	SELECT min(enrolid) as enrolid,
+		1 as UFH_post,
+		min(SVCDATE) as UFH_date
+	FROM UFH_inject_list
+	GROUP BY enrolid;
+QUIT;
+*Merge back the UFH list to the master file;
+PROC sql;
+	CREATE table id_list10 as
+	SELECT a.*,
+		b.*
+	FROM id_list9 a
+	LEFT JOIN UFH_inject_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*Fondaparinux;
+DATA Fondaparinux_inject_list;
+	set all_record_follow_6m;
+	case=0;
+	array proc{*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J1644') then case=1;*case='UFH';
+	end;
+	array proca{*} proc1-proc15;
+		do i = 1 to dim(proca);
+		if proc{i} in: ('J1652') then case=2;*case='Fondaparinux';
+	end;
+	array procb{*} proc1-proc15;
+		do i = 1 to dim(procb);
+		if proc{i} in: ('J1645','J1650','J1655') then case=3;*case='LMWH';
+	end;
+	array procc{*} proc1-proc15;
+		do i = 1 to dim(procc);
+		if proc{i} in: ('C9121','J0883','J0884','J0583','J1945') then case=4;*case='DTI_inject';
+	end;
+	if case=2;
+run; 
+PROC sql;
+	CREATE table Fondaparinux_inject_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Fondaparinux_post,
+		min(SVCDATE) as Fondaparinux_date
+	FROM Fondaparinux_inject_list
+	GROUP BY enrolid;
+QUIT;
+*Merge back the Fondaparinux list to the master file;
+PROC sql;
+	CREATE table id_list11 as
+	SELECT a.*,
+		b.*
+	FROM id_list10 a
+	LEFT JOIN Fondaparinux_inject_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*DTI_inject;
+DATA DTI_inject_inject_list;
+	set all_record_follow_6m;
+	case=0;
+	array proc{*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J1644') then case=1;*case='UFH';
+	end;
+	array proca{*} proc1-proc15;
+		do i = 1 to dim(proca);
+		if proc{i} in: ('J1652') then case=2;*case='Fondaparinux';
+	end;
+	array procb{*} proc1-proc15;
+		do i = 1 to dim(procb);
+		if proc{i} in: ('J1645','J1650','J1655') then case=3;*case='LMWH';
+	end;
+	array procc{*} proc1-proc15;
+		do i = 1 to dim(procc);
+		if proc{i} in: ('C9121','J0883','J0884','J0583','J1945') then case=4;*case='DTI_inject';
+	end;
+	if case=4;
+run; 
+PROC sql;
+	CREATE table DTI_inject_inject_list as
+	SELECT min(enrolid) as enrolid,
+		1 as DTI_inject_post,
+	min(SVCDATE) as DTI_inject_date
+	FROM DTI_inject_inject_list
+	GROUP BY enrolid;
+QUIT;
+*Merge back the DTI_inject list to the master file;
+PROC sql;
+	CREATE table id_list12 as
+	SELECT a.*,
+		b.*
+	FROM id_list11 a
+	LEFT JOIN DTI_inject_inject_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*Assessment of baseline antiplatelet and antithrombotic drugs exposure;
+DATA myfile.id_list_post_AC_10_May;
+	SET id_list12;
+   array change _numeric_;
+        do over change;
+            if change=. then change=0;
+        end;
+		LMWH_post=0;
+	IF LMWH_dispensed_post=1 OR LMWH_inject_post=1 THEN LMWH_post=1;
+	VTE_post=0;
+	IF pe_post_opt_date=0 THEN pe_post_opt_date=.;
+	IF pe_post_ipt_date=0 THEN pe_post_ipt_date=.;
+	IF dvt_post_opt_date=0 THEN dvt_post_opt_date=.;
+	IF dvt_post_ipt_date=0 THEN dvt_post_ipt_date=.;
+	VTE_post_date=min(pe_post_opt_date,pe_post_ipt_date,dvt_post_opt_date,dvt_post_ipt_date);
+	IF VTE_post_date ^=. THEN VTE_post=1;
+ run ;
+PROC FREQ DATA=temp;
+ 	TABLE LMWH_post*IMiDs_L1 /nocol norow nopercent chisq;
+RUN;
+
+DATA analytical_cohort;
+	SET myfile.id_list_post_AC_10_May;
+	/*determine anti-thrombotic treatment initiation*/
+		IF Antiplatelet_all_date=0 THEN Antiplatelet_all_date=.;
+		IF Warfarin_date=0 THEN Warfarin_date=.;
+		IF Dabigatran_date=0 THEN Dabigatran_date=.;
+		IF Rivaroxaban_date=0 THEN Rivaroxaban_date=.;
+		IF Apixaban_date=0 THEN Apixaban_date=.;
+		IF LMWH_inject_date=0 THEN LMWH_inject_date=.;
+		IF LMWH_dispensed_date=0 THEN LMWH_dispensed_date=.;
+	Antithrombotic_post_date=min(Antiplatelet_all_date, Warfarin_date, Dabigatran_date, Rivaroxaban_date, Apixaban_date, LMWH_inject_date, LMWH_dispensed_date);
+	DOACs_post_date=min(Dabigatran_date, Rivaroxaban_date, Apixaban_date);
+	LMWH_post_date=min(LMWH_inject_date, LMWH_dispensed_date);
+	AC_prophylaxis=0;
+	IF (index_date<=Antithrombotic_post_date<=index_date+180 AND (Antithrombotic_post_date<VTE_post_date AND VTE_post=1)) OR
+	(index_date<=Antithrombotic_post_date<=index_date+180 AND VTE_post=0)THEN AC_prophylaxis=1;
+	IF AC_prophylaxis=1 AND Antithrombotic_post_date=Antiplatelet_all_date THEN Prophy_type=1;
+	ELSE IF AC_prophylaxis=1 AND Antithrombotic_post_date=LMWH_post_date THEN Prophy_type=2;
+	ELSE IF AC_prophylaxis=1 AND Antithrombotic_post_date=Warfarin_date THEN Prophy_type=3;
+	ELSE IF AC_prophylaxis=1 AND Antithrombotic_post_date=DOACs_post_date THEN Prophy_type=4;
+RUN;
+
+PROC FREQ DATA=analytical_cohort;
+ 	TABLE RF_cat*Prophy_type/nocol norow nopercent chisq;
+RUN;
+
+*Persistence of VTE prophylaxis;
+*Antiplatelet;
+DATA Antiplatelet_all_NDC;
+	SET redbook;
+	WHERE 	((GENNME contains 'Aspirin') OR 
+			(GENNME contains 'Dipyridamole') OR 
+			(GENNME contains 'Ticlopidine') OR 
+			(GENNME contains 'Clopidogrel'))AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+RUN;
+PROC sql;
+	CREATE table pres_record as
+	SELECT a.*
+	FROM drug_pres_follow_6m a
+	INNER JOIN Antiplatelet_all_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+DATA pres_record;
+	SET pres_record;
+	KEEP enrolid SVCDATE DAYSUPP index_date;
+RUN;
+*Assessment of persistence;
+DATA Drug_persistence;
+	SET pres_record;
+	KEEP enrolid SVCDATE DAYSUPP index_date;
+	IF SVCDATE=. THEN DELETE;
+RUN;
+
+*Assessment of drug persistence;
+proc sort data=Drug_persistence;by enrolid SVCDATE;run;
+data pers;
+ set Drug_persistence;
+ by enrolid SVCDATE;
+ lstsply=SVCDATE+DAYSUPP;
+ gap=SVCDATE-lag(lstsply);
+ if first.enrolid=1 then epsd=1;
+ else if gap>=60 then epsd+1;/*to change the gap days allowed*/
+ format lstsply mmddyy10.;
+run;
+proc sql;
+	create table gap as
+	select distinct enrolid, 
+		max(epsd) as epsd
+ 	from pers
+ 	group by enrolid;
+quit;
+proc freq data=gap;tables epsd;run;
+proc sql;
+ create table persis as
+ select distinct enrolid, 
+	max(lstsply) as lstsply format mmddyy10.,
+ 	max(lstsply)-index_date as days_therapy /*days to discountinuation*/
+ from pers  where epsd=1
+ group by enrolid;
+quit;
+proc freq data=persis;tables days_therapy;run; 
+PROC sql;
+	CREATE table id_list1 as
+	SELECT a.*,
+		b.lstsply as Antiplatelet_all_lstsply,
+		b.days_therapy as Antiplatelet_all_days_therapy
+	FROM analytical_cohort a
+	LEFT JOIN persis b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*Warfarin;
+DATA Warfarin_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Warfarin');
+RUN;
+PROC sql;
+	CREATE table pres_record as
+	SELECT a.*
+	FROM drug_pres_follow_6m a
+	INNER JOIN Warfarin_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+DATA pres_record;
+	SET pres_record;
+	KEEP enrolid SVCDATE DAYSUPP index_date;
+RUN;
+*Assessment of persistence;
+DATA Drug_persistence;
+	SET pres_record;
+	KEEP enrolid SVCDATE DAYSUPP index_date;
+	IF SVCDATE=. THEN DELETE;
+RUN;
+
+*Assessment of drug persistence;
+proc sort data=Drug_persistence;by enrolid SVCDATE;run;
+data pers;
+ set Drug_persistence;
+ by enrolid SVCDATE;
+ lstsply=SVCDATE+DAYSUPP;
+ gap=SVCDATE-lag(lstsply);
+ if first.enrolid=1 then epsd=1;
+ else if gap>=60 then epsd+1;/*to change the gap days allowed*/
+ format lstsply mmddyy10.;
+run;
+proc sql;
+	create table gap as
+	select distinct enrolid, 
+		max(epsd) as epsd
+ 	from pers
+ 	group by enrolid;
+quit;
+proc freq data=gap;tables epsd;run;
+proc sql;
+ create table persis as
+ select distinct enrolid, 
+	max(lstsply) as lstsply format mmddyy10.,
+ 	max(lstsply)-index_date as days_therapy /*days to discountinuation*/
+ from pers  where epsd=1
+ group by enrolid;
+quit;
+proc freq data=persis;tables days_therapy;run; 
+PROC sql;
+	CREATE table id_list2 as
+	SELECT a.*,
+		b.lstsply as Warfarin_lstsply,
+		b.days_therapy as Warfarin_days_therapy
+	FROM id_list1 a
+	LEFT JOIN persis b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*DOACs;
+DATA DOACs_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Dabigatran') OR (GENNME contains 'Rivaroxaban') OR (GENNME contains 'Apixaban');
+RUN;
+
+PROC sql;
+	CREATE table pres_record as
+	SELECT a.*
+	FROM drug_pres_follow_6m a
+	INNER JOIN DOACs_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+DATA pres_record;
+	SET pres_record;
+	KEEP enrolid SVCDATE DAYSUPP index_date;
+RUN;
+*Assessment of persistence;
+DATA Drug_persistence;
+	SET pres_record;
+	KEEP enrolid SVCDATE DAYSUPP index_date;
+	IF SVCDATE=. THEN DELETE;
+RUN;
+
+*Assessment of drug persistence;
+proc sort data=Drug_persistence;by enrolid SVCDATE;run;
+data pers;
+ set Drug_persistence;
+ by enrolid SVCDATE;
+ lstsply=SVCDATE+DAYSUPP;
+ gap=SVCDATE-lag(lstsply);
+ if first.enrolid=1 then epsd=1;
+ else if gap>=60 then epsd+1;/*to change the gap days allowed*/
+ format lstsply mmddyy10.;
+run;
+proc sql;
+	create table gap as
+	select distinct enrolid, 
+		max(epsd) as epsd
+ 	from pers
+ 	group by enrolid;
+quit;
+proc freq data=gap;tables epsd;run;
+proc sql;
+ create table persis as
+ select distinct enrolid, 
+	max(lstsply) as lstsply format mmddyy10.,
+ 	max(lstsply)-index_date as days_therapy /*days to discountinuation*/
+ from pers  where epsd=1
+ group by enrolid;
+quit;
+proc freq data=persis;tables days_therapy;run; 
+PROC sql;
+	CREATE table id_list3 as
+	SELECT a.*,
+		b.lstsply as DOACs_lstsply,
+		b.days_therapy as DOACs_days_therapy
+	FROM id_list2 a
+	LEFT JOIN persis b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*LMWH;
+DATA LMWH_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Dalteparin') OR (GENNME contains 'Enoxaparin') OR (GENNME contains 'Tinzaparin');
+RUN;
+
+PROC sql;
+	CREATE table pres_record as
+	SELECT a.*
+	FROM drug_pres_follow_6m a
+	INNER JOIN LMWH_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+DATA LMWH_SVC_list;
+	set all_record_follow_6m;
+	case=0;
+	array proc{*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J1644') then case=1;*case='UFH';
+	end;
+	array proca{*} proc1-proc15;
+		do i = 1 to dim(proca);
+		if proc{i} in: ('J1652') then case=2;*case='Fondaparinux';
+	end;
+	array procb{*} proc1-proc15;
+		do i = 1 to dim(procb);
+		if proc{i} in: ('J1645','J1650','J1655') then case=3;*case='LMWH';
+	end;
+	array procc{*} proc1-proc15;
+		do i = 1 to dim(procc);
+		if proc{i} in: ('C9121','J0883','J0884','J0583','J1945') then case=4;*case='DTI_inject';
+	end;
+	if case=3;
+	DAYSUPP=1;
+run; 
+
+DATA pres_record;
+	SET pres_record LMWH_SVC_list;
+	KEEP enrolid SVCDATE DAYSUPP index_date;
+RUN;
+*Assessment of persistence;
+DATA Drug_persistence;
+	SET pres_record;
+	KEEP enrolid SVCDATE DAYSUPP index_date;
+	IF SVCDATE=. THEN DELETE;
+RUN;
+
+*Assessment of drug persistence;
+proc sort data=Drug_persistence;by enrolid SVCDATE;run;
+data pers;
+ set Drug_persistence;
+ by enrolid SVCDATE;
+ lstsply=SVCDATE+DAYSUPP;
+ gap=SVCDATE-lag(lstsply);
+ if first.enrolid=1 then epsd=1;
+ else if gap>=60 then epsd+1;/*to change the gap days allowed*/
+ format lstsply mmddyy10.;
+run;
+proc sql;
+	create table gap as
+	select distinct enrolid, 
+		max(epsd) as epsd
+ 	from pers
+ 	group by enrolid;
+quit;
+proc freq data=gap;tables epsd;run;
+proc sql;
+ create table persis as
+ select distinct enrolid, 
+	max(lstsply) as lstsply format mmddyy10.,
+ 	max(lstsply)-index_date as days_therapy /*days to discountinuation*/
+ from pers  where epsd=1
+ group by enrolid;
+quit;
+proc freq data=persis;tables days_therapy;run; 
+PROC sql;
+	CREATE table id_list4 as
+	SELECT a.*,
+		b.lstsply as LMWH_lstsply,
+		b.days_therapy as LMWH_days_therapy
+	FROM id_list3 a
+	LEFT JOIN persis b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA Id_list_persistence_added;
+	SET id_list4;
+	IF Prophy_type=1 THEN AC_days_therapy=Antiplatelet_all_days_therapy; 
+	IF Prophy_type=1 THEN AC_lstsply=Antiplatelet_all_lstsply; 
+	IF Prophy_type=2 THEN AC_days_therapy=LMWH_days_therapy; 
+	IF Prophy_type=2 THEN AC_lstsply=LMWH_lstsply; 
+	IF Prophy_type=3 THEN AC_days_therapy=Warfarin_days_therapy; 
+	IF Prophy_type=3 THEN AC_lstsply=Warfarin_lstsply; 
+	IF Prophy_type=4 THEN AC_days_therapy=DOACs_days_therapy; 
+	IF Prophy_type=4 THEN AC_lstsply=DOACs_lstsply; 
+	IF Prophy_type=. THEN Prophy_type=0;
+	IF death_date=0 THEN death_date=.;
+	AC_lstsply_adj=min(index_date+180, VTE_post_date, AC_lstsply, death_date, 20361);
+	AC_days_therapy_adj=AC_lstsply_adj-Antithrombotic_post_date;
+	persistence_cat=0;
+	IF AC_lstsply_adj=index_date+180 THEN persistence_cat=1;
+	lag_AC=Antithrombotic_post_date-index_date;
+RUN;
+
+DATA temp1;
+	SET Id_list_persistence_added;
+	IF death_date=0 THEN death_date=.;
+	AC_lstsply_adj=min(index_date+180, VTE_post_date, AC_lstsply, death_date, 20361);
+	AC_days_therapy_adj=AC_lstsply_adj-Antithrombotic_post_date;
+	persistence_cat=0;
+	IF AC_lstsply_adj=index_date+180 THEN persistence_cat=1;
+	lag_AC=Antithrombotic_post_date-index_date;
+RUN;
+
+proc anova data = temp1;
+class Prophy_type;
+model lag_AC = Prophy_type;
+run;
+
+PROC NPAR1WAY data=temp1 wilcoxon;
+Class Prophy_type;
+Var lag_AC;
+Run;
+
+PROC MEANS DATA=temp1 MEDIAN P25 P75;
+class Prophy_type;
+VAR lag_AC;
+RUN;
+
+PROC FREQ DATA=temp1;
+TABLE persistence_cat*Prophy_type/nocol norow nopercent chisq;
+RUN;
+
+*add adherence;
+*Warfarin;
+DATA Warfarin_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Warfarin');
+RUN;
+PROC sql;
+	CREATE table pres_record as
+	SELECT a.*
+	FROM drug_pres_follow_6m a
+	INNER JOIN Warfarin_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+proc sort data=pres_record;
+by enrolid SVCDATE;
+run;
+proc transpose data = pres_record out=fill_dates (drop=_name_) prefix = SVCDATE;
+by enrolid;
+var SVCDATE;
+run;
+proc transpose data = pres_record out=days_supply (drop=_name_) prefix = DAYSUPP;
+by enrolid;
+var DAYSUPP;
+run;
+data both;
+merge fill_dates days_supply;
+by enrolid;
+run; 
+
+PROC sql;
+	CREATE table both as
+	SELECT a.*,
+			b.index_date as index_date,
+			b.Antithrombotic_post_date as start_dt,
+			b.AC_lstsply_adj as end_dt
+	FROM both a
+	INNER JOIN Id_list_persistence_added b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+data pdc;
+set both;
+array daydummy(180) day1-day180;
+array filldates(*) SVCDATE1 - SVCDATE100;
+array days_supply(*) DAYSUPP1-DAYSUPP100;
+ do ii=1 to 180; daydummy(ii)=0;end;
+ do ii=1 to 180;
+ do i = 1 to dim(filldates) while (filldates(i) ne .);
+ if (filldates(i)<= index_date + ii -1 <= filldates(i)+days_supply(i)-1)
+ then daydummy(ii)=1;
+ if index_date + ii -1>end_dt then daydummy(ii)=0;
+ if index_date + ii -1>index_date+180 then daydummy(ii)=0;
+ end;
+ end;
+drop i ii;
+days=min(end_dt-start_dt+1, 180);
+dayscovered=sum(of day1 - day180);
+p_dayscovered=dayscovered/days;
+run;
+proc univariate data=pdc;
+var p_dayscovered;
+histogram;
+run;
+PROC sql;
+	CREATE table id_list5 as
+	SELECT a.*,
+		b.p_dayscovered as pdc_warfarin
+	FROM Id_list_persistence_added a
+	LEFT JOIN pdc b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*DOACs;
+DATA DOACs_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Dabigatran') OR (GENNME contains 'Rivaroxaban') OR (GENNME contains 'Apixaban');
+RUN;
+
+PROC sql;
+	CREATE table pres_record as
+	SELECT a.*
+	FROM drug_pres_follow_6m a
+	INNER JOIN DOACs_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+proc sort data=pres_record;
+by enrolid SVCDATE;
+run;
+proc transpose data = pres_record out=fill_dates (drop=_name_) prefix = SVCDATE;
+by enrolid;
+var SVCDATE;
+run;
+proc transpose data = pres_record out=days_supply (drop=_name_) prefix = DAYSUPP;
+by enrolid;
+var DAYSUPP;
+run;
+data both;
+merge fill_dates days_supply;
+by enrolid;
+run; 
+
+PROC sql;
+	CREATE table both as
+	SELECT a.*,
+			b.index_date as index_date,
+			b.Antithrombotic_post_date as start_dt,
+			b.AC_lstsply_adj as end_dt
+	FROM both a
+	INNER JOIN Id_list_persistence_added b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+data pdc;
+set both;
+array daydummy(180) day1-day180;
+array filldates(*) SVCDATE1 - SVCDATE100;
+array days_supply(*) DAYSUPP1-DAYSUPP100;
+ do ii=1 to 180; daydummy(ii)=0;end;
+ do ii=1 to 180;
+ do i = 1 to dim(filldates) while (filldates(i) ne .);
+ if (filldates(i)<= index_date + ii -1 <= filldates(i)+days_supply(i)-1)
+ then daydummy(ii)=1;
+ if index_date + ii -1>end_dt then daydummy(ii)=0;
+ if index_date + ii -1>index_date+180 then daydummy(ii)=0;
+ end;
+ end;
+drop i ii;
+days=min(end_dt-start_dt+1, 180);
+dayscovered=sum(of day1 - day180);
+p_dayscovered=dayscovered/days;
+run;
+proc univariate data=pdc;
+var p_dayscovered;
+histogram;
+run;
+PROC sql;
+	CREATE table id_list6 as
+	SELECT a.*,
+		b.p_dayscovered as pdc_DOACs
+	FROM id_list5 a
+	LEFT JOIN pdc b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*antiplatelet;
+DATA Antiplatelet_all_NDC;
+	SET redbook;
+	WHERE 	((GENNME contains 'Aspirin') OR 
+			(GENNME contains 'Dipyridamole') OR 
+			(GENNME contains 'Ticlopidine') OR 
+			(GENNME contains 'Clopidogrel'))AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+RUN;
+PROC sql;
+	CREATE table pres_record as
+	SELECT a.*
+	FROM drug_pres_follow_6m a
+	INNER JOIN Antiplatelet_all_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+proc sort data=pres_record;
+by enrolid SVCDATE;
+run;
+proc transpose data = pres_record out=fill_dates (drop=_name_) prefix = SVCDATE;
+by enrolid;
+var SVCDATE;
+run;
+proc transpose data = pres_record out=days_supply (drop=_name_) prefix = DAYSUPP;
+by enrolid;
+var DAYSUPP;
+run;
+data both;
+merge fill_dates days_supply;
+by enrolid;
+run; 
+
+PROC sql;
+	CREATE table both as
+	SELECT a.*,
+			b.index_date as index_date,
+			b.Antithrombotic_post_date as start_dt,
+			b.AC_lstsply_adj as end_dt
+	FROM both a
+	INNER JOIN Id_list_persistence_added b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+data pdc;
+set both;
+array daydummy(180) day1-day180;
+array filldates(*) SVCDATE1 - SVCDATE100;
+array days_supply(*) DAYSUPP1-DAYSUPP100;
+ do ii=1 to 180; daydummy(ii)=0;end;
+ do ii=1 to 180;
+ do i = 1 to dim(filldates) while (filldates(i) ne .);
+ if (filldates(i)<= index_date + ii -1 <= filldates(i)+days_supply(i)-1)
+ then daydummy(ii)=1;
+ if index_date + ii -1>end_dt then daydummy(ii)=0;
+ if index_date + ii -1>index_date+180 then daydummy(ii)=0;
+ end;
+ end;
+drop i ii;
+days=min(end_dt-start_dt+1, 180);
+dayscovered=sum(of day1 - day180);
+p_dayscovered=dayscovered/days;
+run;
+proc univariate data=pdc;
+var p_dayscovered;
+histogram;
+run;
+PROC sql;
+	CREATE table id_list7 as
+	SELECT a.*,
+		b.p_dayscovered as pdc_antiplatelet
+	FROM id_list6 a
+	LEFT JOIN pdc b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*LMWH;
+DATA LMWH_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Dalteparin') OR (GENNME contains 'Enoxaparin') OR (GENNME contains 'Tinzaparin');
+RUN;
+
+PROC sql;
+	CREATE table pres_record as
+	SELECT a.*
+	FROM drug_pres_follow_6m a
+	INNER JOIN LMWH_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+DATA LMWH_SVC_list;
+	set all_record_follow_6m;
+	case=0;
+	array proc{*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J1644') then case=1;*case='UFH';
+	end;
+	array proca{*} proc1-proc15;
+		do i = 1 to dim(proca);
+		if proc{i} in: ('J1652') then case=2;*case='Fondaparinux';
+	end;
+	array procb{*} proc1-proc15;
+		do i = 1 to dim(procb);
+		if proc{i} in: ('J1645','J1650','J1655') then case=3;*case='LMWH';
+	end;
+	array procc{*} proc1-proc15;
+		do i = 1 to dim(procc);
+		if proc{i} in: ('C9121','J0883','J0884','J0583','J1945') then case=4;*case='DTI_inject';
+	end;
+	if case=3;
+	DAYSUPP=1;
+run; 
+
+DATA pres_record;
+	SET pres_record LMWH_SVC_list;
+	KEEP enrolid SVCDATE DAYSUPP index_date;
+RUN;
+
+proc sort data=pres_record;
+by enrolid SVCDATE;
+run;
+proc transpose data = pres_record out=fill_dates (drop=_name_) prefix = SVCDATE;
+by enrolid;
+var SVCDATE;
+run;
+proc transpose data = pres_record out=days_supply (drop=_name_) prefix = DAYSUPP;
+by enrolid;
+var DAYSUPP;
+run;
+data both;
+merge fill_dates days_supply;
+by enrolid;
+run; 
+
+PROC sql;
+	CREATE table both as
+	SELECT a.*,
+			b.index_date as index_date,
+			b.Antithrombotic_post_date as start_dt,
+			b.AC_lstsply_adj as end_dt
+	FROM both a
+	INNER JOIN Id_list_persistence_added b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+data pdc;
+set both;
+array daydummy(180) day1-day180;
+array filldates(*) SVCDATE1 - SVCDATE100;
+array days_supply(*) DAYSUPP1-DAYSUPP100;
+ do ii=1 to 180; daydummy(ii)=0;end;
+ do ii=1 to 180;
+ do i = 1 to dim(filldates) while (filldates(i) ne .);
+ if (filldates(i)<= index_date + ii -1 <= filldates(i)+days_supply(i)-1)
+ then daydummy(ii)=1;
+ if index_date + ii -1>end_dt then daydummy(ii)=0;
+ if index_date + ii -1>index_date+180 then daydummy(ii)=0;
+ end;
+ end;
+drop i ii;
+days=min(end_dt-start_dt+1, 180);
+dayscovered=sum(of day1 - day180);
+p_dayscovered=dayscovered/days;
+run;
+proc univariate data=pdc;
+var p_dayscovered;
+histogram;
+run;
+PROC sql;
+	CREATE table id_list8 as
+	SELECT a.*,
+		b.p_dayscovered as pdc_LMWH
+	FROM id_list7 a
+	LEFT JOIN pdc b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*Assessment of adherence;
+DATA id_list_adherence_add;
+	SET id_list8;
+	IF Prophy_type=1 THEN AC_pdc=pdc_antiplatelet; 
+	IF Prophy_type=2 THEN AC_pdc=pdc_LMWH; 
+	IF Prophy_type=3 THEN AC_pdc=pdc_warfarin; 
+	IF Prophy_type=4 THEN AC_pdc=pdc_DOACs; 
+	pdc_cat=0;
+	IF AC_pdc>=0.80 THEN pdc_cat=1;
+	pre_DOACs=0;
+	IF Dabigatran_post=1 OR Rivaroxaban_post=1 OR Apixaban_post=1 THEN pre_DOACs=1;
+	chemotype=0;
+	IF IMiDs_L1=0 AND Bortezomib_L1=0 THEN chemotype=1;
+RUN;
+
+DATA temp1;
+	SET id_list_adherence_add;
+	IF Prophy_type=0 THEN DELETE;
+RUN;
+
+proc anova data = temp1;
+class Prophy_type;
+model AC_pdc = Prophy_type;
+run;
+
+PROC NPAR1WAY data=temp1 wilcoxon;
+Class Prophy_type;
+Var AC_pdc;
+Run;
+MEDIAN P25 P75
+PROC MEANS DATA=temp1 ;
+class Prophy_type;
+VAR AC_pdc;
+RUN;
+
+PROC FREQ DATA=id_list_adherence_add;
+TABLE chemotype*Prophy_type/nocol norow nopercent chisq;
+RUN;
+
+DATA cox_model;
+	SET id_list_adherence_add;
+	fstat=0;
+	event_date=min(index_date+180, DTEND, death_date,VTE_post_date,20361);
+	IF (VTE_post_date=event_date AND VTE_post_date-index_date<=180) THEN fstat=1;
+	lenfol=event_date-index_date;
+	   AC_time=Antithrombotic_post_date;
+	   IF AC_prophylaxis=0 THEN AC_time=.;
+   			IF ( AC_prophylaxis ^= 0) then do;
+      			WaitTime= AC_time - index_date;
+			END;
+	IF Prophy_type=2 THEN DELETE;
+	IF Prophy_type=3 THEN DELETE;
+	IF Prophy_type=1 THEN DELETE;
+	IF IMiDs_L1=1;
+RUN;
+
+proc phreg data= cox_model;
+   model lenfol*fstat(0)= XStatus ;
+   if (WaitTime = . or lenfol < WaitTime) then XStatus=0.;
+   else  XStatus= 1.0;
+run;
+
+proc phreg data= cox_model;
+	class sex CCI_NCI_cat (ref="0") RF_cat (ref="0");
+   model lenfol*fstat(0)= XStatus age sex CCI_NCI_cat IMiDs_L1 RF_cat;
+   if (WaitTime = . or lenfol < WaitTime) then XStatus=0.;
+   else  XStatus= 1.0;
+run;
+
+proc phreg data= temp;
+	class Prophy_type;
+   model lenfol*fstat(0)= XStatus XProphy_type;
+  	if (WaitTime = . or lenfol < WaitTime) then do;
+		XStatus=0.;
+		XProphy_type=0.;
+	end;
+   else do;
+		XStatus= 1.0;
+		XProphy_type=Prophy_type;
+	end;
+run;
