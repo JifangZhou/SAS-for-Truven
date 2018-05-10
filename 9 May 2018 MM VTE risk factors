@@ -1,0 +1,465 @@
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\MM and VTE\Rawdata';
+
+DATA id_list;
+	SET myfile.analytical_cohort_CCI;RUN;
+DATA all_pres_baseline;
+set myfile.all_pres_baseline;
+RUN;
+DATA drug_pres_follow;
+set myfile.all_pres_follow;
+DATA all_record_base;
+set myfile.all_record_base;
+DATA all_record_base_6w;
+set myfile.all_record_base_6w;
+DATA all_record_follow;
+set myfile.all_record_follow;
+DATA all_record_follow_6m;
+set myfile.all_record_follow;
+IF (index_date<=svcdate<=index_date+180) OR (index_date<=disdate<=index_date+180);
+RUN;
+LIBNAME Redbook 'C:\Users\jzhou86\Documents\SCD Project';
+DATA redbook;
+	SET Redbook.redbook;
+RUN;
+
+*Assessment of VTE before and post treatment initiation;
+*assessment of VTE occurrence;
+DATA dvt_list;
+set all_record_base;
+array icd {*} dx1-dx2;
+do i = 1 to dim(icd);
+if icd{i} in: ('6713', '6714', '6715', '6719', '45111', '45119', '4512', '45181', '4532', '4539') then case = 1;
+end;
+if case = 1;
+run; 
+DATA pe_list;
+set all_record_base;
+array icd {*} dx1-dx2;
+do i = 1 to dim(icd);
+if icd{i} in: ('6732', '6738', '41511', '41519') then case = 1;
+end;
+if case = 1;
+run; 
+PROC sql;
+	CREATE table dvt_pre_list as
+	SELECT min(enrolid) as enrolid,
+		1 as dvt_pre
+	FROM dvt_list a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table pe_pre_list as
+	SELECT min(enrolid) as enrolid,
+		1 as pe_pre
+	FROM pe_list a
+	GROUP BY enrolid;
+QUIT;
+*Assessment of VTE post-treatment 6 months;
+DATA dvt_list;
+set all_record_follow_6m;
+array icd {*} dx1-dx2;
+do i = 1 to dim(icd);
+if icd{i} in: ('6713', '6714', '6715', '6719', '45111', '45119', '4512', '45181', '4532', '4539') then case = 1;
+end;
+if case = 1;
+run; 
+DATA pe_list;
+set all_record_follow_6m;
+array icd {*} dx1-dx2;
+do i = 1 to dim(icd);
+if icd{i} in: ('6732', '6738', '41511', '41519') then case = 1;
+end;
+if case = 1;
+run; 
+PROC sql;
+	CREATE table dvt_post_list as
+	SELECT min(enrolid) as enrolid,
+		1 as dvt_post,
+		min(SVCDATE) as dvt_post_opt_date,
+		min(DISDATE) as dvt_post_ipt_date
+	FROM dvt_list a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table pe_post_list as
+	SELECT min(enrolid) as enrolid,
+		1 as pe_post,
+		min(SVCDATE) as pe_post_opt_date,
+		min(DISDATE) as pe_post_ipt_date
+	FROM pe_list a
+	GROUP BY enrolid;
+QUIT;
+*Merge back VTE data into the master files;
+PROC sql;
+	CREATE table id_list4 as
+	SELECT a.*,
+		b.*
+	FROM id_list3 a
+	LEFT JOIN pe_post_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA myfile.id_list_VTE_add;
+	SET id_list4;
+RUN;
+
+*Add baseline risk factors;
+*Clotting disorders;
+DATA Clotting_disorders_list;
+set all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('286', '287','2898') then case = 1;
+end;
+if case = 1;
+run; 
+PROC sql;
+	CREATE table Clotting_disorders_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Clotting_disorders
+	FROM Clotting_disorders_list a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list5 as
+	SELECT a.*,
+		b.*
+	FROM id_list4 a
+	LEFT JOIN Clotting_disorders_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*CHF;
+DATA CHF_list;
+set all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('39891','4254','4255','4257','4258','4259','428') then case = 1;
+end;
+if case = 1;
+run; 
+PROC sql;
+	CREATE table CHF_list as
+	SELECT min(enrolid) as enrolid,
+		1 as CHF
+	FROM CHF_list a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list6 as
+	SELECT a.*,
+		b.*
+	FROM id_list5 a
+	LEFT JOIN CHF_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*AF;
+DATA AF_list;
+set all_record_base;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('42731') then case = 1;
+end;
+if case = 1;
+run; 
+PROC sql;
+	CREATE table AF_list as
+	SELECT min(enrolid) as enrolid,
+		1 as AF
+	FROM AF_list a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list7 as
+	SELECT a.*,
+		b.*
+	FROM id_list6 a
+	LEFT JOIN AF_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*CKD;
+DATA CKD_list;
+set all_record_base;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('40301','40311','40391','40402','40403','40412','40413','40492','40493',
+                       '582','583','585','586','588','V420','V451','V56') then case = 1;
+		end;
+	array proc {*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('3927','3942','3995','5498','5569') then case = 1;
+		end;
+if case = 1;
+run; 
+PROC sql;
+	CREATE table CKD_list as
+	SELECT min(enrolid) as enrolid,
+		1 as CKD
+	FROM CKD_list a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list8 as
+	SELECT a.*,
+		b.*
+	FROM id_list7 a
+	LEFT JOIN CKD_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*CLD;
+DATA CLD_list;
+set all_record_base;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('07022','07023','07044','V427',
+			'4560', '4561', '4562',
+			'5722','5723','5724','5725','5726','5727','5728') then case = 1;
+		end;
+	array proc {*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('391 ','4291','505') then case = 1;
+		end;
+if case = 1;
+run; 
+PROC sql;
+	CREATE table CLD_list as
+	SELECT min(enrolid) as enrolid,
+		1 as CLD
+	FROM CLD_list a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list9 as
+	SELECT a.*,
+		b.*
+	FROM id_list8 a
+	LEFT JOIN CLD_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*Diabetes;
+DATA Diabetes_list;
+set all_record_base;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('250') then case = 1;
+		end;
+if case = 1;
+run; 
+PROC sql;
+	CREATE table Diabetes_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Diabetes
+	FROM Diabetes_list a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list10 as
+	SELECT a.*,
+		b.*
+	FROM id_list9 a
+	LEFT JOIN Diabetes_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*Infection_6w;
+DATA Infection_6w_list;
+set all_record_base_6w;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('00','01','02','03','04','05','06','07','08','09','10','11','12','13') then case = 1;
+		end;
+if case = 1;
+run; 
+PROC sql;
+	CREATE table Infection_6w_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Infection_6w
+	FROM Infection_6w_list a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list11 as
+	SELECT a.*,
+		b.*
+	FROM id_list10 a
+	LEFT JOIN Infection_6w_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*Surgery_6w;
+DATA Surgery_6w_list;
+set all_record_base_6w;
+	array proc {*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ("35081","35521", "35533", "35548", "35549", "35551", "35556", "35558", 
+"35565", "35566", "35571", "35582", "35583", "35585", "35587", "35621", "35623", "35646", 
+"35651", "35654", "35656", "35661", "35665", "35666", "35671", "37799","35301", "35390",
+"44140", "44141", "44143", "44144", "44145", "44146", "44147", "44150", "44151", "44152",
+"44153", "44155", "44156", "44160", "44204", "47600", "47605", "47610", "47562", "47563",
+"47564", "49310", "49311", "56340", "56341", "56342", "32440", "32442", "32445", "32480", 
+"32482", "32484", "32485", "32486", "32488", "32490", "32500", "32501", "27130", "27131", "27132", "27134") then case = 1;
+		end;
+if case = 1;
+run; 
+PROC sql;
+	CREATE table Surgery_6w_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Surgery_6w
+	FROM Surgery_6w_list a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list12 as
+	SELECT a.*,
+		b.*
+	FROM id_list11 a
+	LEFT JOIN Surgery_6w_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*Hip_6w;
+DATA Hip_6w_list;
+set all_record_base_6w;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('73314', '73315', '820','821', 'M84453', 'M84459', 'M84750', 'S72') then case=1;
+		end;
+		if case=1;
+if case = 1;
+run; 
+PROC sql;
+	CREATE table Hip_6w_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Hip_6w
+	FROM Hip_6w_list a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list13 as
+	SELECT a.*,
+		b.*
+	FROM id_list12 a
+	LEFT JOIN Hip_6w_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*Trauma_6w;
+DATA Trauma_6w_list;
+set all_record_base_6w;
+	array proc {*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('62000', '62005','62010') then case = 1;
+	end;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('80','81','82','860','861','862','863','864','865','866','867','868',
+						'900','901','902','903','904',
+						'925','926','927','928','929','958', '959',
+						'E805', 'E870', 'E881', 'E882', 'E883', 'E922',
+						'E923', 'E955', 'E960', 'E965', 'E970', 'E985',
+						'S', 'T07', 'T14', 'V81', 'W10','W11','W12','W13','W14','W15', 
+						'W32','W33','W34','W35','W36','W37','W38','W39',
+						'X93','X94','X95','X96',
+						'Y22','Y23','Y24','Y25') then case=1;
+	end;
+if case = 1;
+run; 
+PROC sql;
+	CREATE table Trauma_6w_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Trauma_6w
+	FROM Trauma_6w_list a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list14 as
+	SELECT a.*,
+		b.*
+	FROM id_list13 a
+	LEFT JOIN Trauma_6w_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*Central_catheter_6w;
+DATA Central_catheter_6w_list;
+set all_record_base_6w;
+array proc {*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('3891', '3893', '3895', '3897', '8607',
+						'36000', '36010', '36011', '36012', '36481','36488', '36489', '36490', '36491', '36533') then case = 1;
+	end;
+	array icd{*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('99931','99932','99933','T80211','T80212','T80219') then case=1;
+	end;
+if case = 1;
+run; 
+PROC sql;
+	CREATE table Central_catheter_6w_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Central_catheter_6w
+	FROM Central_catheter_6w_list a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list15 as
+	SELECT a.*,
+		b.*
+	FROM id_list14 a
+	LEFT JOIN Central_catheter_6w_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*recent admission;
+DATA ADM_6w_list;
+set all_record_base_6w;
+IF ADMDATE=. THEN DELETE;
+RUN;
+
+PROC sql;
+	CREATE table ADM_6w_list as
+	SELECT min(enrolid) as enrolid,
+		1 as ADM_6w
+	FROM ADM_6w_list
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list16 as
+	SELECT a.*,
+		b.*
+	FROM id_list15 a
+	LEFT JOIN ADM_6w_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA myfile.id_list_baseline_added;
+	SET id_list16;
+RUN;
+
+DATA temp;
+	SET id_list16;
+   array change _numeric_;
+        do over change;
+            if change=. then change=0;
+        end;
+		VTE_post=0;
+	IF dvt_post=1 OR pe_post=1 THEN VTE_post=1;
+		VTE_pre=0;
+	IF dvt_pre=1 OR pe_pre=1 THEN VTE_pre=1;
+ run ;
+
+PROC FREQ DATA=temp;
+ 	TABLE adm_6w*IMiDs_L1 /nocol norow nopercent chisq;
+RUN;
+	MEDIAN P25 P75
+PROC MEANS DATA=temp ;
+	CLASS IMiDs_L1;
+	VAR age;
+RUN;
+
+PROC TTEST DATA=temp ;
+	CLASS IMiDs_L1;
+	VAR age;
+RUN;
