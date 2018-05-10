@@ -1,0 +1,658 @@
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\MM and VTE\Rawdata';
+
+DATA id_list;
+	SET Myfile.mm_list_final_adjust;
+DATA all_pres_baseline;
+set myfile.all_pres_baseline;
+RUN;
+DATA drug_pres_follow;
+set myfile.all_pres_follow;
+DATA all_record_base;
+set myfile.all_record_base;
+DATA all_record_base_6w;
+set myfile.all_record_base_6w;
+DATA all_record_follow;
+set myfile.all_record_follow;
+RUN;
+LIBNAME Redbook 'C:\Users\jzhou86\Documents\SCD Project';
+DATA redbook;
+	SET Redbook.redbook;
+RUN;
+*identify date of autologous HSCT;
+DATA HSCT_list;
+set all_record_follow;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('4101', '4104', '4107', '4109', '38241') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC sql;
+	CREATE table HSCT_id_list as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) as HSCT_date,
+		1 as HSCT
+	FROM HSCT_list a
+	GROUP BY enrolid;
+QUIT;
+*NOTE: Table WORK.HSCT_ID_LIST created, with 2121 rows and 3 columns.;
+*Merge autologous HSCT patients into the analytical file;
+PROC sql;
+	CREATE table id_list1 as
+	SELECT 	a.*,
+			b.*
+	FROM	id_list a 
+	LEFT JOIN HSCT_id_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA temp;
+	SET id_list1;
+	lag=HSCT_date-index_date;
+	IF HSCT_DATE ^=.;
+RUN;
+
+PROC MEANS DATA=temp MEDIAN P25 P75;
+VAR lag;
+RUN;
+*Assessment of lines of therapy;
+DATA id_list2;
+	SET id_list1;
+	IF imids_date=index_date THEN L1_type="imids";
+	ELSE IF PI_date=index_date THEN L1_type="PI";
+	ELSE L1_type="old_drugs";
+RUN;
+PROC FREQ DATA=id_list2;
+TABLE L1_type;
+RUN;
+*Determine the duration of the first line treatment;
+*select all IMiDs prescriptions;
+DATA IMIDs_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Lenalidomide') OR (GENNME contains 'Pomalidomide') OR (GENNME contains 'Thalidomide');
+	FLAG = 	'IMIDS';
+RUN;
+PROC sql;
+	CREATE table imids_pres as
+	SELECT a.*
+	FROM drug_pres_follow a
+	INNER JOIN IMIDs_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+*persistence assessment with 90-day gap allowed for the study;
+DATA pres_record;
+	SET imids_pres;
+RUN;
+
+DATA pres_record;
+	SET pres_record;
+	KEEP enrolid SVCDATE DAYSUPP index_date;
+RUN;
+*Assessment of persistence;
+DATA Drug_persistence;
+	SET pres_record;
+	KEEP enrolid SVCDATE DAYSUPP index_date;
+	IF SVCDATE=. THEN DELETE;
+RUN;
+
+*Assessment of drug persistence;
+proc sort data=Drug_persistence;by enrolid SVCDATE;run;
+data pers;
+ set Drug_persistence;
+ by enrolid SVCDATE;
+ lstsply=SVCDATE+DAYSUPP;
+ gap=SVCDATE-lag(lstsply);
+ if first.enrolid=1 then epsd=1;
+ else if gap>=90 then epsd+1;/*to change the gap days allowed*/
+ format lstsply mmddyy10.;
+run;
+proc sql;
+	create table gap as
+	select distinct enrolid, 
+		max(epsd) as epsd
+ 	from pers
+ 	group by enrolid;
+quit;
+proc freq data=gap;tables epsd;run;
+proc sql;
+ create table persis as
+ select distinct enrolid, 
+	max(lstsply) as lstsply format mmddyy10.,
+ 	max(lstsply)-index_date as days_therapy /*days to discountinuation*/
+ from pers  where epsd=1
+ group by enrolid;
+quit;
+proc freq data=persis;tables days_therapy;run; 
+DATA myfile.persis_PIs;
+	SET persis;
+RUN;
+*Assessement of PIs persistence;
+DATA PI_list;
+set all_record_follow;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('J9041','J9047') then case = 1;
+end;
+if case = 1;
+run; 
+DATA pres_record;
+	SET PI_list;
+	DAYSUPP=1;
+RUN;
+
+DATA pres_record;
+	SET pres_record;
+	KEEP enrolid SVCDATE DAYSUPP index_date;
+RUN;
+
+*Assessment of old drugs;
+DATA old_list;
+set all_record_follow;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('J9017','J9033', 'J9034','J0594','J9060','J8530', 'J9070','J9000','J8560', 'J9181','J8600', 'J9245','J9310','J9370', 'J9371') then case = 1;
+end;
+if case = 1;
+run; 
+DATA pres_record;
+	SET old_list;
+	DAYSUPP=1;
+RUN;
+
+DATA pres_record;
+	SET pres_record;
+	KEEP enrolid SVCDATE DAYSUPP index_date;
+RUN;
+*Merge back the persistence data;
+PROC sql;
+	CREATE table id_list3 as
+	SELECT a.*,
+			b.lstsply as lstsply_imids,
+			b.days_therapy as days_therapy_imids
+	FROM id_list2 a
+	LEFT JOIN myfile.persis_imids b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table id_list4 as
+	SELECT a.*,
+			b.lstsply as lstsply_pis,
+			b.days_therapy as days_therapy_pis
+	FROM id_list3 a
+	LEFT JOIN myfile.persis_pis b
+	ON a.enrolid=b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list5 as
+	SELECT a.*,
+			b.lstsply as lstsply_old_drugs,
+			b.days_therapy as days_therapy_old_drugs
+	FROM id_list4 a
+	LEFT JOIN myfile.persis_old_drugs b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA myfile.id_list_Line1_dates;
+	SET id_list5;
+	IF L1_type="imids" THEN L1_end=lstsply_imids;
+	IF L1_type="PI" THEN L1_end=lstsply_pis;
+	IF L1_type="old_d" THEN L1_end=lstsply_old_drugs;
+	IF L1_type="imids" THEN L1_duration=days_therapy_imids;
+	IF L1_type="PI" THEN L1_duration=days_therapy_pis;
+	IF L1_type="old_d" THEN L1_duration=days_therapy_old_drugs;
+	IF L1_end=. THEN L1_end=index_date;
+	IF L1_end=. THEN L1_duration=1;
+RUN;
+
+*extract service records over the 1st line treatment period;
+PROC sql;
+	CREATE table all_record_L1 as
+	SELECT a.*,
+		b.L1_end as L1_end
+	FROM all_record_follow a
+	INNER JOIN myfile.id_list_Line1_dates b
+	ON a.enrolid = b.enrolid;
+QUIT;
+* extraction of first line services variables;
+DATA all_record_L1;
+set all_record_L1;
+if (index_date<=svcdate<=L1_end) OR (index_date<=disdate<=L1_end);
+RUN;
+
+*extract prescription records over the 1st line treatment period;
+PROC sql;
+	CREATE table drug_pres_L1 as
+	SELECT a.*,
+		b.L1_end as L1_end
+	FROM drug_pres_follow a
+	INNER JOIN myfile.id_list_Line1_dates b
+	ON a.enrolid = b.enrolid;
+QUIT;
+* extraction of first line services variables;
+DATA drug_pres_L1;
+set drug_pres_L1;
+if index_date<=svcdate<=L1_end;
+RUN;
+
+*Assessment of first line medication utilization;
+*Melphalan;
+DATA data_list;
+set all_record_L1;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('J8600', 'J9245') then case = 1;
+end;
+if case = 1;
+run; 
+* get the id_lists;
+PROC sql;
+	CREATE table Melphalan_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Melphalan_L1
+	FROM data_list a
+	GROUP BY enrolid;
+QUIT;
+*Merge back the id_list;
+PROC sql;
+	CREATE table id_list1 as
+	SELECT a.*,
+			b.*
+	FROM myfile.id_list_Line1_dates a
+	LEFT JOIN Melphalan_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*Bortezomib;
+DATA data_list;
+set all_record_L1;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('J9041') then case = 1;
+end;
+if case = 1;
+run; 
+* get the id_lists;
+PROC sql;
+	CREATE table Bortezomib_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Bortezomib_L1
+	FROM data_list a
+	GROUP BY enrolid;
+QUIT;
+*Merge back the id_list;
+PROC sql;
+	CREATE table id_list2 as
+	SELECT a.*,
+			b.*
+	FROM id_list1 a
+	LEFT JOIN Bortezomib_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*Bendamustine;
+DATA data_list;
+set all_record_L1;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('J9033', 'J9034') then case = 1;
+end;
+if case = 1;
+run; 
+* get the id_lists;
+PROC sql;
+	CREATE table Bendamustine_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Bendamustine_L1
+	FROM data_list a
+	GROUP BY enrolid;
+QUIT;
+*Merge back the id_list;
+PROC sql;
+	CREATE table id_list3 as
+	SELECT a.*,
+			b.*
+	FROM id_list2 a
+	LEFT JOIN Bendamustine_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*Cyclophosphamide;
+DATA data_list;
+set all_record_L1;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('J8530', 'J9070') then case = 1;
+end;
+if case = 1;
+run; 
+* get the id_lists;
+PROC sql;
+	CREATE table Cyclophosphamide_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Cyclophosphamide_L1
+	FROM data_list a
+	GROUP BY enrolid;
+QUIT;
+*Merge back the id_list;
+PROC sql;
+	CREATE table id_list4 as
+	SELECT a.*,
+			b.*
+	FROM id_list3 a
+	LEFT JOIN Cyclophosphamide_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*Cisplatin;
+DATA data_list;
+set all_record_L1;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('J9060') then case = 1;
+end;
+if case = 1;
+run; 
+* get the id_lists;
+PROC sql;
+	CREATE table Cisplatin_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Cisplatin_L1
+	FROM data_list a
+	GROUP BY enrolid;
+QUIT;
+*Merge back the id_list;
+PROC sql;
+	CREATE table id_list5 as
+	SELECT a.*,
+			b.*
+	FROM id_list4 a
+	LEFT JOIN Cisplatin_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*Doxorubicin;
+DATA data_list;
+set all_record_L1;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('J9000') then case = 1;
+end;
+if case = 1;
+run; 
+* get the id_lists;
+PROC sql;
+	CREATE table Doxorubicin_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Doxorubicin_L1
+	FROM data_list a
+	GROUP BY enrolid;
+QUIT;
+*Merge back the id_list;
+PROC sql;
+	CREATE table id_list6 as
+	SELECT a.*,
+			b.*
+	FROM id_list5 a
+	LEFT JOIN Doxorubicin_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*Etoposide;
+DATA data_list;
+set all_record_L1;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('J8560', 'J9181') then case = 1;
+end;
+if case = 1;
+run; 
+* get the id_lists;
+PROC sql;
+	CREATE table Etoposide_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Etoposide_L1
+	FROM data_list a
+	GROUP BY enrolid;
+QUIT;
+*Merge back the id_list;
+PROC sql;
+	CREATE table id_list7 as
+	SELECT a.*,
+			b.*
+	FROM id_list6 a
+	LEFT JOIN Etoposide_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*Add the oral medications over the first line therapy;
+*Thalidomide;
+DATA drug_NDC;
+	SET redbook;
+	WHERE 	GENNME contains 'Thalidomide';
+RUN;
+PROC sql;
+	CREATE table data_pres as
+	SELECT a.*
+	FROM drug_pres_L1 a
+	INNER JOIN drug_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table Thalidomide_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Thalidomide_L1
+	FROM data_pres a
+	GROUP BY enrolid;
+QUIT;
+*Merge back the id_list;
+PROC sql;
+	CREATE table id_list8 as
+	SELECT a.*,
+			b.*
+	FROM id_list7 a
+	LEFT JOIN Thalidomide_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*Lenalidomide;
+DATA drug_NDC;
+	SET redbook;
+	WHERE 	GENNME contains 'Lenalidomide';
+RUN;
+PROC sql;
+	CREATE table data_pres as
+	SELECT a.*
+	FROM drug_pres_L1 a
+	INNER JOIN drug_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table Lenalidomide_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Lenalidomide_L1
+	FROM data_pres a
+	GROUP BY enrolid;
+QUIT;
+*Merge back the id_list;
+PROC sql;
+	CREATE table id_list9 as
+	SELECT a.*,
+			b.*
+	FROM id_list8 a
+	LEFT JOIN Lenalidomide_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*Pomalidomide;
+DATA drug_NDC;
+	SET redbook;
+	WHERE 	GENNME contains 'Pomalidomide';
+RUN;
+PROC sql;
+	CREATE table data_pres as
+	SELECT a.*
+	FROM drug_pres_L1 a
+	INNER JOIN drug_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table Pomalidomide_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Pomalidomide_L1
+	FROM data_pres a
+	GROUP BY enrolid;
+QUIT;
+*Merge back the id_list;
+PROC sql;
+	CREATE table id_list10 as
+	SELECT a.*,
+			b.*
+	FROM id_list9 a
+	LEFT JOIN Pomalidomide_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*Prednisone;
+DATA drug_NDC;
+	SET redbook;
+	WHERE 	GENNME contains 'Prednisone';
+RUN;
+PROC sql;
+	CREATE table data_pres as
+	SELECT a.*
+	FROM drug_pres_L1 a
+	INNER JOIN drug_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table Prednisone_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Prednisone_L1
+	FROM data_pres a
+	GROUP BY enrolid;
+QUIT;
+*Merge back the id_list;
+PROC sql;
+	CREATE table id_list11 as
+	SELECT a.*,
+			b.*
+	FROM id_list10 a
+	LEFT JOIN Prednisone_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*Dexamethasone;
+DATA drug_NDC;
+	SET redbook;
+	WHERE 	GENNME contains 'Dexamethasone';
+RUN;
+PROC sql;
+	CREATE table data_pres as
+	SELECT a.*
+	FROM drug_pres_L1 a
+	INNER JOIN drug_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table Dexamethasone_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Dexamethasone_L1
+	FROM data_pres a
+	GROUP BY enrolid;
+QUIT;
+*Merge back the id_list;
+PROC sql;
+	CREATE table id_list12 as
+	SELECT a.*,
+			b.*
+	FROM id_list11 a
+	LEFT JOIN Dexamethasone_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*Determine the types of first line therapy;
+DATA myfile.id_L1_type_added;
+	SET id_list12;
+	IF Melphalan_L1=. THEN Melphalan_L1=0;
+	IF Prednisone_L1=. THEN Prednisone_L1=0;
+	IF Thalidomide_L1=. THEN Thalidomide_L1=0;
+	IF Bortezomib_L1=. THEN Bortezomib_L1=0;
+	IF Lenalidomide_L1=. THEN Lenalidomide_L1=0;
+	IF Pomalidomide_L1=. THEN Pomalidomide_L1=0;
+	IF Dexamethasone_L1=. THEN Dexamethasone_L1=0;
+	IF Bendamustine_L1=. THEN Bendamustine_L1=0;
+	IF Cyclophosphamide_L1=. THEN Cyclophosphamide_L1=0;
+	IF Cisplatin_L1=. THEN Cisplatin_L1=0;
+	IF Doxorubicin_L1=. THEN Doxorubicin_L1=0;
+	IF Etoposide_L1=. THEN Etoposide_L1=0;
+	IF (Melphalan_L1=1 AND Prednisone_L1=1) 									THEN L1_chemo_type=1;
+	IF (Melphalan_L1=1 AND Prednisone_L1=1 AND Thalidomide_L1=1) 				THEN L1_chemo_type=2;
+	IF (Bortezomib_L1=1 AND Melphalan_L1=1 AND Prednisone_L1=1) 				THEN L1_chemo_type=3;
+	IF (Lenalidomide_L1=1 AND Dexamethasone_L1=1) 								THEN L1_chemo_type=4;	
+	IF (Bortezomib_L1=1 AND Dexamethasone_L1=1 AND Bendamustine_L1=1)			THEN L1_chemo_type=5;
+	IF (Bortezomib_L1=1 AND Dexamethasone_L1=1 AND Cyclophosphamide_L1=1)		THEN L1_chemo_type=6;
+	IF (Bortezomib_L1=1 AND Thalidomide_L1=1 AND Dexamethasone_L1=1)			THEN L1_chemo_type=7;
+	IF L1_chemo_type=. THEN L1_chemo_type=8;
+	IMiDs_L1=0;
+	IF Thalidomide_L1=1 OR Lenalidomide_L1=1 OR Pomalidomide_L1=1 THEN IMiDs_L1=1;
+	Multi_agent_L1=0;
+	IF Melphalan_L1=1 OR Bendamustine_L1=1 OR Cyclophosphamide_L1=1 THEN Multi_agent_L1=1;
+RUN;
+
+PROC FREQ DATA=myfile.id_L1_type_added;
+	TABLE Dexamethasone_L1 Doxorubicin_L1 Multi_agent_L1 /nocol norow nopercent chisq;
+RUN;
+
+PROC MEANS DATA=myfile.id_L1_type_added MEDIAN P25 P75;
+	VAR age;
+RUN;
+
+*Stregth of Dexamethasone;
+DATA drug_NDC;
+	SET redbook;
+	WHERE 	GENNME contains 'Dexamethasone';
+RUN;
+PROC sql;
+	CREATE table data_pres as
+	SELECT a.*,
+			b.STRNGTH
+	FROM drug_pres_L1 a
+	INNER JOIN drug_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+DATA data_pres;
+	SET data_pres;
+	str=5;
+	IF STRNGTH='4 MG' THEN str=4;
+	ELSE IF STRNGTH='2 MG' THEN str=2;
+	ELSE IF STRNGTH='6 MG' THEN str=6;
+	ELSE IF STRNGTH='1.5 MG' THEN str=1.5;
+	ELSE IF STRNGTH='1 MG' THEN str=1;
+	ELSE IF STRNGTH='0.75 MG' THEN str=0.75;
+	ELSE IF STRNGTH='0.5 MG' THEN str=0.5;
+	Total_dx_dose=METQTY*str;
+RUN;
+PROC SQL;
+CREATE TABLE total_dx_id as
+SELECT min(enrolid) as enrolid,
+sum(Total_dx_dose) as Total_dex_dose
+FROM data_pres
+GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table Dexamethasone_dose_add as
+	SELECT a.*,
+		b.Total_dex_dose
+	FROM myfile.id_L1_type_added a
+	LEFT JOIN total_dx_id b
+	ON a.enrolid=b.enrolid;
+QUIT;
+DATA myfile.Dexamethasone_dose_add;
+	SET Dexamethasone_dose_add;
+	IF Total_dex_dose=. THEN Total_dex_dose=0;
+	IF L1_duration=0 THEN L1_duration=1;
+	avg_dex_dose=30*Total_dex_dose/L1_duration;
+	High_dex=0;
+	IF avg_dex_dose>=480 THEN High_dex=1;
+RUN;
+PROC FREQ DATA=myfile.Dexamethasone_dose_add;
+	TABLE High_dex /nocol norow nopercent chisq;
+RUN;
