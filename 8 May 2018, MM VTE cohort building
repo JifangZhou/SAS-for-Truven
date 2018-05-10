@@ -1,0 +1,514 @@
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\MM and VTE\Rawdata';
+
+
+DATA inpt_sum;
+SET Myfile.MM_ccaei_09 Myfile.MM_ccaei_10 Myfile.MM_ccaei_11 Myfile.MM_ccaei_12 Myfile.MM_ccaei_13
+	Myfile.MM_mdcri_09 Myfile.MM_mdcri_10 Myfile.MM_mdcri_11 Myfile.MM_mdcri_12 Myfile.MM_mdcri_13
+	Myfile.MM_ccaei_142 Myfile.MM_ccaei_151 
+	Myfile.MM_mdcri_142 Myfile.MM_mdcri_151;
+DATA outpt_svc;
+SET	Myfile.MM_ccaeo_09 Myfile.MM_ccaeo_10 Myfile.MM_ccaeo_11 Myfile.MM_ccaeo_12 Myfile.MM_ccaeo_13
+	Myfile.MM_mdcro_09 Myfile.MM_mdcro_10 Myfile.MM_mdcro_11 Myfile.MM_mdcro_12 Myfile.MM_mdcro_13
+	Myfile.MM_ccaeo_142 Myfile.MM_ccaeo_151 
+	Myfile.MM_mdcro_142 Myfile.MM_mdcro_151;
+DATA drug_pres;
+SET	Myfile.MM_ccaed_09 Myfile.MM_ccaed_10 Myfile.MM_ccaed_11 Myfile.MM_ccaed_12 Myfile.MM_ccaed_13
+	Myfile.MM_mdcrd_09 Myfile.MM_mdcrd_10 Myfile.MM_mdcrd_11 Myfile.MM_mdcrd_12 Myfile.MM_mdcrd_13
+	Myfile.MM_ccaed_142 Myfile.MM_ccaed_151  
+	Myfile.MM_mdcrd_142 Myfile.MM_mdcrd_151;
+DATA inpt_svc;
+SET	Myfile.MM_ccaes_09 Myfile.MM_ccaes_10 Myfile.MM_ccaes_11 Myfile.MM_ccaes_12 Myfile.MM_ccaes_13
+	Myfile.MM_mdcrs_09 Myfile.MM_mdcrs_10 Myfile.MM_mdcrs_11 Myfile.MM_mdcrs_12 Myfile.MM_mdcrs_13
+	Myfile.MM_ccaes_142 Myfile.MM_ccaes_151 
+	Myfile.MM_mdcrs_142 Myfile.MM_mdcrs_151;
+DATA Myfileance_all;
+SET	Myfile.MM_ccaet_09 Myfile.MM_ccaet_10 Myfile.MM_ccaet_11 Myfile.MM_ccaet_12 Myfile.MM_ccaet_13
+	Myfile.MM_mdcrt_09 Myfile.MM_mdcrt_10 Myfile.MM_mdcrt_11 Myfile.MM_mdcrt_12 Myfile.MM_mdcrt_13
+	Myfile.MM_ccaet_142 Myfile.MM_ccaet_151 
+	Myfile.MM_mdcrt_142 Myfile.MM_mdcrt_151;
+RUN;
+
+DATA all_record;
+	SET outpt_svc
+		inpt_sum
+		inpt_svc;
+DATA id_list;
+	SET Myfile.id_list_mm;
+	KEEP enrolid sex region index_date DOBYR;
+RUN;
+
+* add age, age category and plan typ to the id_list;
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			min(DTSTART) as DTSTART,
+			max(DTEND) as DTEND,
+			min(plantyp) as plantyp
+	FROM	Myfileance_all
+	GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table list2 as
+	SELECT 	a.*,
+			b.*
+	FROM	id_list a 
+	LEFT JOIN list1 b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA id_list3;
+	SET list2;
+	age=YEAR(index_date)-DOBYR;
+	IF 	 age<=29 THEN age_cat=1;
+	ELSE IF age<=34 THEN age_cat=2;
+	ELSE IF age<=39 THEN age_cat=3;
+	ELSE IF age<=44 THEN age_cat=4;
+	ELSE IF age<=49 THEN age_cat=5;
+	ELSE IF age<=54 THEN age_cat=6;
+	ELSE IF age<=59 THEN age_cat=7;
+	ELSE IF age<=64 THEN age_cat=8;
+	ELSE IF age>=65 THEN age_cat=9;
+	IF plantyp=. THEN plantyp=0;
+	IF plantyp=2 THEN plan_cat=1;
+	ELSE IF plantyp=3 OR plantyp=6 THEN plan_cat=2;
+	ELSE IF plantyp=5 OR plantyp=7 THEN plan_cat=3;
+	ELSE IF plantyp=4 THEN plan_cat=4;
+	ELSE IF plantyp=8 OR plantyp=9 THEN plan_cat=5;
+	ELSE IF plantyp=2 THEN plan_cat=6;
+	IF age<=18 THEN DELETE;
+RUN;
+*at least 12 months prior to the index date;
+DATA id_list4;
+	SET id_list3;
+	IF index_date-DTSTART<360 THEN delete;
+	RUN;
+* There were 21228 observations read from the data set WORK.ID_LIST3.
+NOTE: The data set WORK.ID_LIST4 has 16393 observations and 11 variables.;
+*Assessment of MM specific medication utilization as well as treatment initiation date;
+*Merge back the index_date;
+PROC sql;
+	CREATE table all_record_baseline as
+	SELECT a.*,
+		b.index_date as index_date
+	FROM all_record a
+	INNER JOIN id_list4 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+* extraction of baseline variables;
+DATA all_record_base;
+set all_record_baseline;
+if (index_date-360<=svcdate<index_date) OR (index_date-360<=disdate<index_date);
+RUN;
+* extraction of follow-up variables;
+DATA all_record_follow;
+set all_record_baseline;
+if (20361>=svcdate>=index_date) OR (20361>=disdate>=index_date);
+RUN;
+*find all medications over the opt dispensing records;
+PROC sql;
+	CREATE table drug_pres_baseline as
+	SELECT a.*,
+		b.index_date as index_date
+	FROM drug_pres a
+	INNER JOIN id_list4 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+* extraction of baseline variables;
+DATA all_pres_baseline;
+set drug_pres_baseline;
+if (index_date-360<=svcdate<index_date);
+RUN;
+* extraction of follow-up variables;
+DATA all_pres_follow;
+set drug_pres_baseline;
+if (20361>=svcdate>=index_date);
+RUN;
+*Assessment of medication utilization;
+LIBNAME Redbook 'C:\Users\jzhou86\Documents\SCD Project';
+DATA redbook;
+	SET Redbook.redbook;
+RUN;
+DATA IMIDs_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Lenalidomide') OR (GENNME contains 'Pomalidomide') OR (GENNME contains 'Thalidomide');
+	FLAG = 	'IMIDS';
+RUN;
+
+DATA Vorinostat_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Vorinostat');
+	FLAG = 	'old';
+RUN;
+
+DATA oral_MM_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Vorinostat') OR (GENNME contains 'Lenalidomide') OR 
+			(GENNME contains 'Pomalidomide') OR (GENNME contains 'Thalidomide');
+	FLAG = 	'oral';
+RUN;
+
+*List of patients exposed to the above two classes of medications;
+PROC sql;
+	CREATE table imids_pres as
+	SELECT a.*
+	FROM all_pres_follow a
+	INNER JOIN IMIDs_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table Vorinostat_pres as
+	SELECT a.*
+	FROM all_pres_follow a
+	INNER JOIN Vorinostat_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table imids_list as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as imids_date,
+		1 as imids
+	FROM imids_pres a
+	GROUP BY enrolid;
+QUIT;
+*NOTE: Table WORK.IMIDS_LIST created, with 5223 rows and 3 columns.;
+PROC sql;
+	CREATE table Vorinostat_list as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as Vorinostat_date,
+		1 as Vorinostat
+	FROM Vorinostat_pres a
+	GROUP BY enrolid;
+QUIT;
+*NOTE: Table WORK.VORINOSTAT_LIST created, with 18 rows and 3 columns.;
+
+* Assessment of other injectable drugs;
+DATA PI_list;
+set all_record_follow;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('J9041','J9047') then case = 1;
+end;
+if case = 1;
+run; 
+
+DATA old_drug_list;
+set all_record_follow;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('J9017','J9033', 'J9034','J0594','J9060','J8530', 'J9070','J9000','J8560', 'J9181','J8600', 'J9245','J9310','J9370', 'J9371') then case = 1;
+end;
+if case = 1;
+run; 
+
+* get the id_lists;
+PROC sql;
+	CREATE table PI_list as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) as PI_date,
+		1 as PI
+	FROM PI_list a
+	GROUP BY enrolid;
+QUIT;
+*NOTE: Table WORK.PI_LIST created, with 6308 rows and 3 columns.;
+
+PROC sql;
+	CREATE table old_drug_list as
+	SELECT min(enrolid) as enrolid,
+		min(SVCDATE) as old_drug_date,
+		1 as old_drugs
+	FROM old_drug_list a
+	GROUP BY enrolid;
+QUIT;
+*NOTE: Table WORK.OLD_DRUG_LIST created, with 2345 rows and 3 columns.;
+
+*Merge back the list to the id_list;
+PROC sql;
+	CREATE table id_list8 as
+	SELECT 	a.*,
+			b.*
+	FROM	id_list7 a 
+	LEFT JOIN old_drug_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA id_list9;
+	SET id_list8;
+	MM_dx_date=index_date;
+	index_date=min(imids_date,Vorinostat_date,PI_date,old_drug_date);
+	IF index_date=. THEN DELETE;
+RUN;
+*NOTE: There were 16393 observations read from the data set WORK.ID_LIST8.
+NOTE: The data set WORK.ID_LIST9 has 8457 observations and 20 variables.;
+*exclude patients exposed to MM drugs over the baseline period;
+PROC sql;
+	CREATE table oral_MM_baseline as
+	SELECT a.*
+	FROM all_pres_baseline a
+	INNER JOIN oral_MM_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table oral_MM_baseline_list as
+	SELECT min(enrolid) as enrolid
+	FROM oral_MM_baseline
+	GROUP BY enrolid;
+QUIT;
+* Assessment of other injectable drugs use over the baseline period;
+DATA inject_MM_baseline;
+set all_record_base;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('J9041','J9047','J9017','J9033', 'J9034','J0594',
+				'J9060','J8530', 'J9070','J9000','J8560', 'J9181',
+				'J8600', 'J9245','J9310','J9370', 'J9371') then case = 1;
+end;
+if case = 1;
+run; 
+* get the id_lists;
+PROC sql;
+	CREATE table inject_MM_baseline_list as
+	SELECT min(enrolid) as enrolid
+	FROM inject_MM_baseline a
+	GROUP BY enrolid;
+QUIT;
+*combine all id unique with MM treatment exposure at baseline;
+DATA MM_exposed_baseline;
+	SET inject_MM_baseline_list oral_MM_baseline_list;
+RUN;
+
+PROC sql;
+	CREATE table MM_exposed_baseline_list as
+	SELECT min(enrolid) as enrolid
+	FROM MM_exposed_baseline
+	GROUP BY enrolid;
+QUIT;
+*from id_list 9, excluding patients exposed to MM drugs at baseline;
+PROC sql;
+	CREATE table MM_treated_list as
+	SELECT a.*
+	FROM id_list9 a
+	LEFT JOIN MM_exposed_baseline_list b
+	ON a.enrolid=b.enrolid
+	WHERE b.enrolid IS NULL;
+QUIT;
+* Assess death date;
+DATA death_data;
+	SET all_record_follow;
+	IF DSTATUS =20;
+	IF DISDATE=. THEN DELETE;
+RUN;
+
+PROC sql;
+	CREATE table death_list as
+	SELECT min(enrolid) as enrolid,
+			max(DISDATE) as death_date
+	FROM death_data
+	GROUP BY enrolid;
+QUIT;
+*merge back death date;
+PROC sql;
+	CREATE table MM_treated_list_final as
+	SELECT 	a.*,
+			b.*
+	FROM	MM_treated_list a 
+	LEFT JOIN death_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*At least 6 month post MM treatment initiation (unless died);
+DATA MM_list_final_adjust;
+	SET MM_treated_list_final;
+	IF DTEND-index_date>=180 OR (DTEND-index_date<180 AND death_data ^=. AND death_data-index_date<180);
+RUN;
+*Select all baseline information as well as 6 month data;
+PROC sql;
+	CREATE table all_record_baseline as
+	SELECT a.*,
+		b.index_date as index_date,
+		b.MM_dx_date as MM_dx_date
+	FROM all_record a
+	INNER JOIN MM_list_final_adjust b
+	ON a.enrolid = b.enrolid;
+QUIT;
+* extraction of baseline variables;
+DATA myfile.all_record_base;
+set all_record_baseline;
+if (MM_dx_date-360<=svcdate<index_date) OR (MM_dx_date-360<=disdate<index_date);
+RUN;
+DATA myfile.all_record_base_6w;
+set all_record_baseline;
+if (index_date-42<=svcdate<index_date) OR (index_date-42<=disdate<index_date);
+RUN;
+* extraction of follow-up variables;
+DATA myfile.all_record_follow;
+set all_record_baseline;
+if (20361>=svcdate>=index_date) OR (20361>=disdate>=index_date);
+RUN;
+*find all medications over the opt dispensing records;
+PROC sql;
+	CREATE table drug_pres_baseline as
+	SELECT a.*,
+		b.index_date as index_date
+	FROM drug_pres a
+	INNER JOIN MM_list_final_adjust b
+	ON a.enrolid = b.enrolid;
+QUIT;
+* extraction of baseline variables;
+DATA myfile.all_pres_baseline;
+set drug_pres_baseline;
+if (MM_dx_date-360<=svcdate<index_date);
+RUN;
+* extraction of follow-up variables;
+DATA myfile.all_pres_follow;
+set drug_pres_baseline;
+if (20361>=svcdate>=index_date);
+RUN;
+
+
+
+
+
+
+
+
+
+
+
+
+
+*assessment of VTE occurrence;
+DATA dvt_list;
+set all_record_base_30d;
+array icd {*} dx1-dx2;
+do i = 1 to dim(icd);
+if icd{i} in: ('6713', '6714', '6715', '6719', '45111', '45119', '4512', '45181', '4532', '4539') then case = 1;
+end;
+if case = 1;
+run; 
+DATA pe_list;
+set all_record_base_30d;
+array icd {*} dx1-dx2;
+do i = 1 to dim(icd);
+if icd{i} in: ('6732', '6738', '41511', '41519') then case = 1;
+end;
+if case = 1;
+run; 
+PROC sql;
+	CREATE table dvt_pre_list as
+	SELECT min(enrolid) as enrolid,
+		1 as dvt_pre
+	FROM dvt_list a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table pe_pre_list as
+	SELECT min(enrolid) as enrolid,
+		1 as pe_pre
+	FROM pe_list a
+	GROUP BY enrolid;
+QUIT;
+*post_index VTE occurrence;
+DATA dvt_list;
+set all_record_follow_30d;
+array icd {*} dx1-dx2;
+do i = 1 to dim(icd);
+if icd{i} in: ('6713', '6714', '6715', '6719', '45111', '45119', '4512', '45181', '4532', '4539') then case = 1;
+end;
+if case = 1;
+run; 
+DATA pe_list;
+set all_record_follow_30d;
+array icd {*} dx1-dx2;
+do i = 1 to dim(icd);
+if icd{i} in: ('6732', '6738', '41511', '41519') then case = 1;
+end;
+if case = 1;
+run; 
+PROC sql;
+	CREATE table dvt_post_list as
+	SELECT min(enrolid) as enrolid,
+		1 as dvt_post,
+		min(SVCDATE) as dvt_SVCDATE,
+		min(DISDATE) as dvt_DISDATE
+	FROM dvt_list a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table pe_post_list as
+	SELECT min(enrolid) as enrolid,
+		1 as pe_post,
+		min(SVCDATE) as pe_SVCDATE,
+		min(DISDATE) as pe_DISDATE
+	FROM pe_list a
+	GROUP BY enrolid;
+QUIT;
+
+DATA id_list_vte1;
+	SET myfile.id_list_vte;
+	ever_drug=0;
+	IF max(PI, old_drugs, Vorinostat, imids)=1 THEN ever_drug=1;
+	new_drug=0;
+	IF max(PI, imids)=1 THEN new_drug=1;
+	old_drug=0;
+	IF max(old_drugs, Vorinostat)=1 THEN old_drug=1;
+	both_drug=0;
+	IF new_drug=1 AND old_drug=1 THEN both_drug=1;
+	index_year=YEAR(index_date);
+	IF plan_cat=. THEN plan_cat=6;
+	IF ever_drug=0  THEN drug_pattern=0;
+	ELSE IF new_drug=0 AND old_drug=1  THEN drug_pattern=1;
+	ELSE IF new_drug=1 AND old_drug=0  THEN drug_pattern=2;
+	ELSE IF new_drug=1 AND old_drug=1  THEN drug_pattern=3;
+	IF imids=. THEN imids=0;
+	IF PI=. THEN PI=0;
+RUN;
+
+PROC FREQ DATA=id_list_vte;
+	TABLE age_cat index_year sex region plan_cat CCI_NCI_cat /nocol norow nopercent chisq;
+RUN;
+
+PROC MEANS DATA=id_list_vte;
+	CLASS ever_drug;
+	VAR age CCI_NCI;
+RUN;
+
+PROC TTEST DATA=id_list_vte;
+	CLASS ever_drug;
+	VAR age CCI_NCI;
+RUN;
+
+
+PROC FREQ DATA=id_list_vte1;
+	TABLE age_cat*drug_pattern index_year*drug_pattern sex*drug_pattern region*drug_pattern plan_cat*drug_pattern CCI_NCI_cat*drug_pattern drug_pattern*VTE_post
+			imids*VTE_post PI*VTE_post new_drug*VTE_post/nocol norow nopercent chisq;
+RUN;
+PROC FREQ DATA=id_list_vte;
+	TABLE age_cat*VTE_post index_year*VTE_post sex*VTE_post region*VTE_post plan_cat*VTE_post CCI_NCI_cat*VTE_post /nocol norow nopercent chisq;
+RUN;
+
+PROC FREQ DATA=id_list_vte;
+	TABLE COPD_baseline*VTE_post AMI_baseline*VTE_post CHF_baseline*VTE_post Stroke_baseline*VTE_post CKD_baseline*VTE_post M_S_LIVER_D_baseline*VTE_post VTE_pre*VTE_post/nocol norow nopercent chisq;
+RUN;
+
+proc logistic data= id_list_vte1;
+	CLASS sex (ref='1') CCI_NCI_cat (ref='0'); 
+	model VTE_post(ref='0')= age sex CCI_NCI_cat COPD_baseline AMI_baseline CHF_baseline Stroke_baseline CKD_baseline M_S_LIVER_D_baseline VTE_pre  
+			old_drug imids PI old_drug*imids old_drug*PI;
+RUN;
+		
+DATA temp;
+SET id_list_vte1;
+	fstat=0;
+	lenfol=min(DTEND, 20361, VTE_date)-index_date;
+	IF (VTE_date ^=. AND VTE_date-index_date=lenfol) THEN fstat=1;
+RUN;
+ PROC FREQ DATA=temp;
+ TABLE VTE_post*Day1_initiated/nocol norow nopercent chisq;
+ RUN;
+
+ ods graphics on;
+PROC LIFETEST DATA=temp NOTABLE;
+TIME lenfol*fstat(0); 
+STRATA drug_pattern;RUN;	
