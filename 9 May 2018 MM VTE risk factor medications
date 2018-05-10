@@ -1,0 +1,561 @@
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\MM and VTE\Rawdata';
+
+DATA id_list;
+	SET myfile.id_list_baseline_added;RUN;
+DATA all_pres_baseline;
+set myfile.all_pres_baseline;
+RUN;
+DATA drug_pres_follow;
+set myfile.all_pres_follow;
+DATA all_record_base;
+set myfile.all_record_base;
+DATA all_record_base_6w;
+set myfile.all_record_base_6w;
+DATA all_record_follow;
+set myfile.all_record_follow;
+DATA all_record_follow_6m;
+set myfile.all_record_follow;
+IF (index_date<=svcdate<=index_date+180) OR (index_date<=disdate<=index_date+180);
+RUN;
+LIBNAME Redbook 'C:\Users\jzhou86\Documents\SCD Project';
+DATA redbook;
+	SET Redbook.redbook;
+RUN;
+*ESA at baseline and pre-treatment period;
+DATA ESA_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Epoetin') OR (GENNME contains 'Darbepoetin');
+	FLAG = 	'ESA';
+RUN;
+PROC sql;
+	CREATE table ESA_pres as
+	SELECT a.*
+	FROM all_pres_baseline a
+	INNER JOIN ESA_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table ESA_dispensed_list as
+	SELECT min(enrolid) as enrolid,
+		1 as ESA_dispensed
+	FROM ESA_pres a
+	GROUP BY enrolid;
+QUIT;
+*ESA injection;
+DATA ESA_inject_list;
+set all_record_base;
+	array proc{*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J0881','J0882','J0885','J0886','Q4081') then case=2;
+		end;
+	if case=2;
+run; 
+PROC sql;
+	CREATE table ESA_inject_list as
+	SELECT min(enrolid) as enrolid,
+		1 as ESA_inject
+	FROM ESA_inject_list
+	GROUP BY enrolid;
+QUIT;
+*Merge back the ESA list to the master file;
+PROC sql;
+	CREATE table id_list2 as
+	SELECT a.*,
+		b.*
+	FROM id_list1 a
+	LEFT JOIN ESA_dispensed_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*Sirolimus at baseline period and pre-treatment period;
+DATA Sirolimus_NDC;
+	SET redbook;
+	WHERE 	GENNME contains 'Sirolimus';
+RUN;
+PROC sql;
+	CREATE table Sirolimus_pres as
+	SELECT a.*
+	FROM all_pres_baseline a
+	INNER JOIN Sirolimus_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table Sirolimus_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Sirolimus
+	FROM Sirolimus_pres a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list3 as
+	SELECT a.*,
+		b.*
+	FROM id_list2 a
+	LEFT JOIN Sirolimus_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*Desmopressin at baseline period and pre-treatment period;
+DATA Desmopressin_NDC;
+	SET redbook;
+	WHERE 	GENNME contains 'Desmopressin';
+RUN;
+PROC sql;
+	CREATE table Desmopressin_pres as
+	SELECT a.*
+	FROM all_pres_baseline a
+	INNER JOIN Desmopressin_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table Desmopressin_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Desmopressin
+	FROM Desmopressin_pres a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list4 as
+	SELECT a.*,
+		b.*
+	FROM id_list3 a
+	LEFT JOIN Desmopressin_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*Hormone at baseline period and pre-treatment period;
+DATA Hormone_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Estradiol') OR (GENNME contains 'estradiol') OR (THRCLDS contains 'Estrogens & Comb, NEC')
+			OR (GENNME contains 'Tamoxifen') OR (GENNME contains 'Toremifene') OR (THRCLDS contains 'Fulvestrant');
+RUN;
+PROC sql;
+	CREATE table Hormone_pres as
+	SELECT a.*
+	FROM all_pres_baseline a
+	INNER JOIN Hormone_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table Hormone_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Hormone
+	FROM Hormone_pres a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list5 as
+	SELECT a.*,
+		b.*
+	FROM id_list4 a
+	LEFT JOIN Hormone_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*Check the medication risks and individual risks;
+DATA myfile.id_list_baseline_medication;
+	SET id_list5;
+	ESA_base=0;
+	IF ESA_dispensed=1 OR ESA_inject=1 THEN ESA_base=1;
+RUN;
+
+DATA myfile.id_list_baseline_09_May;
+	SET myfile.id_list_baseline_medication;
+   array change _numeric_;
+        do over change;
+            if change=. then change=0;
+        end;
+		VTE_pre=0;
+	IF dvt_pre=1 OR pe_pre=1 THEN VTE_pre=1;
+	Multi_agent_L1=0;
+	IF Melphalan_L1=1 OR Bendamustine_L1=1 OR Cyclophosphamide_L1=1 THEN Multi_agent_L1=1;
+	RF_num=Clotting_disorders+VTE_pre+Central_catheter_6w+CHF+AF+CKD+Infection_6w+Surgery_6w+ESA_base+hormone+Sirolimus+Desmopressin+Multi_agent_L1+High_dex;
+	RF_cat=0;
+	IF RF_num>=2 THEN RF_cat=1;
+ run ;
+
+PROC FREQ DATA=myfile.id_list_baseline_09_May;
+ 	TABLE RF_cat*IMiDs_L1 /nocol norow nopercent chisq;
+RUN;
+
+*Assessment of prophylaxis for VTE;
+*LMWH;
+DATA LMWH_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Dalteparin') OR (GENNME contains 'Enoxaparin') OR (GENNME contains 'Tinzaparin');
+RUN;
+PROC sql;
+	CREATE table LMWH_pres as
+	SELECT a.*
+	FROM all_pres_baseline a
+	INNER JOIN LMWH_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table LMWH_dispensed_list as
+	SELECT min(enrolid) as enrolid,
+		1 as LMWH_dispensed
+	FROM LMWH_pres a
+	GROUP BY enrolid;
+QUIT;
+*LMWH injection;
+DATA LMWH_inject_list;
+	set all_record_base;
+	case=0;
+	array proc{*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J1644') then case=1;*case='UFH';
+	end;
+	array proca{*} proc1-proc15;
+		do i = 1 to dim(proca);
+		if proc{i} in: ('J1652') then case=2;*case='Fondaparinux';
+	end;
+	array procb{*} proc1-proc15;
+		do i = 1 to dim(procb);
+		if proc{i} in: ('J1645','J1650','J1655') then case=3;*case='LMWH';
+	end;
+	array procc{*} proc1-proc15;
+		do i = 1 to dim(procc);
+		if proc{i} in: ('C9121','J0883','J0884','J0583','J1945') then case=4;*case='DTI_inject';
+	end;
+	if case=3;
+run; 
+PROC sql;
+	CREATE table LMWH_inject_list as
+	SELECT min(enrolid) as enrolid,
+		1 as LMWH_inject
+	FROM LMWH_inject_list
+	GROUP BY enrolid;
+QUIT;
+*Merge back the ESA list to the master file;
+PROC sql;
+	CREATE table id_list2 as
+	SELECT a.*,
+		b.*
+	FROM id_list1 a
+	LEFT JOIN LMWH_inject_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*Antiplatelet;
+DATA Antiplatelet_all_NDC;
+	SET redbook;
+	WHERE 	((GENNME contains 'Aspirin') OR 
+			(GENNME contains 'Dipyridamole') OR 
+			(GENNME contains 'Ticlopidine') OR 
+			(GENNME contains 'Clopidogrel'))AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+RUN;
+PROC sql;
+	CREATE table Antiplatelet_all_pres as
+	SELECT a.*
+	FROM all_pres_baseline a
+	INNER JOIN Antiplatelet_all_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table Antiplatelet_all_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Antiplatelet_all_dispensed
+	FROM Antiplatelet_all_pres a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list3 as
+	SELECT a.*,
+		b.*
+	FROM id_list2 a
+	LEFT JOIN Antiplatelet_all_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*Aspirin;
+DATA ASA_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Aspirin' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Aspirin';
+RUN;
+PROC sql;
+	CREATE table ASA_pres as
+	SELECT a.*
+	FROM all_pres_baseline a
+	INNER JOIN ASA_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table ASA_list as
+	SELECT min(enrolid) as enrolid,
+		1 as ASA_dispensed
+	FROM ASA_pres a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list4 as
+	SELECT a.*,
+		b.*
+	FROM id_list3 a
+	LEFT JOIN ASA_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*Warfarin;
+DATA Warfarin_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Warfarin');
+RUN;
+PROC sql;
+	CREATE table Warfarin_pres as
+	SELECT a.*
+	FROM all_pres_baseline a
+	INNER JOIN Warfarin_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table Warfarin_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Warfarin_dispensed
+	FROM Warfarin_pres a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list5 as
+	SELECT a.*,
+		b.*
+	FROM id_list4 a
+	LEFT JOIN Warfarin_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*Dabigatran;
+DATA Dabigatran_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Dabigatran');
+RUN;
+PROC sql;
+	CREATE table Dabigatran_pres as
+	SELECT a.*
+	FROM all_pres_baseline a
+	INNER JOIN Dabigatran_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table Dabigatran_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Dabigatran_dispensed
+	FROM Dabigatran_pres a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list6 as
+	SELECT a.*,
+		b.*
+	FROM id_list5 a
+	LEFT JOIN Dabigatran_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*Rivaroxaban;
+DATA Rivaroxaban_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Rivaroxaban');
+RUN;
+PROC sql;
+	CREATE table Rivaroxaban_pres as
+	SELECT a.*
+	FROM all_pres_baseline a
+	INNER JOIN Rivaroxaban_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table Rivaroxaban_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Rivaroxaban_dispensed
+	FROM Rivaroxaban_pres a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list7 as
+	SELECT a.*,
+		b.*
+	FROM id_list6 a
+	LEFT JOIN Rivaroxaban_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*Apixaban;
+DATA Apixaban_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Apixaban');
+RUN;
+PROC sql;
+	CREATE table Apixaban_pres as
+	SELECT a.*
+	FROM all_pres_baseline a
+	INNER JOIN Apixaban_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table Apixaban_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Apixaban_dispensed
+	FROM Apixaban_pres a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list8 as
+	SELECT a.*,
+		b.*
+	FROM id_list7 a
+	LEFT JOIN Apixaban_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*Edoxaban;
+DATA Edoxaban_NDC;
+	SET redbook;
+	WHERE (GENNME contains 'Edoxaban');
+RUN;
+PROC sql;
+	CREATE table Edoxaban_pres as
+	SELECT a.*
+	FROM all_pres_baseline a
+	INNER JOIN Edoxaban_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+PROC sql;
+	CREATE table Edoxaban_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Edoxaban_dispensed
+	FROM Edoxaban_pres a
+	GROUP BY enrolid;
+QUIT;
+PROC sql;
+	CREATE table id_list9 as
+	SELECT a.*,
+		b.*
+	FROM id_list8 a
+	LEFT JOIN Edoxaban_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*UFH;
+DATA UFH_inject_list;
+	set all_record_base;
+	case=0;
+	array proc{*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J1644') then case=1;*case='UFH';
+	end;
+	array proca{*} proc1-proc15;
+		do i = 1 to dim(proca);
+		if proc{i} in: ('J1652') then case=2;*case='Fondaparinux';
+	end;
+	array procb{*} proc1-proc15;
+		do i = 1 to dim(procb);
+		if proc{i} in: ('J1645','J1650','J1655') then case=3;*case='LMWH';
+	end;
+	array procc{*} proc1-proc15;
+		do i = 1 to dim(procc);
+		if proc{i} in: ('C9121','J0883','J0884','J0583','J1945') then case=4;*case='DTI_inject';
+	end;
+	if case=1;
+run; 
+PROC sql;
+	CREATE table UFH_inject_list as
+	SELECT min(enrolid) as enrolid,
+		1 as UFH_inject
+	FROM UFH_inject_list
+	GROUP BY enrolid;
+QUIT;
+*Merge back the UFH list to the master file;
+PROC sql;
+	CREATE table id_list10 as
+	SELECT a.*,
+		b.*
+	FROM id_list9 a
+	LEFT JOIN UFH_inject_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*Fondaparinux;
+DATA Fondaparinux_inject_list;
+	set all_record_base;
+	case=0;
+	array proc{*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J1644') then case=1;*case='UFH';
+	end;
+	array proca{*} proc1-proc15;
+		do i = 1 to dim(proca);
+		if proc{i} in: ('J1652') then case=2;*case='Fondaparinux';
+	end;
+	array procb{*} proc1-proc15;
+		do i = 1 to dim(procb);
+		if proc{i} in: ('J1645','J1650','J1655') then case=3;*case='LMWH';
+	end;
+	array procc{*} proc1-proc15;
+		do i = 1 to dim(procc);
+		if proc{i} in: ('C9121','J0883','J0884','J0583','J1945') then case=4;*case='DTI_inject';
+	end;
+	if case=2;
+run; 
+PROC sql;
+	CREATE table Fondaparinux_inject_list as
+	SELECT min(enrolid) as enrolid,
+		1 as Fondaparinux_inject
+	FROM Fondaparinux_inject_list
+	GROUP BY enrolid;
+QUIT;
+*Merge back the Fondaparinux list to the master file;
+PROC sql;
+	CREATE table id_list11 as
+	SELECT a.*,
+		b.*
+	FROM id_list10 a
+	LEFT JOIN Fondaparinux_inject_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*DTI_inject;
+DATA DTI_inject_inject_list;
+	set all_record_base;
+	case=0;
+	array proc{*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J1644') then case=1;*case='UFH';
+	end;
+	array proca{*} proc1-proc15;
+		do i = 1 to dim(proca);
+		if proc{i} in: ('J1652') then case=2;*case='Fondaparinux';
+	end;
+	array procb{*} proc1-proc15;
+		do i = 1 to dim(procb);
+		if proc{i} in: ('J1645','J1650','J1655') then case=3;*case='LMWH';
+	end;
+	array procc{*} proc1-proc15;
+		do i = 1 to dim(procc);
+		if proc{i} in: ('C9121','J0883','J0884','J0583','J1945') then case=4;*case='DTI_inject';
+	end;
+	if case=4;
+run; 
+PROC sql;
+	CREATE table DTI_inject_inject_list as
+	SELECT min(enrolid) as enrolid,
+		1 as DTI_inject_inject
+	FROM DTI_inject_inject_list
+	GROUP BY enrolid;
+QUIT;
+*Merge back the DTI_inject list to the master file;
+PROC sql;
+	CREATE table id_list12 as
+	SELECT a.*,
+		b.*
+	FROM id_list11 a
+	LEFT JOIN DTI_inject_inject_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+*Assessment of baseline antiplatelet and antithrombotic drugs exposure;
+DATA myfile.id_list_base_AC_09_May;
+	SET id_list12;
+   array change _numeric_;
+        do over change;
+            if change=. then change=0;
+        end;
+		LMWH_pre=0;
+	IF LMWH_dispensed=1 OR LMWH_inject=1 THEN LMWH_pre=1;
+ run ;
+PROC FREQ DATA=temp;
+ 	TABLE DTI_inject_inject*IMiDs_L1 /nocol norow nopercent chisq;
+RUN;
+
