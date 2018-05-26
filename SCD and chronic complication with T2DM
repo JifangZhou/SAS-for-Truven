@@ -1,0 +1,355 @@
+*look at post-index complications;
+*Merge with the post-index service records;
+DATA id_list;
+	SET All_non_dm;
+	KEEP enrolid index_date SCD_status;
+	SCD_status=0;RUN;
+DATA all_record;
+	SET inpt_sum outpt_svc inpt_svc;
+RUN;
+PROC SQL;
+	CREATE table svc_all as
+	SELECT a.*,
+			b.index_date
+	FROM all_record a 
+	INNER JOIN id_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+DATA svc_post;
+set svc_all;
+if index_date+360>=svcdate>=index_date OR index_date+360>=DISDATE>=index_date;
+RUN;
+*depression;
+DATA temp;
+	SET svc_post;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('296', '298', '3004', '3090', '3091', '311') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as depression
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file1 as
+	SELECT a.*,
+			b.depression
+	FROM id_list a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+DATA id_file1;
+	SET id_file1;
+	IF depression=. THEN depression=0;
+RUN;
+
+
+*Nephropathy;
+DATA temp;
+	SET svc_post;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('25040','25041','25042','25043', '581', '583', '585') then case = 1;
+end;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('3927', '3942', '3943', '3953', '3993', '3994', '3995', '5498', '554', '556', 'V56',
+				'36800', '36810', '36815', '50300', '50340', '50360', '50365', '50370', '50380', '90920', 
+	'90921', '90924', '90925', '90935', '90937', '90945', '90947', '90989', '90993', '90997', '90999') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Nephropathy
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file1 as
+	SELECT a.*,
+			b.Nephropathy
+	FROM id_file1 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*Neuropathy;
+DATA temp;
+	SET svc_post;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2506', '337', '357', '354', '355', '3581', '7135') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Neuropathy
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file2 as
+	SELECT a.*,
+			b.Neuropathy
+	FROM id_file1 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*ophthalmic;
+DATA temp;
+	SET svc_post;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in ('25050','25051','25052','25053', '36201','36202','36203','36204','36205','36206','36207') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as ophthalmic
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file3 as
+	SELECT a.*,
+			b.ophthalmic
+	FROM id_file2 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*peripheral_circulatory;
+DATA temp;
+	SET svc_post;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('2507','440','441','442','443', '7854') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as peripheral_circulatory
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file4 as
+	SELECT a.*,
+			b.peripheral_circulatory
+	FROM id_file3 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*Foot_Ulcer ;
+DATA temp;
+	SET svc_post;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('7071') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Foot_Ulcer 
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file5 as
+	SELECT a.*,
+			b.Foot_Ulcer 
+	FROM id_file4 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*Amputation;
+DATA temp;
+	SET svc_post;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in ('8410','8411','8412','8413','8414','8415','8416','8417','8418','8419',
+			'26910', '27590','27591','27592', '27594', '27596', '27598', '27880','27881','27882', 
+				'27884', '27886', '27888', '27889', '28800', '28805', '28810', '28820', '28825') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Amputation 
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file6 as
+	SELECT a.*,
+			b.Amputation 
+	FROM id_file5 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*Myocardial_Infarction ;
+DATA temp;
+	SET svc_post;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('4100', '412') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Myocardial_Infarction
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file7 as
+	SELECT a.*,
+			b.Myocardial_Infarction
+	FROM id_file6 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*Stroke_post;
+DATA temp;
+	SET svc_post;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('430','431','432','433','434','435','436','437','438') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Stroke_post
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file8 as
+	SELECT a.*,
+			b.Stroke_post
+	FROM id_file7 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*Coronary Artery Bypass Surgery ;
+DATA temp;
+	SET svc_post;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('361', '362', '363','3351','3352','3353','33540','33541','33542','33543','33544','33545', '33572') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as CABS 
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file9 as
+	SELECT a.*,
+			b.CABS 
+	FROM id_file8 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*Angioplasty ;
+DATA temp;
+	SET svc_post;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('3601', '3602', '3603', '3605', '3609',
+				'92980','92981','92982','92983','92984', '92995','92996') then case = 1;
+end;
+if case = 1;
+run; 
+
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			1 as Angioplasty  
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+PROC SQL;
+	CREATE table id_file10 as
+	SELECT a.*,
+			b.Angioplasty  
+	FROM id_file9 a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+data id_file10;
+   set id_file10;
+   array change _numeric_;
+        do over change;
+            if change=. then change=0;
+        end;
+ run ;
+
+DATA myfile.id_list_SCD_non_dm_1604;
+ 	SET id_file10;
+RUN;
+DATA scd_list;
+	SET myfile.april_15_dm2_cohort_all;
+	KEEP enrolid SCD_status;
+	IF SCD_status=1;
+RUN;
+PROC SQL;
+	CREATE table id_file11 as
+	SELECT a.*,
+			b.SCD_status 
+	FROM myfile.id_file_16_april_postcomor_12m a 
+	INNER JOIN scd_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_file12;
+	SET id_file10 id_file11; 
+RUN;
+
+ PROC FREQ DATA=id_file12;
+TABLE Nephropathy*SCD_status 
+		Neuropathy*SCD_status
+		ophthalmic*SCD_status 
+		peripheral_circulatory*SCD_status 
+		Foot_Ulcer*SCD_status
+		Amputation*SCD_status 
+		Myocardial_Infarction*SCD_status 
+		Stroke_post*SCD_status 
+		CABS*SCD_status
+		Angioplasty*SCD_status
+		depression*SCD_status/chisq nocol norow nopercent;
+RUN;
