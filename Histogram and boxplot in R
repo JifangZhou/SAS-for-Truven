@@ -1,0 +1,39 @@
+install.packages("ggpubr")
+library(ggpubr)
+
+analytical_cohort<-read.csv("C:/Users/jzhou86/Documents/SCD Project/SCD readmission/SCD readmission 4 Feb.csv", header = TRUE, sep = ",")
+analytical_cohort$age_cat <- factor(analytical_cohort$age_cat)
+
+p <- ggboxplot(analytical_cohort, x = "age_cat", y = "p_dayscovered"
+            )+scale_fill_grey()+theme_classic()
+#  Add p-value
+p + stat_compare_means()
+# Change method
+p + stat_compare_means(method = "anova")
+
+library(ggplot2)
+library(reshape2)
+library(plyr)
+df <- structure(c(68,  195 ,  277 ,  99,  88,   66,
+                  50,  361 ,  498 , 212 , 155 ,  78,
+                  128, 401,   958,  292,  199,  138,  
+                  2116, 2512, 5028, 2522 ,1857 ,2423), .Dim = c(6,4), .Dimnames = list(c("0-9","10-17", "18-29",
+                                                                                "30-39", "40-49", "50+"), c("High dose (\u2265 1000 mg)", "Intermediate dose (500-1000 mg)", "Low dose (< 500 mg)", "Unexposed")))
+df.m <- melt(df)
+df.m <- rename(df.m, c(Var1 = "Age_Group", Var2 = "Cumulative_HU_Dose"))
+
+a <- ggplot(df.m, aes(x = Age_Group, y = value,
+                      fill = Cumulative_HU_Dose))
+b <- a + geom_bar(stat = "identity", position = "stack")
+b + scale_fill_grey()+theme_classic()
+
+scale_fill_brewer(palette="OrRd")
+
+df <- data.frame(ID = 1:60, 
+                 LetterGrade = sample(c("A", "B", "C", "D", "E", "F"), 60, replace = T),
+                 ExperimentCohort = sample(c("One", "Two", "Three"), 60, replace = T))
+df.new<-ddply(df,.(ExperimentCohort),summarise,
+              prop=as.numeric(prop.table(table(LetterGrade))),
+              LetterGrade=names(table(LetterGrade)))
+
+ggplot(df.new,aes(LetterGrade,prop,fill=ExperimentCohort))+geom_bar(stat="identity",position='dodge')
