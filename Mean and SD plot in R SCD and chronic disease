@@ -1,0 +1,31 @@
+# Mean and SD plot for PDC changes in r
+library(ggplot2)
+library(Rmisc)
+gee_cohort<-read.csv("C:/Users/jzhou86/Documents/HSCT project/idlistandGEEfiles06Sep/auto_dm2_gee.csv", header = TRUE, sep = ",")
+gee_cohort$exposed <- factor(gee_cohort$exposed)
+gee_cohort$exposed[gee_cohort$exposed == "0" ] <- NA
+tgc <- summarySE(gee_cohort, measurevar="pdc", groupvars=c("exposed","Time"))
+# Standard error of the mean
+pd <- position_dodge(0.01)
+
+ggplot(tgc, aes(x=Time, y=pdc, colour=exposed)) + 
+  geom_errorbar(aes(ymin=pdc, ymax=pdc+se), colour="black", width=.1) +
+  geom_point(size=6, shape=20) +
+  xlab("Time from HCT in months") +
+  ylab("Proportion of Days Covered (PDC)") +
+  scale_colour_hue(name="p-value = 0.28",    # Legend label, use darker colors
+                   breaks=c(NA, "1"),
+                   h = c(0, 0),
+                   c=c(900,900),
+                   na.value = "black",
+                   labels=c("Chemotherapy-alone", "Autologous HCT"),
+                   l=25) +
+  scale_fill_manual(values="red")+
+  expand_limits(y=0) + 
+  scale_x_continuous( breaks=1:7*1, 
+                      labels=c("Baseline", "0-6", "7-12","13-18", "19-24","25-30","31-36"))+
+  geom_line() +
+  geom_point()+
+  theme_classic() +
+  theme(legend.justification=c(1,-6),
+        legend.position=c(1,0)) 
