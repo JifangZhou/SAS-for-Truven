@@ -1,0 +1,54 @@
+*Convert the table short to long;
+DATA id_list_hsr_all_acute;
+	SET workingD.id_list_cost_0608;
+	KEEP enrolid acute_tot_Q1 acute_tot_Q2 acute_tot_Q3 acute_tot_Q4 acute_tot_Q5 acute_tot_Q6 acute_tot_Q7 acute_tot_Q8 acute_tot_Q9 acute_tot_Q10 acute_tot_Q11;
+RUN;
+
+proc transpose data=id_list_hsr_all_acute out=long1;
+   by enrolid;
+run;
+
+data long2;
+  set long1 (rename=(col1=value));
+  period=input(substr(_name_, 12), 11.);
+  drop _name_;
+  if value=. THEN delete;
+  value_pppm=value/6;
+run; 
+
+*merge back the weights to the analytical file;
+PROC SQL;
+CREATE TABLE id_list_temp1 as
+	SELECT a.*,
+			b.*
+	FROM long2 a
+	LEFT JOIN id_list_temp b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+PROC MEANS DATA=long2 MEAN STD MEDIAN P25 P75 min max;
+CLASS period;
+VAR value_pppm;
+RUN;
+
+DATA id_list_temp2;
+	SET id_list_temp1;
+	value_adj=value*Wei;
+IF hsct=1;
+RUN;
+
+PROC MEANS DATA=id_list_temp2 MEAN STD MEDIAN P25 P75 min max;
+CLASS period;
+VAR value_pppm;
+RUN;
+
+DATA id_list_temp3;
+	SET id_list_temp1;
+	value_adj=value*Wei;
+IF period=4;
+RUN;
+
+PROC TTEST DATA=id_list_temp3;
+CLASS hsct;
+VAR value_pppm;
+RUN;
