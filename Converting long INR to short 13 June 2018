@@ -1,0 +1,46 @@
+*extraction of dates and INR values;
+DATA all_INR_part;
+	SET Inr_all_0613;
+	IF Study_ID=. THEN delete;
+	KEEP Study_ID Date INR;
+	rename 	Date=Date1 INR=INR1;
+RUN;
+DATA inr_1;
+	SET all_INR_part;
+	KEEP Study_ID Date1 INR1 seq;
+	rename Study_ID=mednum 	Date1=obsdate INR1=inr;
+	seq=1;
+RUN;
+%macro pso (time);
+DATA inr_&time.;
+	SET Inr_all_0613;
+	IF Study_ID=. THEN delete;
+
+	%let AA1 = &time;
+	%let BB1 = %SYSEVALF(7*&AA1+4);
+	%put BB1 = &BB1;
+	%let CC1 = %SYSEVALF(7*&AA1+5);
+	%put CC1 = &CC1;
+	KEEP Study_ID var&BB1. var&CC1. obsdate inr seq;
+	rename 	Study_ID=mednum;
+	obsdate = input(var&BB1., best12.);
+	inr 	= input(var&CC1., best12.);
+	FORMAT obsdate MMDDYY10.;
+	DROP var&BB1. var&CC1.;
+	seq=&AA1.;
+RUN;
+%MEND;
+
+%pso(2);%pso(3);%pso(4);%pso(5);%pso(6);%pso(7);%pso(8);%pso(9);%pso(10);
+%pso(11);%pso(12);%pso(13);%pso(14);%pso(15);%pso(16);%pso(17);%pso(18);%pso(19);%pso(20);
+%pso(21);%pso(22);%pso(23);%pso(24);%pso(25);%pso(26);%pso(27);%pso(28);%pso(29);%pso(30);
+%pso(31);%pso(32);%pso(33);%pso(34);%pso(35);%pso(36);%pso(37);%pso(38);%pso(39);%pso(40);
+
+DATA analytical_part;
+	SET inr_1 inr_2 inr_3 inr_4 inr_5 inr_6 inr_7 inr_8 inr_9 inr_10
+		inr_11 inr_12 inr_13 inr_14 inr_15 inr_16 inr_17 inr_18 inr_19 inr_20
+		inr_21 inr_22 inr_23 inr_24 inr_25 inr_26 inr_27 inr_28 inr_29 inr_30
+		inr_31 inr_32 inr_33 inr_34 inr_35 inr_36 inr_37 inr_38 inr_39 inr_40;
+RUN; 
+
+
