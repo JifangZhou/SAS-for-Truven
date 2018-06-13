@@ -1,0 +1,289 @@
+*Assessment of health service utilization;
+%macro pso (time);
+DATA inpt_list1;
+	SET inpt_list;
+	IF (index_date+30*(&time.-1)<=DISDATE<index_date+30*&time.);
+RUN;
+
+DATA opt_list1;
+	SET opt_list;
+	IF (index_date+30*(&time.-1)<SVCDATE<=index_date+30*&time.);
+RUN;
+
+DATA svc1;
+	SET svc_all;
+	IF (index_date+30*(&time.-1)<SVCDATE<=index_date+30*&time.);
+RUN;
+
+DATA pres_list1;
+	SET pres_list;
+	IF (index_date+30*(&time.-1)<SVCDATE<=index_date+30*&time.);
+RUN;
+
+*All cause ipt number;
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			min(DISDATE) as DISDATE
+	FROM inpt_list1
+	GROUP BY enrolid, DISDATE;
+QUIT;
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			count(DISDATE) as ipt_Q&time.
+	FROM case_list
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_list_Q&time. as
+	SELECT a.enrolid,
+			b.*
+	FROM myfile.pres_cost_hsct_hu_6_april a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*Assess number of ER visits;
+DATA temp;
+	SET opt_list1;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0637','0981') THEN ER=1;
+	ELSE IF STDPROV in ('220','428') THEN ER=1;
+	ELSE IF STDPLAC in ('23') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120','10220','10320','10420','10520',
+						'12220','20120','20220','21120','21220','22120','22320',
+						'30120','30220','30320','30420','30520','30620',
+						'31120','31220','31320','31420','31520','31620') THEN ER=1;
+	IF ER=1;
+RUN;
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			min(SVCDATE) as SVCDATE
+	FROM	temp
+	GROUP BY enrolid, SVCDATE;
+QUIT;
+
+PROC sql;
+	CREATE table list2 as
+	SELECT 	min(enrolid) as enrolid,
+			count(SVCDATE) as ER_Q&time.
+	FROM list1
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_list_Q&time. as
+	SELECT a.*,
+			b.*
+	FROM id_list_Q&time. a 
+	LEFT JOIN list2 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*Assessment of transfusion;
+DATA svc_list1;
+	SET svc_list1;
+array proc {*} proc1-proc15;
+do i = 1 to dim(proc);
+if proc{i} in: ('36430'	'P9011' 'P9016' 'P9021' 'P9022' 'P9038' 'P9039' 'P9040' 'P9051' 'P9054' 'P9057' 'P9058') then transfusion = 1;
+end;
+array icd {*} dx1-dx15;
+do i = 1 to dim(icd);
+if icd{i} in: ('990') then transfusion = 1;
+end;
+IF REVCODE in: ('038','039') then transfusion = 1;
+if transfusion = 1;
+IF SVCDATE=. THEN DELETE;
+run; 
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			min(SVCDATE) as SVCDATE
+	FROM	svc_list1
+	GROUP BY enrolid, SVCDATE;
+QUIT;
+
+PROC sql;
+	CREATE table list2 as
+	SELECT 	min(enrolid) as enrolid,
+			count(SVCDATE) as transfusion_Q&time.
+	FROM list1
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_list_Q&time. as
+	SELECT a.*,
+			b.*
+	FROM id_list_Q&time. a 
+	LEFT JOIN list2 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*SCD_specific ipt number;
+DATA inpt_list1;
+	SET inpt_list1;
+	array icd {*} dx1-dx2;
+	do i = 1 to dim(icd);
+	if icd{i} in: ('2750', '28242', '28262', '28264', '28269','73340','73341','73342','73343','73344', '73349',
+					'7300', '7301', '7302', '7301', '0955', '0155', '70710', '2894', '28952', '7590', '7892', '3629',
+					'574', '57510', '430', '431', '432', '43301', '43311', '43321', '43331', '43341', '43351', '43361', '43371', '43381', '43391', '434', '436',
+					'480','481','482','483','484','485','486','487','488', '5173', '5851','5852','5853','7910', '4150', '4160', '4168') then case = 1;
+	end;
+	if case = 1;
+	RUN;
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			min(DISDATE) as DISDATE
+	FROM inpt_list1
+	GROUP BY enrolid, DISDATE;
+QUIT;
+PROC SQL;
+CREATE TABLE case_list as
+	SELECT min(enrolid) as enrolid,
+			count(DISDATE) as ipt_SCD_Q&time.
+	FROM case_list
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_list_Q&time. as
+	SELECT a.*,
+			b.*
+	FROM id_list_Q&time. a 
+	LEFT JOIN case_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*Assess number of SCD_related ER visits;
+DATA opt_list2;
+	SET opt_list1;
+	array icd {*} dx1-dx2;
+	do i = 1 to dim(icd);
+	if icd{i} in: ('2750', '28242', '28262', '28264', '28269','73340','73341','73342','73343','73344', '73349',
+					'7300', '7301', '7302', '7301', '0955', '0155', '70710', '2894', '28952', '7590', '7892', '3629',
+					'574', '57510', '430', '431', '432', '43301', '43311', '43321', '43331', '43341', '43351', '43361', '43371', '43381', '43391', '434', '436',
+					'480','481','482','483','484','485','486','487','488', '5173', '5851','5852','5853','7910', '4150', '4160', '4168') then case = 1;
+	end;
+	if case = 1;
+	RUN;
+DATA temp;
+	SET opt_list2;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0637','0981') THEN ER=1;
+	ELSE IF STDPROV in ('220','428') THEN ER=1;
+	ELSE IF STDPLAC in ('23') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120','10220','10320','10420','10520',
+						'12220','20120','20220','21120','21220','22120','22320',
+						'30120','30220','30320','30420','30520','30620',
+						'31120','31220','31320','31420','31520','31620') THEN ER=1;
+	IF ER=1;
+RUN;
+PROC sql;
+	CREATE table list1 as
+	SELECT 	min(enrolid) as enrolid,
+			min(SVCDATE) as SVCDATE
+	FROM	temp
+	GROUP BY enrolid, SVCDATE;
+QUIT;
+
+PROC sql;
+	CREATE table list2 as
+	SELECT 	min(enrolid) as enrolid,
+			count(SVCDATE) as ER_SCD_Q&time.
+	FROM list1
+	GROUP BY enrolid;
+QUIT;
+
+PROC SQL;
+	CREATE table id_list_Q&time. as
+	SELECT a.*,
+			b.*
+	FROM id_list_Q&time. a 
+	LEFT JOIN list2 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+%let AA = &time;
+%let BB = %SYSEVALF(30*&AA-29);
+%put BB = &BB;
+%let CC = %SYSEVALF(30*&AA);
+%put CC = &CC;
+*all-cause LOS;
+data pdc;
+set both;
+array daydummy(2160) day1-day2160;
+array filldates(*) SVCDATE1 - SVCDATE880;
+array days_supply(*) DAYSUPP1-DAYSUPP880;
+ do ii=1 to 2160; daydummy(ii)=0;end;
+ do ii=1 to 2160;
+ do i = 1 to dim(filldates) while (filldates(i) ne .);
+ if filldates(i)<= start_dt + ii -1 <= filldates(i)+days_supply(i)-1
+ then daydummy(ii)=1;
+ end;
+ end;
+drop i ii;
+dayscovered=sum(of day&BB. - day&CC.);
+LOS_Q&time.=dayscovered;
+run;
+PROC SQL;
+	CREATE table id_list_Q&time. as
+	SELECT a.*,
+			b.LOS_Q&time.
+	FROM id_list_Q&time. a 
+	LEFT JOIN pdc b
+	ON a.enrolid = b.enrolid;
+QUIT;
+*SCD related LOS;
+%let AA1 = &time;
+%let BB1 = %SYSEVALF(30*&AA1-29);
+%put BB1 = &BB;
+%let CC1 = %SYSEVALF(30*&AA1);
+%put CC1 = &CC1;
+*all-cause LOS;
+data pdc_SCD;
+set both_SCD;
+array daydummy(2160) day1-day2160;
+array filldates(*) SVCDATE1 - SVCDATE880;
+array days_supply(*) DAYSUPP1-DAYSUPP880;
+ do ii=1 to 2160; daydummy(ii)=0;end;
+ do ii=1 to 2160;
+ do i = 1 to dim(filldates) while (filldates(i) ne .);
+ if filldates(i)<= start_dt + ii -1 <= filldates(i)+days_supply(i)-1
+ then daydummy(ii)=1;
+ end;
+ end;
+drop i ii;
+dayscovered=sum(of day&BB1. - day&CC1.);
+LOS_SCD_Q&time.=dayscovered;
+run;
+PROC SQL;
+	CREATE table id_list_Q&time. as
+	SELECT a.*,
+			b.LOS_SCD_Q&time.
+	FROM id_list_Q&time. a 
+	LEFT JOIN pdc_SCD b
+	ON a.enrolid = b.enrolid;
+QUIT;
+DATA id_list_Q&time.;
+	SET id_list_Q&time.;
+	IF ipt_Q&time.=. THEN ipt_Q&time.=0;
+	IF ER_Q&time.=. THEN ER_Q&time.=0;
+	IF ipt_SCD_Q&time.=. THEN ipt_SCD_Q&time.=0;
+	IF ER_SCD_Q&time.=. THEN ER_SCD_Q&time.=0;
+	IF transfusion_Q&time.=. THEN transfusion_Q&time.=0;
+	IF LOS_SCD_Q&time.=. THEN LOS_SCD_Q&time.=0;
+	IF LOS_Q&time.=. THEN LOS_Q&time.=0;
+	acute_Q&time.=ipt_Q&time.+ER_Q&time.;
+	acute_SCD_Q&time.=ipt_SCD_Q&time.+ER_SCD_Q&time.;
+RUN;
+%MEND;
+
+%pso(1);/*%pso(2);%pso(3);%pso(4);%pso(5);%pso(6);%pso(7);%pso(8);%pso(9);%pso(10);
+%pso(11);%pso(12);%pso(13);%pso(14);%pso(15);%pso(16);%pso(17);%pso(18);%pso(19);%pso(20);
+%pso(21);%pso(22);%pso(23);%pso(24);%pso(25);%pso(26);%pso(27);%pso(28);%pso(29);%pso(30);
+%pso(31);%pso(32);%pso(33);%pso(34);%pso(35);%pso(36);%pso(37);%pso(38);%pso(39);%pso(40);
+%pso(41);%pso(42);%pso(43);%pso(44);%pso(45);%pso(46);%pso(47);%pso(48);%pso(49);%pso(50);
+%pso(51);%pso(52);%pso(53);%pso(54);%pso(55);%pso(56);%pso(57);%pso(58);%pso(59);%pso(60);
+%pso(61);%pso(62);%pso(63);%pso(64);%pso(65);%pso(66);%pso(67);%pso(68);%pso(69);%pso(70);
