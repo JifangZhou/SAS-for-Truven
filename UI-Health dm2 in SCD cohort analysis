@@ -1,0 +1,154 @@
+LIBNAME myfile "C:\Users\jzhou86\Documents\ASH Award Application\Preliminary analysis";
+
+DATA SCD_demo1;
+	SET SCD_demo;
+  date_birth= input(Birth_Date, mmddyy8.);
+  format date_birth date10.;
+  date_first= input(First_Encounter, mmddyy8.);
+  format date_first date10.;
+  date_last= input(Last_Encounter, mmddyy8.);
+  format date_last date10.;
+RUN;
+
+PROC FREQ DATA=SCD_demo2;
+	TABLE SCD_Subtype Tobacco Alcohol Substance Race;
+RUN;
+
+DATA SCD_demo2;
+	SET SCD_demo1;
+	IF SCD_Subtype="Not.SCD" THEN DELETE;
+	age=(date_first-date_birth)/365.25;
+	follow_up=date_last-date_first;
+	IF age>=20;
+	IF MRN__Organization="A231-287861" THEN MRN__Organization=231287861;
+	numeric_MRN = input(MRN__Organization, 11.); 
+RUN;
+
+DATA myfile.SCD_demo;
+	SET SCD_demo1;
+	IF SCD_Subtype="Not.SCD" THEN DELETE;
+	age=(date_first-date_birth)/365.25;
+	follow_up=date_last-date_first;
+RUN;
+
+PROC SQL;
+	CREATE table dm_dx as
+	SELECT min(MRN__Organization) as id,
+			min(Admit_Date) as dx_date
+	FROM DM
+	GROUP BY MRN__Organization;
+QUIT;	
+
+PROC SQL;
+	CREATE table id_list_dx as
+	SELECT a.*,
+			b.dx_date
+	FROM SCD_demo2 a
+	LEFT JOIN dm_dx b 
+	ON a.numeric_MRN=b.id;
+QUIT;	
+
+*Assessment of glycose level;
+DATA ip_lab_glu;
+	SET ip_lab;
+	IF Clinical_Event="GLUC" OR Clinical_Event="Glucos" OR Clinical_Event="WBGLU";
+	IF Clinical_Event_Result>=200;
+	numeric_MRN = input(MRN__Organization, 11.); 
+RUN;
+PROC SQL;
+	CREATE table dm_ip_lab as
+	SELECT min(numeric_MRN) as id,
+			1 as ip_lab
+	FROM ip_lab_glu
+	GROUP BY numeric_MRN;
+QUIT;	
+DATA op_lab_glu;
+	SET op_lab;
+	IF Clinical_Event="GLUC" OR Clinical_Event="Glucos" OR Clinical_Event="WBGLU";
+	IF Clinical_Event_Result>=200;
+	numeric_MRN = input(MRN__Organization, 11.); 
+	numeric_result = input(Clinical_Event_Result, 5.); 
+RUN;
+PROC SQL;
+	CREATE table dm_op_lab as
+	SELECT min(numeric_MRN) as id,
+			1 as op_lab
+	FROM op_lab_glu
+	GROUP BY numeric_MRN;
+QUIT;	
+
+PROC FREQ DATA=op_lab;
+	TABLE Clinical_Event;
+RUN;
+
+PROC SQL;
+	CREATE table id_list_lab as
+	SELECT a.*,
+			b.*
+	FROM id_list_dx a
+	LEFT JOIN dm_ip_lab b 
+	ON a.numeric_MRN=b.id;
+QUIT;
+
+PROC SQL;
+	CREATE table id_list_lab1 as
+	SELECT a.*,
+			b.*
+	FROM id_list_lab a
+	LEFT JOIN dm_op_lab b 
+	ON a.numeric_MRN=b.id;
+QUIT;
+
+DATA myfile.id_adult_dm;
+	SET id_list_lab1;
+	dm=0;
+	IF (dx_date^=. OR op_lab=1) THEN dm=1;
+	IF age<=29 then age_cat=0;
+	ELSE IF age<=39 then age_cat=1;
+	ELSE IF age<=49 then age_cat=2;
+	ELSE IF age<=59 then age_cat=3;
+	ELSE IF age<=69 then age_cat=4;
+	ELSE IF age<=109 then age_cat=5;
+RUN;
+
+PROC FREQ DATA=myfile.id_adult_dm;
+	TABLE SCD_Subtype/nocol norow nopercent chisq;
+RUN;
+
+PROC MEANS DATA=op_lab_glu;
+	VAR numeric_result;
+RUN;
+
+DATA lab_fruc;
+	SET ip_lab op_lab;
+	IF Clinical_Event="FRUCT";
+	IF Clinical_Event_Result>285;
+	numeric_result = input(Clinical_Event_Result, 5.); 
+RUN;
+
+PROC MEANS DATA=lab_fruc;
+	VAR numeric_result;
+RUN;
+
+PROC SQL;
+	CREATE table dm_fruc as
+	SELECT min(MRN__Organization) as id,
+			1 as fruc_lab
+	FROM lab_fruc
+	GROUP BY MRN__Organization;
+QUIT;	
+
+DATA dm_fruc;
+	SET dm_fruc;
+	numeric_MRN = input(id, 11.); 
+RUN;
+
+PROC SQL;
+	CREATE table id_list_lab2 as
+	SELECT a.*,
+			b.fruc_lab
+	FROM id_list_lab1 a
+	LEFT JOIN dm_fruc b 
+	ON a.numeric_MRN=b.numeric_MRN;
+QUIT;	
+
