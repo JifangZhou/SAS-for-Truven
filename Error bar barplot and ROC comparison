@@ -1,0 +1,45 @@
+# create dummy data
+df3 <- data.frame(Type=rep(c("VTE", "PE"), each=3),
+                  dose=rep(c("<50th", "50th-80th", "80th+"),2),
+                  len=c(0.47, 1.38, 6.71, 0.01, 3.41, 4.45),
+                  sd=c(0.12, 0.28, 0.77, 0.19, 0.46, 0.62))
+df3$dose=as.factor(df3$dose)
+library("ggplot2")
+p <- ggplot(df3, aes(x=dose, y=len, fill=Type)) + 
+  geom_bar(stat="identity", position=position_dodge()) +
+  geom_errorbar(aes(ymin=len-sd, ymax=len+sd), width=.2,
+                position=position_dodge(.9))
+
+p + scale_fill_brewer(palette="Paired") + theme_minimal()
+p + labs(title="Incidence Rate by Risk Level", 
+         x="Cumulative Risk Score", y = "Incidence Rate with 96% CI")+
+  scale_fill_manual(values=c('black','lightgray'))+
+  theme_classic()
+  
+  install.packages("pROC")
+library(pROC)
+
+all_file<- read.csv(file="C:/Users/jzhou86/Documents/ASH Award Application/Preliminary analysis/VTE predictive model 0707.csv",
+                    head=TRUE,sep=",")
+
+rocobj <- plot.roc(all_file$VTE_180, all_file$VTE_pred,
+                   
+                   main="Confidence intervals", percent=TRUE,
+                   
+                   ci=TRUE, # compute AUC (of AUC by default)
+                   
+                   print.auc=TRUE) # print the AUC (will contain the CI)
+
+
+
+rocobj1 <- plot.roc(all_file$VTE_180, all_file$Caprini_cat,
+                    
+                    main="Statistical comparison", percent=TRUE, col="#1c61b6")
+
+rocobj2 <- lines.roc(all_file$VTE_180, all_file$VTE_pred, percent=TRUE, col="#008600")
+
+testobj <- roc.test(rocobj1, rocobj2)
+
+text(50, 50, labels=paste("p-value =", format.pval(testobj$p.value)), adj=c(0, .5))
+
+legend("bottom", legend=c("CAPRINI Model (AUC 0.756)", "PARViS Model  (AUC 0.841)"), col=c("#1c61b6", "#008600"), lwd=2)
