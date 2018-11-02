@@ -1,0 +1,173 @@
+LIBNAME myfile "F:\User Folders\jzhou86\Suda R01\RawData";
+
+DATA id_list;
+	SET myfile.analytical_cohort_abx_15oct;
+RUN;
+
+DATA all_records;
+	SET myfile.all_abx_opt myfile.all_abx_ipt;
+RUN;
+
+
+DATA oral_inf;
+	SET all_records;
+	oral_inf=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('5206','5220','5221','5224','5225','5226','5227','52300','5233',
+'5264','5262','5265','5266','5222','5228','5229','5210','52181',
+'5283','73345' ) then oral_inf=1;
+		end;
+	IF oral_inf=1;
+RUN;
+  
+DATA oral_inf;
+	SET oral_inf;
+	index_date=min(SVCDATE,DISDATE);
+	oral_inf=1;
+RUN;
+
+*Merge back with id list;
+* any time prior to the dental visit;
+PROC sql;
+	CREATE table oral_inf_anytime_list as
+	SELECT a.visit_id,
+		b.oral_inf as oral_inf_anytime
+	FROM id_list a
+	INNER JOIN oral_inf b
+	ON a.enrolid = b.enrolid AND a.visit_dt>=b.index_date;
+QUIT; 
+PROC sql;
+	CREATE table oral_inf_anytime_list as
+	SELECT min(visit_id) as visit_id,
+		min(oral_inf_anytime) as oral_inf_anytime
+	FROM oral_inf_anytime_list
+	GROUP BY visit_id;
+QUIT; 
+PROC sql;
+	CREATE table oral_inf_1year_list as
+	SELECT a.visit_id,
+		b.oral_inf as oral_inf_1year
+	FROM id_list a
+	INNER JOIN oral_inf b
+	ON a.enrolid = b.enrolid AND a.visit_dt>=b.index_date>=a.visit_dt-365;
+QUIT; 
+
+PROC sql;
+	CREATE table oral_inf_1year_list as
+	SELECT min(visit_id) as visit_id,
+		min(oral_inf_1year) as oral_inf_1year
+	FROM oral_inf_1year_list
+	GROUP BY visit_id;
+QUIT; 
+
+PROC sql;
+	CREATE table oral_inf_6m_list as
+	SELECT a.visit_id,
+		b.oral_inf as oral_inf_6m
+	FROM id_list a
+	INNER JOIN oral_inf b
+	ON a.enrolid = b.enrolid AND a.visit_dt>=b.index_date>=a.visit_dt-180;
+QUIT; 
+
+PROC sql;
+	CREATE table oral_inf_6m_list as
+	SELECT min(visit_id) as visit_id,
+		min(oral_inf_6m) as oral_inf_6m
+	FROM oral_inf_6m_list
+	GROUP BY visit_id;
+QUIT; 
+
+PROC sql;
+	CREATE table oral_inf_1m_list as
+	SELECT a.visit_id,
+		b.oral_inf as oral_inf_1m
+	FROM id_list a
+	INNER JOIN oral_inf b
+	ON a.enrolid = b.enrolid AND a.visit_dt>=b.index_date>=a.visit_dt-30;
+QUIT; 
+
+PROC sql;
+	CREATE table oral_inf_1m_list as
+	SELECT min(visit_id) as visit_id,
+		min(oral_inf_1m) as oral_inf_1m
+	FROM oral_inf_1m_list
+	GROUP BY visit_id;
+QUIT; 
+
+PROC sql;
+	CREATE table oral_inf_sameday_list as
+	SELECT a.visit_id,
+		b.oral_inf as oral_inf_sameday
+	FROM id_list a
+	INNER JOIN oral_inf b
+	ON a.enrolid = b.enrolid AND a.visit_dt=b.index_date;
+QUIT; 
+
+PROC sql;
+	CREATE table oral_inf_sameday_list as
+	SELECT min(visit_id) as visit_id,
+		min(oral_inf_sameday) as oral_inf_sameday
+	FROM oral_inf_sameday_list
+	GROUP BY visit_id;
+QUIT; 
+
+*Merge back the visit list on oral infections;
+PROC sql;
+	CREATE table id_list as
+	SELECT a.*,
+		b.*
+	FROM id_list a
+	LEFT JOIN oral_inf_sameday_list b
+	ON a.visit_id = b.visit_id;
+QUIT; 
+
+PROC sql;
+	CREATE table id_list as
+	SELECT a.*,
+		b.*
+	FROM id_list a
+	LEFT JOIN oral_inf_1m_list b
+	ON a.visit_id = b.visit_id;
+QUIT; 
+
+PROC sql;
+	CREATE table id_list as
+	SELECT a.*,
+		b.*
+	FROM id_list a
+	LEFT JOIN oral_inf_6m_list b
+	ON a.visit_id = b.visit_id;
+QUIT; 
+
+PROC sql;
+	CREATE table id_list as
+	SELECT a.*,
+		b.*
+	FROM id_list a
+	LEFT JOIN oral_inf_1year_list b
+	ON a.visit_id = b.visit_id;
+QUIT; 
+
+PROC sql;
+	CREATE table id_list as
+	SELECT a.*,
+		b.*
+	FROM id_list a
+	LEFT JOIN oral_inf_anytime_list b
+	ON a.visit_id = b.visit_id;
+QUIT; 
+
+PROC FREQ DATA=id_list;
+TABLE oral_inf_sameday oral_inf_1m oral_inf_6m oral_inf_1year oral_inf_anytime/nocol norow nopercent missing;
+RUN;
+PROC FREQ DATA=id_list;
+TABLE oral_inf_1m*inappropriate_abx 
+oral_inf_6m*inappropriate_abx 
+oral_inf_1year*inappropriate_abx 
+oral_inf_anytime*inappropriate_abx/nocol norow nopercent missing chisq;
+RUN;
+
+DATA myfile.abx_analytical_18Oct;
+	SET id_list;
+RUN;
