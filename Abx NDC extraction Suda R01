@@ -1,0 +1,386 @@
+/*antibiotic list*/
+/*list provided by KS see email dated 3/13*/
+libname rb "E:\Truven Data"; 
+data rb; 
+set rb.redbook; 
+gen = upcase(GENNME); 
+prod = upcase(PRODNME); 
+run; 
+
+proc sql; 
+create table abx as 
+select * 
+from rb 
+where 
+gen like '%AMIKACIN%'or
+gen like '%AMINOPENICILLIN%'or
+gen like '%AMOXICILLIN%'or
+gen like '%AMPICILLIN%'or
+gen like '%AVIBACTAM%'or
+gen like '%AZITHROMYCIN%'or
+gen like '%AZTREONAM%'or
+gen like '%CEFACLOR%'or
+gen like '%CEFADROXIL%'or
+gen like '%CEFAZOLIN%'or
+gen like '%CEFDINIR%'or
+gen like '%CEFDITOREN%'or
+gen like '%CEFEPIME%'or
+gen like '%CEFIXIME%'or
+gen like '%CEFOTAXIME%'or
+gen like '%CEFOTETAN%'or
+gen like '%CEFOXITIN%'or
+gen like '%CEFPODOXIME%'or
+gen like '%CEFPROZIL%'or
+gen like '%CEFTAROLINE%'or
+gen like '%CEFTAZIDIME%'or
+gen like '%CEFTIBUTEN%'or
+gen like '%CEFTOLOZANE%'or
+gen like '%CEFTRIAXONE%'or
+gen like '%CEFUROXIME%'or
+gen like '%CEPHALEXIN%'or
+gen like '%CHLORAMPHENICOL%'or
+gen like '%CILASTATIN%'or
+gen like '%CIPROFLOXACIN%'or
+gen like '%CLARITHROMYCIN%'or
+gen like '%CLAVULANATE%'or
+gen like '%CLINDAMYCIN%'or
+gen like '%COLISTIMETHATE%'or
+gen like '%COTRIMOXAZOLE%'or
+gen like '%CO-TRIMOXAZOLE%'or
+gen like '%DALBAVANCIN%'or
+gen like '%DALFOPRISTIN%'or
+gen like '%DAPTOMYCIN%'or
+gen like '%DELAFLOXACIN%'or
+gen like '%DEMECLOCYCLINE%'or
+gen like '%DICLOXACILLIN%'or
+gen like '%DORIPENEM%'or
+gen like '%DOXYCYCLINE%'or
+gen like '%ERTAPENEM%'or
+gen like '%ERYTHROMYCIN%'or
+gen like '%FIDAXOMICIN%'or
+gen like '%FOSFOMYCIN%'or
+gen like '%GEMIFLOXACIN%'or
+gen like '%GENTAMICIN%'or
+gen like '%IMIPENEM%'or
+gen like '%LEVOFLOXACIN%'or
+gen like '%LINCOMYCIN%'or
+gen like '%LINEZOLID%'or
+gen like '%MEROPENEM%'or
+gen like '%METHENAMINE%'or
+gen like '%MINOCYCLINE%'or
+gen like '%MOXIFLOXACIN%'or
+gen like '%NAFCILLIN%'or
+gen like '%NEOMYCIN%'or
+gen like '%NITROFURANTOIN%'or
+gen like '%OFLOXACIN%'or
+gen like '%ORITAVANCIN%'or
+gen like '%OXACILLIN%'or
+gen like '%PENICILLIN%'or
+gen like '%PIPERACILLIN%'or
+gen like '%POLYMYXIN%'or
+gen like '%QUINUPRISTIN%'or
+gen like '%RIFABUTIN%'or
+gen like '%RIFAMPIN%'or
+gen like '%RIFAPENTINE%'or
+gen like '%RIFAXIMIN%'or
+gen like '%STREPTOMYCIN%'or
+gen like '%SULBACTAM%'or
+gen like '%SULFADIAZINE%'or
+gen like '%SULFAMETHOXAZOLE%'or
+gen like '%SULFASALAZINE%'or
+gen like '%TAZOBACTAM%'or
+gen like '%TEDIZOLID%'or
+gen like '%TELAVANCIN%'or
+gen like '%TELITHROMYCIN%'or
+gen like '%TETRACYCLINE%'or
+gen like '%TICARCILLIN%'or
+gen like '%TIGECYCLINE%'or
+gen like '%TOBRAMYCIN%'or
+gen like '%TRIMETHOPRIM%'or
+gen like '%VABORACTAM%'or
+gen like '%VANCOMYCIN%'; 
+quit; 
+/*NOTE: Table WORK.ABX created, with 24988 rows and 36 columns.
+*/
+proc freq; tables MSTFMDS; run; 
+/*  Master Form Description
+
+                                                                  Cumulative    Cumulative
+       MSTFMDS                           Frequency     Percent     Frequency      Percent
+       ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+       Bandage                                  6        0.02             6         0.02
+       Capsule                               6942       27.78          6948        27.81
+       Capsule, Delayed Release               130        0.52          7078        28.33
+       Capsule, Extended Release               26        0.10          7104        28.43
+       Cream                                  364        1.46          7468        29.89
+       Crystal                                 26        0.10          7494        29.99
+       Dressing                                 1        0.00          7495        29.99
+       Drop/Solution/Suspension               122        0.49          7617        30.48
+       Foam                                    10        0.04          7627        30.52
+       Gel/Jelly                              127        0.51          7754        31.03
+       Granule                                 11        0.04          7765        31.07
+       Granule for Reconstitution               9        0.04          7774        31.11
+       Implant                                  1        0.00          7775        31.11
+       Injectable                             155        0.62          7930        31.74
+       Kit                                     46        0.18          7976        31.92
+       Liquid                                   5        0.02          7981        31.94
+       Lotion                                   9        0.04          7990        31.98
+       Ointment                              1004        4.02          8994        35.99
+       Pad                                     23        0.09          9017        36.09
+       Patient Pack                             1        0.00          9018        36.09
+       Pod                                      1        0.00          9019        36.09
+       Powder                                 832        3.33          9851        39.42
+       Powder for Injection                   167        0.67         10018        40.09
+       Powder for Solution                   1734        6.94         11752        47.03
+       Powder for Suspension                 2273        9.10         14025        56.13
+       Powder for Suspension, Extende           6        0.02         14031        56.15
+       Solution                              1618        6.48         15649        62.63
+       Spray                                    2        0.01         15651        62.63
+       Suppository                              2        0.01         15653        62.64
+       Suspension                            1340        5.36         16993        68.00
+       Swab                                    10        0.04         17003        68.04
+       Syringe                                 12        0.05         17015        68.09
+       Syrup                                   44        0.18         17059        68.27
+       Tablet                                6985       27.95         24044        96.22
+       Tablet for Suspension                   14        0.06         24058        96.28
+       Tablet, Chewable                       341        1.36         24399        97.64
+       Tablet, Delayed Release                 76        0.30         24475        97.95
+       Tablet, Enteric Coated                 362        1.45         24837        99.40
+       Tablet, Extended Release               151        0.60         24988       100.00
+
+*/
+proc freq; tables MASTFRM*MSTFMDS/list missing; run; 
+/*
+  The FREQ Procedure
+
+                                                                        Cumulative    Cumulative
+  MASTFRM    MSTFMDS                           Frequency     Percent     Frequency      Percent
+  ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+  BAN        Bandage                                  6        0.02             6         0.02
+  CAP        Capsule                               6942       27.78          6948        27.81
+  CER        Capsule, Extended Release               26        0.10          6974        27.91
+  CRE        Cream                                  364        1.46          7338        29.37
+  CRY        Crystal                                 26        0.10          7364        29.47
+  CTB        Tablet, Chewable                       341        1.36          7705        30.83
+  DRE        Dressing                                 1        0.00          7706        30.84
+  ECC        Capsule, Delayed Release               130        0.52          7836        31.36
+  ECT        Tablet, Enteric Coated                 362        1.45          8198        32.81
+  FOA        Foam                                    10        0.04          8208        32.85
+  GEL        Gel/Jelly                              127        0.51          8335        33.36
+  GER        Powder for Suspension, Extende           6        0.02          8341        33.38
+  GRA        Granule                                 11        0.04          8352        33.42
+  GRR        Granule for Reconstitution               9        0.04          8361        33.46
+  GTT        Drop/Solution/Suspension               122        0.49          8483        33.95
+  IMP        Implant                                  1        0.00          8484        33.95
+  INJ        Injectable                             155        0.62          8639        34.57
+  KIT        Kit                                     46        0.18          8685        34.76
+  LIQ        Liquid                                   5        0.02          8690        34.78
+  LOT        Lotion                                   9        0.04          8699        34.81
+  OIN        Ointment                              1004        4.02          9703        38.83
+  PAD        Pad                                     23        0.09          9726        38.92
+  PAK        Patient Pack                             1        0.00          9727        38.93
+  PDI        Powder for Injection                   167        0.67          9894        39.60
+  PDR        Powder for Suspension                 2273        9.10         12167        48.69
+  PDS        Powder for Solution                   1734        6.94         13901        55.63
+  POD        Pod                                      1        0.00         13902        55.63
+  POW        Powder                                 832        3.33         14734        58.96
+  SOL        Solution                              1618        6.48         16352        65.44
+  SPR        Spray                                    2        0.01         16354        65.45
+  SRN        Syringe                                 12        0.05         16366        65.50
+  SUP        Suppository                              2        0.01         16368        65.50
+  SUS        Suspension                            1340        5.36         17708        70.87
+  SWA        Swab                                    10        0.04         17718        70.91
+  SYR        Syrup                                   44        0.18         17762        71.08
+  TAB        Tablet                                6985       27.95         24747        99.04
+  TBS        Tablet for Suspension                   14        0.06         24761        99.09
+  TCP        Tablet, Delayed Release                 76        0.30         24837        99.40
+  TER        Tablet, Extended Release               151        0.60         24988       100.00
+
+*/
+data abx;
+set abx; 
+if MASTFRM in ('SYR','SWA','SUP','SPR','OIN','LOT','GTT','GEL','FOA','DRE','CRE','BAN') then delete; 
+run; 
+/*NOTE: There were 24988 observations read from the data set WORK.ABX.
+NOTE: The data set WORK.ABX has 23287 observations and 36 variables.
+*/
+proc freq; tables gen*MSTFMDS/list; run; 
+
+data abx;
+set abx; 
+if gen in ('ADAPALENE;CLINDAMYCIN PHOSPHATE;CREAM BASE') then delete; 
+run; 
+/*NOTE: There were 23287 observations read from the data set WORK.ABX.
+NOTE: The data set WORK.ABX has 23285 observations and 36 variables.
+*/
+
+proc freq; tables gen*MSTFMDS/list; run; 
+/*list extracted to spreadsheet Abx products for review*/
+
+/*03/25/18: review completed, see email from KS on 03/20 and see file on data documentation: Abx products for review KS edits2*/
+
+
+proc sql; 
+create table abx2 as 
+select * 
+from abx 
+where
+gen like '%AMOXICILLIN%' or
+gen like '%AMOXICILLIN/CLAVULANATE POTASSIUM%' or
+gen like '%AMPICILLIN%' or
+gen like '%AMPICILLIN SODIUM%' or
+gen like '%AMPICILLIN SODIUM/SULBACTAM SODIUM%' or
+gen like '%AMPICILLIN TRIHYDRATE%' or
+gen like '%AZITHROMYCIN%' or
+gen like '%AZITHROMYCIN DIHYDRATE%' or
+gen like '%AZITHROMYCIN/DEXTROSE%' or
+gen like '%BACAMPICILLIN HYDROCHLORIDE%' or
+gen like '%CEFACLOR%' or
+gen like '%CEFADROXIL%' or
+gen like '%CEFAZOLIN%' or
+gen like '%CEFAZOLIN SODIUM%' or
+gen like '%CEFAZOLIN SODIUM/DEXTROSE%' or
+gen like '%CEFAZOLIN SODIUM/SODIUM CHLORIDE%' or
+gen like '%CEFDINIR%' or
+gen like '%CEFDITOREN PIVOXIL%' or
+gen like '%CEFEPIME HYDROCHLORIDE%' or
+gen like '%CEFIXIME%' or
+gen like '%CEFOTAXIME SODIUM%' or
+gen like '%CEFOTETAN DISODIUM%' or
+gen like '%CEFOXITIN%' or
+gen like '%CEFOXITIN SODIUM%' or
+gen like '%CEFPODOXIME PROXETIL%' or
+gen like '%CEFPROZIL%' or
+gen like '%CEFTAROLINE FOSAMIL%' or
+gen like '%CEFTAZIDIME%' or
+gen like '%CEFTAZIDIME SODIUM/DEXTROSE%' or
+gen like '%CEFTAZIDIME/SODIUM CARBONATE%' or
+gen like '%CEFTIBUTEN%' or
+gen like '%CEFTOLOZANE/TAZOBACTAM%' or
+gen like '%CEFTRIAXONE%' or
+gen like '%CEFTRIAXONE SODIUM%' or
+gen like '%CEFTRIAXONE SODIUM/LIDOCAINE%' or
+gen like '%CEFUROXIME AXETIL%' or
+gen like '%CEFUROXIME SODIUM%' or
+gen like '%CEPHALEXIN%' or
+gen like '%CEPHALEXIN HYDROCHLORIDE%' or
+gen like '%CIPROFLOXACIN%' or
+gen like '%CIPROFLOXACIN HYDROCHLORIDE%' or
+gen like '%CIPROFLOXACIN/CIPROFLOXACIN HYDROCHLORIDE%' or
+gen like '%CLARITHROMYCIN%' or
+gen like '%CLAVULANATE POTASSIUM/TICARCILLIN DISODIUM%' or
+gen like '%CLINDAMYCIN HYDROCHLORIDE%' or
+gen like '%CLINDAMYCIN PALMITATE HYDROCHLORIDE%' or
+gen like '%CLINDAMYCIN PHOSPHATE%' or
+gen like '%CLINDAMYCIN PHOSPHATE/DEXTROSE%' or
+gen like '%CLOXACILLIN SODIUM%' or
+gen like '%DALBAVANCIN%' or
+gen like '%DALFOPRISTIN/QUINUPRISTIN%' or
+gen like '%DAPTOMYCIN%' or
+gen like '%DEMECLOCYCLINE HYDROCHLORIDE%' or
+gen like '%DEXTROSE/LEVOFLOXACIN%' or
+gen like '%DEXTROSE/VANCOMYCIN HYDROCHLORIDE%' or
+gen like '%DICLOXACILLIN SODIUM%' or
+gen like '%DOXYCYCLINE%' or
+gen like '%DOXYCYCLINE HYCLATE%' or
+gen like '%DOXYCYCLINE;NUTRITIONAL SUPPLEMENT%' or
+gen like '%ENROFLOXACIN%' or
+gen like '%ERYTHROMYCIN%' or
+gen like '%ERYTHROMYCIN ESTOLATE%' or
+gen like '%ERYTHROMYCIN ETHYLSUCCINATE%' or
+gen like '%ERYTHROMYCIN ETHYLSUCCINATE/SULFISOXAZOLE ACETYL%' or
+gen like '%ERYTHROMYCIN GLUCEPTATE%' or
+gen like '%ERYTHROMYCIN LACTOBIONATE%' or
+gen like '%ERYTHROMYCIN STEARATE%' or
+gen like '%ERYTHROMYCIN THIOCYANATE%' or
+gen like '%ERYTHROMYCIN, TOPICAL%' or
+gen like '%GEMIFLOXACIN MESYLATE%' or
+gen like '%LEVOFLOXACIN%' or
+gen like '%LIDOCAINE HYDROCHLORIDE/OXYTETRACYCLINE%' or
+gen like '%LINCOMYCIN HYDROCHLORIDE%' or
+gen like '%LINEZOLID%' or
+gen like '%MINOCYCLINE HYDROCHLORIDE%' or
+gen like '%MOXIFLOXACIN HYDROCHLORIDE%' or
+gen like '%NAFCILLIN SODIUM%' or
+gen like '%OFLOXACIN%' or
+gen like '%ORITAVANCIN%' or
+gen like '%OXACILLIN SODIUM%' or
+gen like '%OXYTETRACYCLINE%' or
+gen like '%OXYTETRACYCLINE HYDROCHLORIDE%' or
+gen like '%PENICILLIN G BENZATHINE%' or
+gen like '%PENICILLIN G BENZATHINE/PENICILLIN G PROCAINE%' or
+gen like '%PENICILLIN G POTASSIUM%' or
+gen like '%PENICILLIN G POTASSIUM/SODIUM CHLORIDE%' or
+gen like '%PENICILLIN G PROCAINE%' or
+gen like '%PENICILLIN G SODIUM%' or
+gen like '%PENICILLIN V POTASSIUM%' or
+gen like '%PIPERACILLIN SODIUM%' or
+gen like '%PIPERACILLIN SODIUM/TAZOBACTAM SODIUM%' or
+gen like '%SODIUM CHLORIDE/VANCOMYCIN HYDROCHLORIDE%' or
+gen like '%SULFADIAZINE%' or
+gen like '%SULFADIAZINE SODIUM%' or
+gen like '%SULFADIAZINE/SULFAMERAZINE/SULFAMETHAZINE%' or
+gen like '%SULFAMETHOXAZOLE%' or
+gen like '%SULFAMETHOXAZOLE, MICRONIZED%' or
+gen like '%SULFAMETHOXAZOLE/TRIMETHOPRIM%' or
+gen like '%SULFASALAZINE%' or
+gen like '%TEDIZOLID PHOSPHATE%' or
+gen like '%TELAVANCIN HYDROCHLORIDE%' or
+gen like '%TELITHROMYCIN%' or
+gen like '%TETRACYCLINE%' or
+gen like '%TETRACYCLINE HYDROCHLORIDE%' or
+gen like '%TETRACYCLINE/AMPHOTERICIN%' or
+gen like '%TICARCILLIN DISODIUM%' or
+gen like '%TIGECYCLINE%' or
+gen like '%TRIMETHOPRIM%' or
+gen like '%TRIMETHOPRIM HYDROCHLORIDE%' or
+gen like '%TRIMETHOPRIM, MICRONIZED%' or
+gen like '%VANCOMYCIN HCL;SOLUTION, MULTI INGREDIENT%' or
+gen like '%VANCOMYCIN HYDROCHLORIDE%' or
+gen like '%VANCOMYCIN HYDROCHLORIDE;POWDER, MULTI INGREDIENT%' ; 
+quit; 
+/*NOTE: Table WORK.ABX2 created, with 20511 rows and 36 columns.
+*/
+proc freq; tables gen*MSTFMDS/list; run; 
+
+data abx2;
+set abx2; 
+if gen = 'ALATROFLOXACIN MESYLATE' then delete; 
+if gen = 'AMOXICILLIN;CLARITHROMYCIN;LANSOPRAZOLE' then delete; 
+if gen = 'AMOXICILLIN;CLARITHROMYCIN;OMEPRAZOLE' then delete; 
+if gen = 'AMPICILLIN/PROBENECID' then delete; 
+if gen = 'AVIBACTAM/CEFTAZIDIME' then delete; 
+if gen in ('AZO-SULFAMETHOXAZOLE','BENZOYL PEROXIDE/CLINDAMYCIN PHOSPHATE;CLEANSER','BENZOYL PEROXIDE/CLINDAMYCIN PHOSPHATE;LOTION, MUL','BENZOYL PEROXIDE;CLINDAMYCIN PHOSPHATE',
+'BENZOYL PEROXIDE;DOXYCYCLINE','BI SUBCITRATE K/METRONIDAZOLE/TETRACYCLINE HCL','BI SUBSALICYLATE/METRONIDAZOLE/TETRACYCLINE HCL','BI SUBSALICYLATE;METRONIDAZOLE;TETRACYCLINE HCL',
+'CIPROFLOXACIN HYDROCHLORIDE/DEXAMETHASONE','CIPROFLOXACIN HYDROCHLORIDE/FLUOCINOLONE ACETONIDE','CIPROFLOXACIN HYDROCHLORIDE/HYDROCORTISONE','CLINDAMYCIN PHOSPHATE;CLEANSER',
+'CLINDAMYCIN PHOSPHATE;CLEANSER AND MOISTURIZER','DIPHENHYDRAMINE HCL;HC;NYSTATIN;TETRACYCLINE HCL;M','DOXYCYCLINE HYCLATE;CLEANSER AND MOISTURIZER','DOXYCYCLINE HYCLATE;EYELID CLEANSER;SPRAY, MULTI I',
+'DOXYCYCLINE;CLEANSER','DOXYCYCLINE;FLAXSEED OIL/OMEGA-3 FATTY ACIDS/VIT E','DOXYCYCLINE;OCTINOXATE/ZINC OXIDE;SALICYLIC ACID','HC ACE/OXYTETRACYCLINE HCL','MINOCYCLINE HYDROCHLORIDE;EYELID CLEANSER',
+'OXYTETRACYCLINE HYDROCHLORIDE/POLYMYXIN B SULFATE','PHENAZOPYRIDINE HYDROCHLORIDE/SULFAMETHOXAZOLE','POLYMYXIN B SULFATE/TRIMETHOPRIM SULFATE','SILVER SULFADIAZINE') then delete; 
+if gen = 'CLINDAMYCIN PHOSPHATE' and MSTFMDS = 'Pad' then delete; 
+if gen = 'ERYTHROMYCIN' and MSTFMDS = 'Pad' then delete; 
+if gen = 'TETRACYCLINE HYDROCHLORIDE' and MSTFMDS = 'Implant' then delete; 
+run; 
+/*NOTE: There were 20511 observations read from the data set WORK.ABX2.
+NOTE: The data set WORK.ABX2 has 20335 observations and 36 variables.
+*/
+proc freq; tables gen; run; 
+
+data abx2;
+set abx2; 
+if gen  = 'CHLORTETRACYCLINE HYDROCHLORIDE' then delete; 
+run; 
+/*NOTE: There were 20335 observations read from the data set WORK.ABX2.
+NOTE: The data set WORK.ABX2 has 20329 observations and 36 variables.
+*/
+proc freq; tables gen*MSTFMDS/list; run; 
+
+/*update based on meeting on 4/12: remove sulfasalazine from the list*/
+/*rerun the cohort*/
+
+data ks.abx2; 
+set abx2; 
+if gen = 'SULFASALAZINE' THEN DELETE;
+run;
+/*NOTE: There were 20329 observations read from the data set WORK.ABX2.
+NOTE: The data set KS.ABX2 has 20098 observations and 36 variables.
+*/ 
