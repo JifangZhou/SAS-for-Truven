@@ -1,0 +1,158 @@
+*all dental visit data;
+libname dn "E:\Truven Dental\Data";
+
+
+*Assessment of time interval from the index visits;
+LIBNAME myfile "F:\User Folders\jzhou86\Suda R01\RawData";
+LIBNAME codlist "F:\User Folders\jzhou86\Suda R01\RawData\Code list";
+LIBNAME workingD "F:\User Folders\jzhou86\Suda R01\RawData\Working Directory";
+*antibiotics;
+DATA eligible_op_visit;
+	SET myfile.opoid_list_15_aug_2;
+	visit_id = catx('_', enrolid, visit_dt);
+RUN;
+
+DATA eligible_abx_visit;
+	SET myfile.abx_visit_14_aug;
+RUN;
+
+* Add enrollment data for both dental and medical;
+data dental_enroll;
+set dn.Dnmct113 dn.Dncet113
+	dn.Dnmct123 dn.Dncet123
+	dn.Dnmct133 dn.Dncet133
+	dn.Dnmct143 dn.Dncet143
+	dn.Dnmct152 dn.Dncet152; 
+run;  
+
+PROC sql;
+	CREATE table dental_enroll_id as
+	SELECT min(enrolid) as enrolid,
+			min(DTSTART) as dental_start,
+			max(DTEND) as dental_end
+	FROM dental_enroll
+	GROUP BY enrolid;
+QUIT;
+
+*Select all data on medical enrollment;
+%macro opclms (in = , out = ); 
+PROC sql;
+	CREATE table &out. as
+	SELECT min(enrolid) as enrolid,
+			min(DTSTART) as medical_start,
+			max(DTEND) as medical_end
+	FROM &in. 
+	GROUP BY enrolid;
+QUIT;
+%mend; 
+%opclms   (in = myfile.dental_ccaet_09, out = c09_o);
+%opclms   (in = myfile.dental_ccaet_10, out = c10_o);
+%opclms   (in = myfile.dental_ccaet_11, out = c11_o);
+%opclms   (in = myfile.dental_ccaet_12, out = c12_o);
+%opclms   (in = myfile.dental_ccaet_13, out = c13_o);
+%opclms   (in = myfile.dental_ccaet_142, out = c14_o);
+%opclms   (in = myfile.dental_ccaet_151, out = c15_o);
+
+%opclms  (in = myfile.dental_mdcrt_09, out = m09_o);
+%opclms  (in = myfile.dental_mdcrt_10, out = m10_o);
+%opclms  (in = myfile.dental_mdcrt_11, out = m11_o);
+%opclms  (in = myfile.dental_mdcrt_12, out = m12_o);
+%opclms  (in = myfile.dental_mdcrt_13, out = m13_o);
+%opclms  (in = myfile.dental_mdcrt_142, out = m14_o);
+%opclms  (in = myfile.dental_mdcrt_151, out = m15_o);
+
+data medical_enroll_id; 
+set c09_o c10_o c11_o c12_o c13_o c14_o c15_o
+	m09_o m10_o m11_o m12_o m13_o m14_o m15_o;
+RUN;
+
+PROC sql;
+	CREATE table medical_enroll_id as
+	SELECT min(enrolid) as enrolid,
+			min(medical_start) as medical_start,
+			max(medical_end) as medical_end
+	FROM medical_enroll_id
+	GROUP BY enrolid;
+QUIT;
+
+*Add back enrollment data;
+PROC sql;
+	CREATE table eligible_op_visit as
+	SELECT a.*,
+			b.*
+	FROM eligible_op_visit a
+	LEFT JOIN dental_enroll_id b
+	ON a.enrolid=b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table eligible_op_visit as
+	SELECT a.*,
+			b.*
+	FROM eligible_op_visit a
+	LEFT JOIN medical_enroll_id b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+
+PROC sql;
+	CREATE table eligible_abx_visit as
+	SELECT a.*,
+			b.*
+	FROM eligible_abx_visit a
+	LEFT JOIN dental_enroll_id b
+	ON a.enrolid=b.enrolid;
+QUIT;
+PROC sql;
+	CREATE table eligible_abx_visit as
+	SELECT a.*,
+			b.*
+	FROM eligible_abx_visit a
+	LEFT JOIN medical_enroll_id b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA myfile.eligible_abx_visit;
+	SET eligible_abx_visit;
+DATA myfile.eligible_op_visit;
+	SET eligible_op_visit;
+RUN;
+
+*Assessment of gingival manipulation;
+DATA gingival_manip_code;
+	SET codlist.gingival_manipulation;
+	IF Does_the_associated_CDT_code_inv=1;
+	KEEP CDT_Code;
+RUN;
+proc sql noprint; 
+select quote(CDT_Code)
+into :gingival_manip_codes separated by ", "
+from gingival_manip_code; 
+quit; 
+*Select all dental claims with gingival manipulation;
+data dental_claims;
+set dn.Dnmcn113 dn.Dncen113
+	dn.Dnmcn123 dn.Dncen123
+	dn.Dnmcn133 dn.Dncen133
+	dn.Dnmcn143 dn.Dncen143
+	dn.Dnmcn152 dn.Dncen152; 
+if PROC1 in (&gingival_manip_codes) ;
+RUN;
+*NOTE: The data set WORK.DENTAL_CLAIMS has 133502521 observations and 59 variables.;
+
+PROC sql;
+	CREATE table gingival_manip as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as ging_manip_date
+	FROM dental_claims
+	GROUP BY enrolid,SVCDATE;
+QUIT;
+
+PROC sql;
+	CREATE table eligible_abx_visit as
+	SELECT a.*,
+			b.*
+	FROM eligible_abx_visit a
+	LEFT JOIN medical_enroll_id b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
