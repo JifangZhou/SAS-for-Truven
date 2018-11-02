@@ -1,0 +1,178 @@
+LIBNAME myfile "F:\User Folders\jzhou86\Suda R01\RawData";
+LIBNAME codlist "F:\User Folders\jzhou86\Suda R01\RawData\Code list";
+LIBNAME workingD "F:\User Folders\jzhou86\Suda R01\RawData\Working Directory";
+DATA cdi_list;
+	SET CDI_list1;
+	IF Pain_category="MODERATE" THEN Pain_category="moderate";
+RUN;
+
+* Craete list for dental visit severity;
+libname dn "E:\Truven Dental\Data";
+
+data dental_claims;
+set dn.Dnmcn113 dn.Dncen113
+	dn.Dnmcn123 dn.Dncen123
+	dn.Dnmcn133 dn.Dncen133
+	dn.Dnmcn143 dn.Dncen143
+	dn.Dnmcn152 dn.Dncen152; 
+run; 
+
+PROC sql;
+	CREATE table dental_pain_records as
+	SELECT a.enrolid,
+			a.SVCDATE,
+			b.proc,
+			b.Surgical__1_surgical__0_non_surg as Surgical,
+			b.Pain_category
+	FROM dental_claims a
+	INNER JOIN cdi_list b
+	ON a.proc1 = b.proc;
+QUIT; 
+
+DATA dental_pain_records1;
+	SET dental_pain_records;
+	IF Pain_category="limited" THEN pain_cat=0;
+	IF Pain_category="mild" THEN pain_cat=1;
+	IF Pain_category="moderate" THEN pain_cat=2;
+	IF Pain_category="severe" THEN pain_cat=3;
+	visit_id = catx('_', enrolid, SVCDATE);
+RUN;
+ 
+PROC sql;
+	CREATE table dental_pain_list as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as SVCDATE,
+			max(pain_cat) as pain_cat,
+			min(visit_id) as visit_id
+	FROM dental_pain_records1
+	GROUP BY visit_id;
+QUIT; 
+
+*Now merge with the opioid file of the final cohort;
+DATA op_list;
+	SET myfile.analytical_list_op_31aug;
+RUN;
+
+PROC sql;
+	CREATE table op_list_1 as
+	SELECT a.*,
+			b.pain_cat
+	FROM op_list a
+	LEFT JOIN dental_pain_list b
+	ON a.visit_id = b.visit_id;
+QUIT;
+
+*adjudicating inappropriate opioid use based on CDI definition;
+DATA op_list_2;
+	SET op_list_1;
+	CDI_cat=0;
+	IF pain_cat=1 AND total_ome>0 THEN CDI_cat=1;
+	IF pain_cat=2 AND total_ome>40 THEN CDI_cat=1;
+	IF pain_cat=3 AND total_ome>80 THEN CDI_cat=1;
+	IF pain_cat=0 THEN CDI_cat=.;
+RUN;
+
+PROC FREQ DATA=op_list_2;
+TABLE CDI_cat*pain_cat/nocol norow nopercent chisq;
+RUN;
+
+PROC FREQ DATA=dental_pain_records;
+TABLE Pain_category;RUN;
+
+*Assessment of liver disease post-visit;
+DATA case_list_ipt;
+	SET myfile.all_op_ipt;
+	case=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in("07020", "07021", "02022", "07023", "0703", "07031", "07032", "07033", 
+"07040", "07049", "07059", "07060", "07070", "07071", "07090", "5731", 
+"07041", "07044", "07051", "07054", "07070", "07071", "07042", "07052", 
+"2734", "2750", "2751", "4530", "5710", "5711", "5711", "57140", "57141",
+"5718", "5719", "5730", "5733", "5738", "5739", "51742", "5761", "5712", 
+"5715", "5716") then case=1;
+		end;
+	IF case=1;
+	event_date=DISDATE;
+RUN;
+
+DATA case_list_opt;
+	SET myfile.all_op_opt;
+	case=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in("07020", "07021", "02022", "07023", "0703", "07031", "07032", "07033", 
+"07040", "07049", "07059", "07060", "07070", "07071", "07090", "5731", 
+"07041", "07044", "07051", "07054", "07070", "07071", "07042", "07052", 
+"2734", "2750", "2751", "4530", "5710", "5711", "5711", "57140", "57141",
+"5718", "5719", "5730", "5733", "5738", "5739", "51742", "5761", "5712", 
+"5715", "5716") then case=1;
+		end;
+	IF case=1;
+	event_date=SVCDATE;
+RUN;
+
+DATA myfile.liver_op_list;
+	SET case_list_ipt case_list_opt;
+	KEEP enrolid event_date;
+RUN;
+
+PROC sql;
+	CREATE table  liver_op_list as
+	SELECT 	a.visit_id,
+			a.enrolid,
+			b.event_date as liver_op_date
+	FROM op_list_2 a
+	INNER JOIN  myfile.liver_op_list b
+	ON a.enrolid = b.enrolid AND a.visit_dt+365>=b.event_date>a.visit_dt;
+QUIT;
+
+PROC sql;
+	CREATE table liver_op_list as
+	SELECT min(liver_op_date) as liver_op_date,
+			min(visit_id) as visit_id
+	FROM liver_op_list
+	GROUP BY visit_id;
+QUIT; 
+
+PROC sql;
+	CREATE table op_list_3 as
+	SELECT a.*,
+			b.liver_op_date
+	FROM op_list_2 a
+	LEFT JOIN liver_op_list b
+	ON a.visit_id = b.visit_id;
+QUIT;
+
+DATA myfile.op_analytical_15Sep;
+	SET op_list_3;RUN;
+
+DATA op_list_3;
+	SET op_list_3;
+	IF pain_cat=1 OR pain_cat=2 OR pain_cat=3;
+RUN;
+
+PROC MEANS DATA=op_list_3 MEAN STD MEDIAN P25 P75;
+	VAR age number_pcp number_special number_er number_adm;
+RUN;
+PROC MEANS DATA=op_list_3 MEAN STD MEDIAN P25 P75;
+	CLASS CDI_cat;
+	VAR age number_pcp number_special number_er number_adm;
+RUN;
+
+
+PROC FREQ DATA=op_list_3;
+	TABLE sex*CDI_cat
+			DIAGNOSTIC*CDI_cat 
+PREVENTIVE*CDI_cat
+RESTORATIV*CDI_cat
+ORAL*CDI_cat
+PERIODONTI*CDI_cat
+ADJUNCTIVE*CDI_cat
+ENDODONTIC*CDI_cat
+IMPLANT*CDI_cat
+PROSTHODON*CDI_cat
+ORTHODONTI*CDI_cat
+MAXILLOFAC*CDI_cat
+missing*CDI_cat/nocol norow nopercent;
+RUN;
