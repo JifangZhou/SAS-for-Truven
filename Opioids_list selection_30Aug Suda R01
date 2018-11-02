@@ -1,0 +1,882 @@
+*Assessment of time interval from the index visits;
+LIBNAME myfile "F:\User Folders\jzhou86\Suda R01\RawData";
+LIBNAME codlist "F:\User Folders\jzhou86\Suda R01\RawData\Code list";
+LIBNAME workingD "F:\User Folders\jzhou86\Suda R01\RawData\Working Directory";
+
+DATA id_list;
+	SET myfile.eligible_op_visit;
+	IF refil_def_2=1 OR refil_def_2=1 THEN DELETE;
+RUN; 
+*Number assessment;
+**Number of unique prescriptions: 688,875
+*Number of unique visits: 685,579
+*Number of unique patients: 593,346;
+
+*Select all id_list;
+PROC sql;
+	CREATE table enrolid_list as
+	SELECT min(enrolid) as enrolid
+	FROM id_list a
+	GROUP BY enrolid;
+QUIT;
+
+*select all service data, inpatient data, and dental data;
+libname dn "E:\Truven Dental\Data";
+
+data dental_claims;
+set dn.Dnmcn113 dn.Dncen113
+	dn.Dnmcn123 dn.Dncen123
+	dn.Dnmcn133 dn.Dncen133
+	dn.Dnmcn143 dn.Dncen143
+	dn.Dnmcn152 dn.Dncen152; 
+run; 
+
+PROC sql;
+	CREATE table op_dental_all as
+	SELECT a.*
+	FROM dental_claims a
+	INNER JOIN enrolid_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*extract from opt data;
+%macro opclms (in = , out = ); 
+options compress = on reuse = yes; 
+PROC sql;
+	CREATE table &out. as
+	SELECT a.* 
+	FROM &in. a
+	INNER JOIN enrolid_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+%mend; 
+%opclms   (in = myfile.dental_ccaeo_09, out = c09_o);
+%opclms   (in = myfile.dental_ccaeo_10, out = c10_o);
+%opclms   (in = myfile.dental_ccaeo_11, out = c11_o);
+%opclms   (in = myfile.dental_ccaeo_12, out = c12_o);
+%opclms   (in = myfile.dental_ccaeo_13, out = c13_o);
+%opclms   (in = myfile.dental_ccaeo_142, out = c14_o);
+%opclms   (in = myfile.dental_ccaeo_151, out = c15_o);
+
+%opclms  (in = myfile.dental_mdcro_09, out = m09_o);
+%opclms  (in = myfile.dental_mdcro_10, out = m10_o);
+%opclms  (in = myfile.dental_mdcro_11, out = m11_o);
+%opclms  (in = myfile.dental_mdcro_12, out = m12_o);
+%opclms  (in = myfile.dental_mdcro_13, out = m13_o);
+%opclms  (in = myfile.dental_mdcro_142, out = m14_o);
+%opclms  (in = myfile.dental_mdcro_151, out = m15_o);
+
+data all_op_opt; 
+set	c09_o c10_o c11_o c12_o c13_o c14_o c15_o
+	m09_o m10_o m11_o m12_o m13_o m14_o m15_o; 
+IF enrolid=. THEN DELETE;
+run; 
+
+*extract from ipt data;
+%macro ipclms (in = , out = ); 
+options compress = on reuse = yes; 
+PROC sql;
+	CREATE table &out. as
+	SELECT a.* 
+	FROM &in. a
+	INNER JOIN enrolid_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+%mend; 
+%ipclms   (in = myfile.dental_ccaei_09, out = c09_i);
+%ipclms   (in = myfile.dental_ccaei_10, out = c10_i);
+%ipclms   (in = myfile.dental_ccaei_11, out = c11_i);
+%ipclms   (in = myfile.dental_ccaei_12, out = c12_i);
+%ipclms   (in = myfile.dental_ccaei_13, out = c13_i);
+%ipclms   (in = myfile.dental_ccaei_142, out = c14_i);
+%ipclms   (in = myfile.dental_ccaei_151, out = c15_i);
+
+%ipclms  (in = myfile.dental_mdcri_09, out = m09_i);
+%ipclms  (in = myfile.dental_mdcri_10, out = m10_i);
+%ipclms  (in = myfile.dental_mdcri_11, out = m11_i);
+%ipclms  (in = myfile.dental_mdcri_12, out = m12_i);
+%ipclms  (in = myfile.dental_mdcri_13, out = m13_i);
+%ipclms  (in = myfile.dental_mdcri_142, out = m14_i);
+%ipclms  (in = myfile.dental_mdcri_151, out = m15_i);
+
+data myfile.all_op_ipt; 
+set	c09_i c10_i c11_i c12_i c13_i c14_i c15_i
+	m09_i m10_i m11_i m12_i m13_i m14_i m15_i; 
+IF enrolid=. THEN DELETE;
+run; 
+*extract from naloxone prescription data;
+LIBNAME Redbook 'E:\Truven Data';
+DATA redbook;
+	SET Redbook.redbook;
+RUN;
+DATA naloxone_NDC;
+	SET redbook;
+	WHERE 	(GENNME contains 'Naloxone' )AND
+			(MSTFMDS contains 'Tablet' or MSTFMDS contains 'Suspension');
+	FLAG = 	'Naloxone';
+RUN;
+libname ccae09 "E:\Truven Data\CCAE\2009";
+libname ccae10 "E:\Truven Data\CCAE\2010";
+libname ccae11 "E:\Truven Data\CCAE\2011";
+libname ccae12 "E:\Truven Data\CCAE\2012";
+libname ccae13 "E:\Truven Data\CCAE\2013";
+libname ccae14 "E:\Truven Data\CCAE\2014";
+libname ccae15 "E:\Truven Data\CCAE\2015";
+
+libname mdcr09 "E:\Truven Data\MDCR\2009";
+libname mdcr10 "E:\Truven Data\MDCR\2010";
+libname mdcr11 "E:\Truven Data\MDCR\2011";
+libname mdcr12 "E:\Truven Data\MDCR\2012";
+libname mdcr13 "E:\Truven Data\MDCR\2013";
+libname mdcr14 "E:\Truven Data\MDCR\2014";
+libname mdcr15 "E:\Truven Data\MDCR\2015";
+
+%macro RA (in = , out = ); 
+options compress = on reuse = yes; 
+PROC sql;
+	CREATE table &out. as
+	SELECT a.enrolid,
+			a.SVCDATE 
+	FROM &in. a
+	INNER JOIN naloxone_NDC b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+%mend; 
+
+%RA (in = ccae09.ccaed093, out = c09_d);
+%RA (in = ccae10.ccaed103, out = c10_d);
+%RA (in = ccae11.ccaed113, out = c11_d);
+%RA (in = ccae12.ccaed122, out = c12_d);
+%RA (in = ccae13.ccaed131, out = c13_d);
+%RA (in = ccae14.ccaed142, out = c14_d);
+%RA (in = ccae15.ccaed151, out = c15_d);
+%RA (in = mdcr09.mdcrd093, out = m09_d);
+%RA (in = mdcr10.mdcrd103, out = m10_d);
+%RA (in = mdcr11.mdcrd113, out = m11_d);
+%RA (in = mdcr12.mdcrd122, out = m12_d);
+%RA (in = mdcr13.mdcrd131, out = m13_d);
+%RA (in = mdcr14.mdcrd142, out = m14_d);
+%RA (in = mdcr15.mdcrd151, out = m15_d);
+
+data myfile.all_naloxone_presc; 
+set	c09_d c10_d c11_d c12_d c13_d c14_d c15_d
+	m09_d m10_d m11_d m12_d m13_d m14_d m15_d; 
+IF enrolid=. THEN DELETE;
+run; 
+*Select all naloxone within eligible dental visits cohort;
+PROC sql;
+	CREATE table all_op_naloxone as
+	SELECT a.* 
+	FROM all_naloxone_presc a
+	INNER JOIN enrolid_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*assessment of all PCP visits over the past 6 months;
+DATA myfile.all_op_opt;
+	SET all_op_opt;
+RUN;
+PROC sql;
+	CREATE table temp as
+	SELECT 	min(enrolid) as enrolid,
+			MIN(SVCDATE) as SVCDATE,
+			min(STDPROV) as STDPROV
+	FROM all_op_opt
+	GROUP BY enrolid,SVCDATE,STDPROV;
+QUIT;
+
+*Create all eligible dental visit with opioid prescription;
+PROC sql;
+	CREATE table visit_list as
+	SELECT min(visit_id) as visit_id,
+			min(enrolid) as enrolid,
+			min(visit_dt) as visit_dt
+	FROM id_list
+	GROUP BY visit_id;
+QUIT;
+
+
+PROC sql;
+	CREATE table visit_list_svc as
+	SELECT a.*,
+		b.*
+	FROM visit_list a
+	INNER JOIN temp b
+	ON a.enrolid = b.enrolid AND a.visit_dt-180<=b.SVCDATE<a.visit_dt;
+QUIT;
+*calculate number of all services;
+DATA visit_list_svc_elig;
+	SET visit_list_svc;
+	IF 100<=STDPROV<=899;
+RUN;
+PROC sql;
+	CREATE table num_svc as
+	SELECT min(visit_id) as visit_id,
+			count(SVCDATE) as number_all_SVC
+	FROM visit_list_svc_elig
+	GROUP BY visit_id;
+QUIT;
+*NOTE: Table WORK.VISIT_LIST created, with 423121 rows and 2 columns.;
+DATA visit_list_svc_pcp;
+	SET visit_list_svc;
+	IF STDPROV=200 OR STDPROV=202 OR STDPROV=240 OR STDPROV=400 OR STDPROV=825 OR STDPROV=845;
+RUN;
+PROC sql;
+	CREATE table num_pcp as
+	SELECT min(visit_id) as visit_id,
+			count(SVCDATE) as number_pcp
+	FROM visit_list_svc_pcp
+	GROUP BY visit_id;
+QUIT;
+*NOTE: Table WORK.NUM_PCP created, with 237035 rows and 2 columns.;
+
+*Number of admissions;
+
+PROC sql;
+	CREATE table visit_list_adm as
+	SELECT a.*,
+		b.ADMDATE
+	FROM visit_list a
+	INNER JOIN myfile.all_op_ipt b
+	ON a.enrolid = b.enrolid AND a.visit_dt-180<=b.ADMDATE<a.visit_dt;
+QUIT;
+PROC sql;
+	CREATE table num_adm as
+	SELECT min(visit_id) as visit_id,
+			count(ADMDATE) as number_adm
+	FROM visit_list_adm
+	GROUP BY visit_id;
+QUIT;
+*NOTE: Table WORK.NUM_ADM created, with 10991 rows and 2 columns.;
+*ED visits;
+DATA er_records;
+	SET myfile.all_op_opt;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0637','0981') THEN ER=1;
+	ELSE IF STDPROV in ('220','428') THEN ER=1;
+	ELSE IF STDPLAC in ('23') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120','10220','10320','10420','10520',
+						'12220','20120','20220','21120','21220','22120','22320',
+						'30120','30220','30320','30420','30520','30620',
+						'31120','31220','31320','31420','31520','31620') THEN ER=1;
+	IF ER=1;
+RUN;
+PROC sql;
+	CREATE table er_list as
+	SELECT 	min(enrolid) as enrolid,
+			MIN(SVCDATE) as SVCDATE
+	FROM er_records
+	GROUP BY enrolid,SVCDATE;
+QUIT;
+
+DATA myfile.er_list;
+	SET er_list;
+RUN;
+
+PROC sql;
+	CREATE table visit_list_er as
+	SELECT a.*,
+		b.*
+	FROM visit_list a
+	INNER JOIN er_list b
+	ON a.enrolid = b.enrolid AND a.visit_dt-180<=b.SVCDATE<a.visit_dt;
+QUIT;
+
+PROC sql;
+	CREATE table num_er as
+	SELECT min(visit_id) as visit_id,
+			count(SVCDATE) as number_er
+	FROM visit_list_er
+	GROUP BY visit_id;
+QUIT;
+
+PROC FREQ DATA=num_er ORDER=FREQ;
+TABLE number_er;RUN;
+
+
+*Now merge all svc use data into visit list;
+PROC sql;
+	CREATE table id_list1 as
+	SELECT a.*,
+			b.*
+	FROM visit_list a
+	LEFT JOIN num_pcp b
+	ON a.visit_id=b.visit_id;
+QUIT;
+
+PROC sql;
+	CREATE table id_list2 as
+	SELECT a.*,
+			b.*
+	FROM id_list1 a
+	LEFT JOIN num_svc b
+	ON a.visit_id=b.visit_id;
+QUIT;
+
+PROC sql;
+	CREATE table id_list3 as
+	SELECT a.*,
+			b.*
+	FROM id_list2 a
+	LEFT JOIN num_adm b
+	ON a.visit_id=b.visit_id;
+QUIT;
+
+PROC sql;
+	CREATE table id_list4 as
+	SELECT a.*,
+			b.*
+	FROM id_list3 a
+	LEFT JOIN num_er b
+	ON a.visit_id=b.visit_id;
+QUIT;
+
+DATA myfile.svc_op_number_6m;
+	SET id_list4;
+	IF number_pcp=. THEN number_pcp=0;
+	IF number_er=. THEN number_er=0;
+	IF number_all_SVC=. THEN number_all_SVC=0;
+	IF number_adm=. THEN number_adm=0;
+	number_special=number_all_SVC-number_pcp;
+RUN;
+PROC sql;
+	CREATE table myfile.svc_op_number_6m_pj as
+	SELECT a.*,
+			b.*
+	FROM myfile.svc_op_number_6m a
+	LEFT JOIN myfile.pj_id_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+*select immunocompromised data;
+DATA case_list_ipt;
+	SET myfile.all_op_ipt;
+	case=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('042','B20','B21','B22','B23','B24','28800','D709','28801','D700','27903','D803','27904','D800','714','M05','M06') then case=1;
+		end;
+	IF case=1;
+	event_date=DISDATE;
+RUN;
+
+DATA case_list_opt;
+	SET myfile.all_op_opt;
+	case=0;
+	array icd {*} dx1-dx2;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('042','B20','B21','B22','B23','B24','28800','D709','28801','D700','27903','D803','27904','D800','714','M05','M06') then case=1;
+		end;
+	IF case=1;
+	event_date=SVCDATE;
+RUN;
+DATA myfile.immuno_compromise_list;
+	SET case_list_ipt case_list_opt;
+	KEEP enrolid event_date;
+RUN;
+*select diabetes data;
+DATA case_list_ipt;
+	SET myfile.all_op_ipt;
+	case=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('250') then case=1;
+		end;
+	IF case=1;
+	event_date=DISDATE;
+RUN;
+
+DATA case_list_opt;
+	SET myfile.all_op_opt;
+	case=0;
+	array icd {*} dx1-dx2;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('250') then case=1;
+		end;
+	IF case=1;
+	event_date=SVCDATE;
+RUN;
+DATA myfile.diabetes_list;
+	SET case_list_ipt case_list_opt;
+	KEEP enrolid event_date;
+RUN;
+*select SUD data;
+DATA case_list_ipt;
+	SET myfile.all_op_ipt;
+	case=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('2910','2911','2912','2913','2914','2915','2918','29181','29182','29189','2919','30300','30301','30302','30303',
+						'30390','303910','30392','30393','30500','30501','30502','30503','3575','4255','53530',' 53531','5710','5711','5712','5713','E8600',
+						'30440','30441','30442','30443','30570','30571','30572','30573','30430','30431','30432','30433',
+						'30520','30521','30522','30523','30420','30421','30422','30423','30560','30561','30562','30563',
+						'9685','E9385','2920','29211','29212','2922','29281','29282','29283','29284','29285','29289','2929','30450','30451','30452','30453',
+						'30530','30531','30532','30533','9696','E8541','E9396','30400','30401','30402','30403','30470','30471','30472','30473',
+						'30550','30551','30552','30553','96500','96501','96502','96509','E8500','E9350','30410','30411','30412','30413','30540','30541','30542','30543',
+						'30460','30461','30462','30463','30480','30481','30482','30483','30490','30491','30492','30493','30590','30591','30592','30593',
+						'64830','64831','64832','64833','64834','V6542',
+						'F10','F11','F12','F13','F14','F15','F16','F17','F18','F19') then case=1;
+		end;
+	IF case=1;
+	event_date=DISDATE;
+RUN;
+
+DATA case_list_opt;
+	SET myfile.all_op_opt;
+	case=0;
+	array icd {*} dx1-dx2;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('2910','2911','2912','2913','2914','2915','2918','29181','29182','29189','2919','30300','30301','30302','30303',
+						'30390','303910','30392','30393','30500','30501','30502','30503','3575','4255','53530',' 53531','5710','5711','5712','5713','E8600',
+						'30440','30441','30442','30443','30570','30571','30572','30573','30430','30431','30432','30433',
+						'30520','30521','30522','30523','30420','30421','30422','30423','30560','30561','30562','30563',
+						'9685','E9385','2920','29211','29212','2922','29281','29282','29283','29284','29285','29289','2929','30450','30451','30452','30453',
+						'30530','30531','30532','30533','9696','E8541','E9396','30400','30401','30402','30403','30470','30471','30472','30473',
+						'30550','30551','30552','30553','96500','96501','96502','96509','E8500','E9350','30410','30411','30412','30413','30540','30541','30542','30543',
+						'30460','30461','30462','30463','30480','30481','30482','30483','30490','30491','30492','30493','30590','30591','30592','30593',
+						'64830','64831','64832','64833','64834','V6542',
+						'F10','F11','F12','F13','F14','F15','F16','F17','F18','F19') then case=1;
+		end;
+	IF case=1;
+	event_date=SVCDATE;
+RUN;
+DATA myfile.SUD_list;
+	SET case_list_ipt case_list_opt;
+	KEEP enrolid event_date;
+RUN;
+
+*naloxone administration;
+DATA case_list_ipt;
+	SET myfile.all_op_ipt;
+	case=0;
+	array proc {*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J2310','A4210') then case=1;
+		end;
+	IF case=1;
+	event_date=DISDATE;
+RUN;
+
+DATA case_list_opt;
+	SET myfile.all_op_opt;
+	case=0;
+	array proc {*} proc1-proc2;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J2310','A4210') then case=1;
+		end;
+	IF case=1;
+	event_date=SVCDATE;
+RUN;
+DATA myfile.naloxone_adm_list;
+	SET case_list_ipt case_list_opt;
+	KEEP enrolid event_date;
+RUN;
+
+*opioid poisoning
+*HCPCS J2310 or HCPCS A4211; *icd9 965.00, 965.01, 965.02 or 965.09; *E code E850.0-E850.2  14 days afteropioid RX date;
+DATA case_list_ipt;
+	SET myfile.all_op_ipt;
+	case=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('96500','96501','96502','96509','E8500','E8501','E8502') then case=1;
+		end;
+	array proc {*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J2310','A4211') then case=1;
+		end;
+	IF case=1;
+	event_date=DISDATE;
+RUN;
+
+DATA case_list_opt;
+	SET myfile.all_op_opt;
+	case=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('96500','96501','96502','96509','E8500','E8501','E8502') then case=1;
+		end;
+	array proc {*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('J2310','A4211') then case=1;
+		end;
+	IF case=1;
+	event_date=SVCDATE;
+RUN;
+DATA myfile.opioid_poisoning_list;
+	SET case_list_ipt case_list_opt;
+	KEEP enrolid event_date;
+RUN;
+*combine naloxone prescription and administration list;
+DATA myfile.all_op_naloxone;
+	SET all_op_naloxone;
+RUN;
+*add other predictors for overprescribing;
+*immunocompromised_severe;
+PROC sql;
+	CREATE table visit_list_immuno_compromise as
+	SELECT 	a.visit_id,
+			a.enrolid,
+			b.event_date as immuno_compromis_date
+	FROM myfile.svc_op_number_6m_pj a
+	INNER JOIN myfile.immuno_compromise_list b
+	ON a.enrolid = b.enrolid AND b.event_date<a.visit_dt;
+QUIT;
+
+PROC sql;
+	CREATE table list_immuno_compromise as
+	SELECT min(visit_id) as visit_id,
+			1 as prior_immuno_compromise
+	FROM visit_list_immuno_compromise
+	GROUP BY visit_id;
+QUIT;
+PROC sql;
+CREATE table id_list5 as
+	SELECT a.*,
+			b.*
+	FROM myfile.svc_op_number_6m_pj a
+	LEFT JOIN list_immuno_compromise b
+	ON a.visit_id=b.visit_id;
+QUIT;
+*diabetes;
+PROC sql;
+	CREATE table visit_list_diabetes as
+	SELECT 	a.visit_id,
+			a.enrolid,
+			b.event_date as diabetes_date
+	FROM myfile.svc_op_number_6m_pj a
+	INNER JOIN myfile.diabetes_list b
+	ON a.enrolid = b.enrolid AND b.event_date<a.visit_dt;
+QUIT;
+
+PROC sql;
+	CREATE table list_diabetes as
+	SELECT min(visit_id) as visit_id,
+			1 as prior_diabetes
+	FROM visit_list_diabetes
+	GROUP BY visit_id;
+QUIT;
+PROC sql;
+CREATE table id_list6 as
+	SELECT a.*,
+			b.*
+	FROM id_list5 a
+	LEFT JOIN list_diabetes b
+	ON a.visit_id=b.visit_id;
+QUIT;
+*history of substance abuse;
+PROC sql;
+	CREATE table visit_list_sud as
+	SELECT 	a.visit_id,
+			a.enrolid,
+			b.event_date as sud_date
+	FROM myfile.svc_op_number_6m_pj a
+	INNER JOIN myfile.sud_list b
+	ON a.enrolid = b.enrolid AND b.event_date<a.visit_dt;
+QUIT;
+
+PROC sql;
+	CREATE table list_sud as
+	SELECT min(visit_id) as visit_id,
+			1 as prior_sud
+	FROM visit_list_sud
+	GROUP BY visit_id;
+QUIT;
+PROC sql;
+CREATE table id_list7 as
+	SELECT a.*,
+			b.*
+	FROM id_list6 a
+	LEFT JOIN list_sud b
+	ON a.visit_id=b.visit_id;
+QUIT;
+DATA myfile.temp_file;
+	SET id_list7;
+RUN;
+*use of naloxone 30 days after the visits;
+PROC sql;
+	CREATE table visit_list_naloxone_pres as
+	SELECT 	a.visit_id,
+			a.enrolid,
+			b.SVCDATE as naloxone_pres_date
+	FROM myfile.svc_op_number_6m_pj a
+	INNER JOIN myfile.all_op_naloxone b
+	ON a.enrolid = b.enrolid AND a.visit_dt<b.SVCDATE<=a.visit_dt+30;
+QUIT;
+
+PROC sql;
+	CREATE table list_naloxone_pres as
+	SELECT min(visit_id) as visit_id,
+			1 as naloxone_pres_30
+	FROM visit_list_naloxone_pres
+	GROUP BY visit_id;
+QUIT;
+PROC sql;
+CREATE table id_list8 as
+	SELECT a.*,
+			b.*
+	FROM id_list7 a
+	LEFT JOIN list_naloxone_pres b
+	ON a.visit_id=b.visit_id;
+QUIT;
+*naloxone administration 30 days;
+PROC sql;
+	CREATE table visit_list_naloxone_adm as
+	SELECT 	a.visit_id,
+			a.enrolid,
+			b.event_date as naloxone_adm_date
+	FROM myfile.svc_op_number_6m_pj a
+	INNER JOIN myfile.naloxone_adm_list b
+	ON a.enrolid = b.enrolid AND a.visit_dt<b.event_date<=a.visit_dt+30;
+QUIT;
+
+PROC sql;
+	CREATE table list_naloxone_adm as
+	SELECT min(visit_id) as visit_id,
+			1 as naloxone_adm_30
+	FROM visit_list_naloxone_adm
+	GROUP BY visit_id;
+QUIT;
+PROC sql;
+CREATE table id_list9 as
+	SELECT a.*,
+			b.*
+	FROM id_list8 a
+	LEFT JOIN list_naloxone_adm b
+	ON a.visit_id=b.visit_id;
+QUIT;
+*opioid poisoning 14 days;
+PROC sql;
+	CREATE table visit_list_opioid_poisoning as
+	SELECT 	a.visit_id,
+			a.enrolid
+	FROM myfile.svc_op_number_6m_pj a
+	INNER JOIN myfile.opioid_poisoning_list b
+	ON a.enrolid = b.enrolid AND a.visit_dt<b.event_date<=a.visit_dt+14;
+QUIT;
+
+PROC sql;
+	CREATE table list_opioid_poisoning as
+	SELECT min(visit_id) as visit_id,
+			1 as opioid_poisoning_14
+	FROM visit_list_opioid_poisoning
+	GROUP BY visit_id;
+QUIT;
+PROC sql;
+CREATE table id_list1 as
+	SELECT a.*,
+			b.*
+	FROM id_list9 a
+	LEFT JOIN list_opioid_poisoning b
+	ON a.visit_id=b.visit_id;
+QUIT;
+*opioid poisoning 30 days;
+PROC sql;
+	CREATE table visit_list_opioid_poisoning as
+	SELECT 	a.visit_id,
+			a.enrolid
+	FROM myfile.svc_op_number_6m_pj a
+	INNER JOIN myfile.opioid_poisoning_list b
+	ON a.enrolid = b.enrolid AND a.visit_dt<b.event_date<=a.visit_dt+30;
+QUIT;
+
+PROC sql;
+	CREATE table list_opioid_poisoning as
+	SELECT min(visit_id) as visit_id,
+			1 as opioid_poisoning_30
+	FROM visit_list_opioid_poisoning
+	GROUP BY visit_id;
+QUIT;
+PROC sql;
+CREATE table id_list2 as
+	SELECT a.*,
+			b.*
+	FROM id_list1 a
+	LEFT JOIN list_opioid_poisoning b
+	ON a.visit_id=b.visit_id;
+QUIT;
+*opioid poisoning 6 months;
+PROC sql;
+	CREATE table visit_list_opioid_poisoning as
+	SELECT 	a.visit_id,
+			a.enrolid
+	FROM myfile.svc_op_number_6m_pj a
+	INNER JOIN myfile.opioid_poisoning_list b
+	ON a.enrolid = b.enrolid AND a.visit_dt<b.event_date<=a.visit_dt+180;
+QUIT;
+
+PROC sql;
+	CREATE table list_opioid_poisoning as
+	SELECT min(visit_id) as visit_id,
+			1 as opioid_poisoning_6m
+	FROM visit_list_opioid_poisoning
+	GROUP BY visit_id;
+QUIT;
+PROC sql;
+CREATE table id_list3 as
+	SELECT a.*,
+			b.*
+	FROM id_list2 a
+	LEFT JOIN list_opioid_poisoning b
+	ON a.visit_id=b.visit_id;
+QUIT;
+*opioid poisoning 12 months;
+PROC sql;
+	CREATE table visit_list_opioid_poisoning as
+	SELECT 	a.visit_id,
+			a.enrolid
+	FROM myfile.svc_op_number_6m_pj a
+	INNER JOIN myfile.opioid_poisoning_list b
+	ON a.enrolid = b.enrolid AND a.visit_dt<b.event_date<=a.visit_dt+360;
+QUIT;
+
+PROC sql;
+	CREATE table list_opioid_poisoning as
+	SELECT min(visit_id) as visit_id,
+			1 as opioid_poisoning_12m
+	FROM visit_list_opioid_poisoning
+	GROUP BY visit_id;
+QUIT;
+PROC sql;
+CREATE table id_list4 as
+	SELECT a.*,
+			b.*
+	FROM id_list3 a
+	LEFT JOIN list_opioid_poisoning b
+	ON a.visit_id=b.visit_id;
+QUIT;
+
+*substance use disprders at 30, 90, 6 months and 12 month post opioid Rx;
+PROC sql;
+	CREATE table visit_list_sud as
+	SELECT 	a.visit_id,
+			a.enrolid
+	FROM myfile.svc_op_number_6m_pj a
+	INNER JOIN myfile.sud_list b
+	ON a.enrolid = b.enrolid AND a.visit_dt<b.event_date<=a.visit_dt+30;
+QUIT;
+
+PROC sql;
+	CREATE table list_sud as
+	SELECT min(visit_id) as visit_id,
+			1 as sud_30
+	FROM visit_list_sud
+	GROUP BY visit_id;
+QUIT;
+PROC sql;
+CREATE table id_list5 as
+	SELECT a.*,
+			b.*
+	FROM id_list4 a
+	LEFT JOIN list_sud b
+	ON a.visit_id=b.visit_id;
+QUIT;
+PROC sql;
+	CREATE table visit_list_sud as
+	SELECT 	a.visit_id,
+			a.enrolid
+	FROM myfile.svc_op_number_6m_pj a
+	INNER JOIN myfile.sud_list b
+	ON a.enrolid = b.enrolid AND a.visit_dt<b.event_date<=a.visit_dt+90;
+QUIT;
+
+PROC sql;
+	CREATE table list_sud as
+	SELECT min(visit_id) as visit_id,
+			1 as sud_90
+	FROM visit_list_sud
+	GROUP BY visit_id;
+QUIT;
+PROC sql;
+CREATE table id_list6 as
+	SELECT a.*,
+			b.*
+	FROM id_list5 a
+	LEFT JOIN list_sud b
+	ON a.visit_id=b.visit_id;
+QUIT;
+PROC sql;
+	CREATE table visit_list_sud as
+	SELECT 	a.visit_id,
+			a.enrolid
+	FROM myfile.svc_op_number_6m_pj a
+	INNER JOIN myfile.sud_list b
+	ON a.enrolid = b.enrolid AND a.visit_dt<b.event_date<=a.visit_dt+180;
+QUIT;
+
+PROC sql;
+	CREATE table list_sud as
+	SELECT min(visit_id) as visit_id,
+			1 as sud_6m
+	FROM visit_list_sud
+	GROUP BY visit_id;
+QUIT;
+PROC sql;
+CREATE table id_list7 as
+	SELECT a.*,
+			b.*
+	FROM id_list6 a
+	LEFT JOIN list_sud b
+	ON a.visit_id=b.visit_id;
+QUIT;
+PROC sql;
+	CREATE table visit_list_sud as
+	SELECT 	a.visit_id,
+			a.enrolid
+	FROM myfile.svc_op_number_6m_pj a
+	INNER JOIN myfile.sud_list b
+	ON a.enrolid = b.enrolid AND a.visit_dt<b.event_date<=a.visit_dt+360;
+QUIT;
+
+PROC sql;
+	CREATE table list_sud as
+	SELECT min(visit_id) as visit_id,
+			1 as sud_12m
+	FROM visit_list_sud
+	GROUP BY visit_id;
+QUIT;
+PROC sql;
+CREATE table id_list8 as
+	SELECT a.*,
+			b.*
+	FROM id_list7 a
+	LEFT JOIN list_sud b
+	ON a.visit_id=b.visit_id;
+QUIT;
+*ER visits 7 day and 14 days post index;
+DATA myfile.temp_file;
+	SET id_list7;
+RUN;
+
+*adding the outcome measures;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+*number of visit;
+PROC sql;
+	CREATE table temp as
+	SELECT min(visit_id) as visit_id
+	FROM id_list a
+	GROUP BY visit_id;
+QUIT;
+
+*number of individual patients;
+PROC sql;
+	CREATE table temp as
+	SELECT min(enrolid) as enrolid
+	FROM id_list a
+	GROUP BY enrolid;
+QUIT;
