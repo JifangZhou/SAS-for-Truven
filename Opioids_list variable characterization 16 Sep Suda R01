@@ -1,0 +1,39 @@
+LIBNAME myfile "F:\User Folders\jzhou86\Suda R01\RawData";
+LIBNAME codlist "F:\User Folders\jzhou86\Suda R01\RawData\Code list";
+LIBNAME workingD "F:\User Folders\jzhou86\Suda R01\RawData\Working Directory";
+
+DATA id_list;
+	SET myfile.analytical_list_op_31aug;
+	day2_op=0;
+	day3_op=0;
+	day7_op=0;
+	IF total_ome>80 THEN day2_op=1;
+	IF total_ome>120 THEN day3_op=1;
+	IF total_ome>280 THEN day7_op=1;
+RUN;
+PROC MEANS DATA=id_list MEAN STD MEDIAN P25 P75;
+	VAR age number_pcp number_special number_er number_adm;
+RUN;
+PROC MEANS DATA=id_list MEAN STD MEDIAN P25 P75;
+	CLASS day7_op;
+	VAR age number_pcp number_special number_er number_adm;
+RUN;
+
+
+PROC FREQ DATA=id_list;
+	TABLE sex*day7_op
+			DIAGNOSTIC*day7_op 
+PREVENTIVE*day7_op
+RESTORATIV*day7_op
+ORAL*day7_op
+PERIODONTI*day7_op
+ADJUNCTIVE*day7_op
+ENDODONTIC*day7_op
+IMPLANT*day7_op
+PROSTHODON*day7_op
+ORTHODONTI*day7_op
+MAXILLOFAC*day7_op
+missing*day7_op/nocol norow nopercent;
+RUN;
+
+ 
