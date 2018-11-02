@@ -1,0 +1,133 @@
+LIBNAME myfile "F:\User Folders\jzhou86\Suda R01\RawData";
+LIBNAME collist "F:\User Folders\jzhou86\Suda R01\RawData\Code list";
+LIBNAME workingD "F:\User Folders\jzhou86\Suda R01\RawData\Working Directory";
+
+proc sql noprint; 
+select quote(dx)
+into :exoraldxcodes separated by ", "
+from collist.exoraldxcodes; 
+quit;
+
+proc sql noprint; 
+select quote(dx)
+into :paindxcodes separated by ", "
+from collist.paindxcodes; 
+quit;
+
+*Extracting pain diagnosis and dates;
+%macro opclms (in = , out = ); 
+options compress = on reuse = yes; 
+data &out. (keep = enrolid SVCDATE dx1 dx2 dx3 dx4 proc1 STDPROV);
+set &in.;
+/*diagnoses*/
+array dx{*} dx1 dx2 dx3 dx4;
+do i = 1 to dim(dx); 
+if dx{i} in (&paindxcodes) then pain = 1;
+end; 
+/*procedures*/
+if proc1 in ('D9610','M20552','M20605','M21089','E0486','J0585') then pain = 1; 
+if pain = 1 ;
+run;
+%mend; 
+%opclms   (in = myfile.dental_ccaei_09, out = c09_i);
+%opclms   (in = myfile.dental_ccaei_10, out = c10_i);
+%opclms   (in = myfile.dental_ccaei_11, out = c11_i);
+%opclms   (in = myfile.dental_ccaei_12, out = c12_i);
+%opclms   (in = myfile.dental_ccaei_13, out = c13_i);
+%opclms   (in = myfile.dental_ccaei_142, out = c14_i);
+%opclms   (in = myfile.dental_ccaei_151, out = c15_i);
+
+%opclms  (in = myfile.dental_mdcri_09, out = m09_i);
+%opclms  (in = myfile.dental_mdcri_10, out = m10_i);
+%opclms  (in = myfile.dental_mdcri_11, out = m11_i);
+%opclms  (in = myfile.dental_mdcri_12, out = m12_i);
+%opclms  (in = myfile.dental_mdcri_13, out = m13_i);
+%opclms  (in = myfile.dental_mdcri_142, out = m14_i);
+%opclms  (in = myfile.dental_mdcri_151, out = m15_i);
+
+%opclms   (in = myfile.dental_ccaeo_09, out = c09_o);
+%opclms   (in = myfile.dental_ccaeo_10, out = c10_o);
+%opclms   (in = myfile.dental_ccaeo_11, out = c11_o);
+%opclms   (in = myfile.dental_ccaeo_12, out = c12_o);
+%opclms   (in = myfile.dental_ccaeo_13, out = c13_o);
+%opclms   (in = myfile.dental_ccaeo_142, out = c14_o);
+%opclms   (in = myfile.dental_ccaeo_151, out = c15_o);
+
+%opclms  (in = myfile.dental_mdcro_09, out = m09_o);
+%opclms  (in = myfile.dental_mdcro_10, out = m10_o);
+%opclms  (in = myfile.dental_mdcro_11, out = m11_o);
+%opclms  (in = myfile.dental_mdcro_12, out = m12_o);
+%opclms  (in = myfile.dental_mdcro_13, out = m13_o);
+%opclms  (in = myfile.dental_mdcro_142, out = m14_o);
+%opclms  (in = myfile.dental_mdcro_151, out = m15_o);
+
+
+data myfile.all_pain_M; 
+set c09_i c10_i c11_i c12_i c13_i c14_i c15_i
+	m09_i m10_i m11_i m12_i m13_i m14_i m15_i 
+	c09_o c10_o c11_o c12_o c13_o c14_o c15_o
+	m09_o m10_o m11_o m12_o m13_o m14_o m15_o; 
+IF enrolid=. THEN DELETE;
+if STDPROV in (100,105,805); 
+run;
+*NOTE: There were 4027 observations read from the data set WORK.C09_I.
+NOTE: There were 5043 observations read from the data set WORK.C10_I.
+NOTE: There were 6823 observations read from the data set WORK.C11_I.
+NOTE: There were 7149 observations read from the data set WORK.C12_I.
+NOTE: There were 7522 observations read from the data set WORK.C13_I.
+NOTE: There were 7826 observations read from the data set WORK.C14_I.
+NOTE: There were 7133 observations read from the data set WORK.C15_I.
+NOTE: There were 2055 observations read from the data set WORK.M09_I.
+NOTE: There were 1913 observations read from the data set WORK.M10_I.
+NOTE: There were 2831 observations read from the data set WORK.M11_I.
+NOTE: There were 3152 observations read from the data set WORK.M12_I.
+NOTE: There were 3604 observations read from the data set WORK.M13_I.
+NOTE: There were 3631 observations read from the data set WORK.M14_I.
+NOTE: There were 2881 observations read from the data set WORK.M15_I.
+NOTE: There were 1810528 observations read from the data set WORK.C09_O.
+NOTE: There were 2407983 observations read from the data set WORK.C10_O.
+NOTE: There were 3201843 observations read from the data set WORK.C11_O.
+NOTE: There were 3704704 observations read from the data set WORK.C12_O.
+NOTE: There were 3943328 observations read from the data set WORK.C13_O.
+NOTE: There were 4869243 observations read from the data set WORK.C14_O.
+NOTE: There were 4571288 observations read from the data set WORK.C15_O.
+NOTE: There were 337885 observations read from the data set WORK.M09_O.
+NOTE: There were 396504 observations read from the data set WORK.M10_O.
+NOTE: There were 539348 observations read from the data set WORK.M11_O.
+NOTE: There were 669158 observations read from the data set WORK.M12_O.
+NOTE: There were 978427 observations read from the data set WORK.M13_O.
+NOTE: There were 1097115 observations read from the data set WORK.M14_O.
+NOTE: There were 939442 observations read from the data set WORK.M15_O.
+NOTE: The data set MYFILE.ALL_PAIN_M has 360056 observations and 8 variables.
+;
+*Select pain diagnosis from dental claims;
+options compress = on reuse = yes;
+
+libname dn "E:\Truven Dental\Data";
+
+data dental_claims;
+set 
+dn.Dnmcn113 dn.Dncen113
+dn.Dnmcn123 dn.Dncen123
+dn.Dnmcn133 dn.Dncen133
+dn.Dnmcn143 dn.Dncen143
+dn.Dnmcn152 dn.Dncen152; 
+run; 
+data dental_pain (keep = enrolid SVCDATE dx1 dx2 proc1);
+set dental_claims; 
+array dx{*} dx1 dx2;
+do i = 1 to dim(dx); 
+if dx{i} in (&paindxcodes) then pain = 1;
+end; 
+/*procedures*/
+if proc1 in ('D9610','M20552','M20605','M21089','E0486','J0585') then pain = 1; 
+if pain = 1 ; 
+run; 
+
+DATA myfile.all_pain_N;
+	SET dental_pain;
+RUN;
+*NOTE: There were 369967 observations read from the data set WORK.DENTAL_PAIN.;
+
+*extraction of medical encounters;
+
