@@ -1,0 +1,205 @@
+*Assessment of time interval from the index visits;
+LIBNAME myfile "F:\User Folders\jzhou86\Suda R01\RawData";
+LIBNAME codlist "F:\User Folders\jzhou86\Suda R01\RawData\Code list";
+LIBNAME workingD "F:\User Folders\jzhou86\Suda R01\RawData\Working Directory";
+*antibiotics;
+DATA eligible_visit;
+	SET myfile.eligible_visit_list_0806;
+	visit_id = catx('_', enrolid, visit_dt);
+RUN;
+
+DATA id_list;
+	SET myfile.id_list_0807;
+DATA abx_rx;
+	SET myfile.rx_abx_list;
+DATA abx_ndc;
+	SET codlist.abx_list;
+RUN;
+
+PROC sql;
+	CREATE table temp_dx as
+	SELECT a.*,
+		b.flag
+	FROM abx_rx a
+	INNER JOIN abx_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+
+PROC sql;
+	CREATE table temp_visit_abx as
+	SELECT a.*,
+		b.svcdate as abx_date,
+		b.flag,
+		b.ndcnum,
+		b.METQTY,
+		b.SEQNUM
+	FROM eligible_visit a
+	INNER JOIN temp_dx b
+	ON a.enrolid = b.enrolid AND -7<=a.visit_dt-b.svcdate<=7;
+QUIT;
+
+DATA temp_visit_abx;
+	SET temp_visit_abx;
+	diff=abx_date-visit_dt;
+	visit_id = catx('_', enrolid, visit_dt);
+	abx_rx_id= catx('_', enrolid, visit_dt, SEQNUM);
+RUN;
+*all abx visits within 7 days;
+*NOTE: The data set WORK.TEMP_VISIT_ABX has 4731400 observations and 11 variables.;
+
+* No 14 day admission;
+DATA admission_list;
+	SET workingD.admission_list;
+RUN;
+PROC sql;
+	CREATE table visit_exclusion as
+	SELECT a.*
+	FROM temp_visit_abx a
+	INNER JOIN admission_list b
+	ON a.enrolid = b.enrolid AND 0<=a.abx_date-b.adm_date<=14;
+QUIT;
+
+PROC sql;
+	CREATE table visit_exclusion as
+	SELECT min(visit_id) as visit_id,
+			1 as Day_14_adm
+	FROM visit_exclusion
+	GROUP BY visit_id;
+QUIT;
+
+PROC sql;
+	CREATE table temp as
+	SELECT min(visit_id) as visit_id,
+			min(enrolid) as enrolid,
+			min(visit_dt) as visit_dt,
+			min(abx_date) as abx_date
+	FROM temp_visit_abx
+	GROUP BY abx_rx_id;
+QUIT;
+
+PROC sql;
+	CREATE table visit_id_list as
+	SELECT a.*,
+		b.*
+	FROM temp a
+	LEFT JOIN visit_exclusion b
+	ON a.visit_id = b.visit_id;
+QUIT;
+
+*exclusion of extra oral infections;
+DATA all_exoral;
+	SET workingD.all_exoral;
+RUN;
+
+PROC sql;
+	CREATE table visit_exclusion as
+	SELECT a.*
+	FROM temp a
+	INNER JOIN all_exoral b
+	ON a.enrolid = b.enrolid AND 0<=a.abx_date-b.exoraldx_date<=14;
+QUIT;
+
+PROC sql;
+	CREATE table visit_exclusion as
+	SELECT min(visit_id) as visit_id,
+			1 as Day_14_exoral
+	FROM visit_exclusion
+	GROUP BY visit_id;
+QUIT;
+
+PROC sql;
+	CREATE table visit_id_list as
+	SELECT a.*,
+		b.*
+	FROM visit_id_list a
+	LEFT JOIN visit_exclusion b
+	ON a.visit_id = b.visit_id;
+QUIT;
+
+*** any cc condition;
+DATA cc_list;
+	SET workingD.cc_list;
+RUN;
+
+PROC sql;
+	CREATE table visit_exclusion as
+	SELECT a.*
+	FROM temp a
+	INNER JOIN cc_list b
+	ON a.enrolid = b.enrolid AND a.abx_date>b.cc_date;
+QUIT;
+
+PROC sql;
+	CREATE table visit_exclusion as
+	SELECT min(visit_id) as visit_id,
+			1 as cc_prior
+	FROM visit_exclusion
+	GROUP BY visit_id;
+QUIT;
+
+PROC sql;
+	CREATE table visit_id_list as
+	SELECT a.*,
+		b.*
+	FROM visit_id_list a
+	LEFT JOIN visit_exclusion b
+	ON a.visit_id = b.visit_id;
+QUIT;
+
+*** any cc condition;
+DATA pj_list;
+	SET workingD.pj_list;
+RUN;
+
+PROC sql;
+	CREATE table visit_exclusion as
+	SELECT a.*
+	FROM temp a
+	INNER JOIN pj_list b
+	ON a.enrolid = b.enrolid AND a.abx_date>b.pj_date;
+QUIT;
+
+PROC sql;
+	CREATE table visit_exclusion as
+	SELECT min(visit_id) as visit_id,
+			1 as pj_prior
+	FROM visit_exclusion
+	GROUP BY visit_id;
+QUIT;
+
+PROC sql;
+	CREATE table visit_id_list as
+	SELECT a.*,
+		b.*
+	FROM visit_id_list a
+	LEFT JOIN visit_exclusion b
+	ON a.visit_id = b.visit_id;
+QUIT;
+
+DATA myfile.abx_interim_list_12Aug;
+	SET visit_id_list;
+RUN;
+
+DATA temp_num_est;
+	SET visit_id_list;
+	IF Day_14_adm=.;
+	IF Day_14_exoral=.;
+	IF cc_prior=.;
+	IF pj_prior=.;
+RUN;
+
+PROC sql;
+	CREATE table num_est as
+	SELECT min(visit_id) as visit_id
+	FROM temp_num_est
+	GROUP BY visit_id;
+QUIT;
+
+PROC sql;
+	CREATE table num_est as
+	SELECT min(enrolid) as enrolid
+	FROM temp_num_est
+	GROUP BY enrolid;
+QUIT;
+
