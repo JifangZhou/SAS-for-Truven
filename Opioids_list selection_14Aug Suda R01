@@ -1,0 +1,667 @@
+*Assessment of time interval from the index visits;
+LIBNAME myfile "F:\User Folders\jzhou86\Suda R01\RawData";
+LIBNAME codlist "F:\User Folders\jzhou86\Suda R01\RawData\Code list";
+LIBNAME workingD "F:\User Folders\jzhou86\Suda R01\RawData\Working Directory";
+*antibiotics;
+DATA eligible_visit;
+	SET myfile.interim_opioid_12aug;
+	visit_id = catx('_', enrolid, visit_dt);
+RUN;
+
+DATA id_list;
+	SET myfile.all_id_list;
+DATA op_rx;
+	SET myfile.rx_op_list;
+DATA op_ndc;
+	SET codlist.opioid_list;
+RUN;
+
+*Select visits with more than 90 days' cumulative supply over the past 365 days;
+PROC sql;
+	CREATE table temp_dx as
+	SELECT a.*,
+		b.flag
+	FROM op_rx a
+	INNER JOIN op_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+*Assessment of all opioid Rx over the past 365 days;
+PROC sql;
+	CREATE table temp_visit_op as
+	SELECT a.*,
+		b.svcdate,
+		b.flag,
+		b.ndcnum,
+		b.METQTY,
+		b.SEQNUM,
+		b.DAYSUPP
+	FROM eligible_visit a
+	INNER JOIN temp_dx b
+	ON a.enrolid = b.enrolid AND a.visit_dt-390<=b.svcdate<=a.visit_dt;
+QUIT;
+*Assessment of Rx drug coverage over the 365 pre-index period;
+proc sort data=temp_visit_op;
+by visit_id SVCDATE;
+run;
+*NOTE: There were 1382870 observations read from the data set WORK.TEMP_VISIT_OP.;
+
+proc transpose data = temp_visit_op out=fill_dates (drop=_name_) prefix = SVCDATE;
+by visit_id;
+var SVCDATE;
+run;
+proc transpose data = temp_visit_op out=days_supply (drop=_name_) prefix = DAYSUPP;
+by visit_id;
+var DAYSUPP;
+run;
+data both;
+merge fill_dates days_supply;
+by visit_id;
+run; 
+
+
+PROC sql;
+	CREATE table both as
+	SELECT a.*,
+			b.visit_dt-365 as start_dt,
+			b.visit_dt as end_dt
+	FROM both a
+	INNER JOIN eligible_visit b
+	ON a.visit_id = b.visit_id;
+QUIT;
+
+data pdc;
+set both;
+array daydummy(365) day1-day365;
+array filldates(*) SVCDATE1 - SVCDATE99;
+array days_supply(*) DAYSUPP1-DAYSUPP99;
+ do ii=1 to 365; daydummy(ii)=0;end;
+ do ii=1 to 365;
+ do i = 1 to dim(filldates) while (filldates(i) ne .);
+ if filldates(i)<= start_dt + ii -1 <= filldates(i)+days_supply(i)-1
+ then daydummy(ii)=1;
+ end;
+ end;
+drop i ii;
+dayscovered=sum(of day1 - day365);label dayscovered='Total Days Covered';
+p_dayscovered=dayscovered/180;label p_dayscovered='Proportion of Days Covered';
+run;
+proc univariate data=pdc;
+var dayscovered;
+histogram;
+run;
+
+DATA pdc_90;
+	SET pdc;
+	IF dayscovered>=90;
+RUN;
+
+PROC sql;
+	CREATE table refil_def_1 as
+	SELECT min(visit_id) as visit_id,
+			1 as refil_def_1
+	FROM pdc_90
+	GROUP BY visit_id;
+QUIT;
+
+
+*Merge all 35 days past Opioid Rx with same flag;
+PROC sql;
+	CREATE table temp_visit_op as
+	SELECT a.*,
+		b.svcdate,
+		b.flag,
+		b.ndcnum,
+		b.METQTY,
+		b.SEQNUM,
+		b.DAYSUPP
+	FROM eligible_visit a
+	INNER JOIN temp_dx b
+	ON a.enrolid = b.enrolid AND a.visit_dt=b.svcdate;
+QUIT;
+
+*Add all Rx with 35 day with same flag;
+PROC sql;
+	CREATE table temp_visit_op_35 as
+	SELECT a.*,
+		b.flag as previous_flag,
+		b.SVCDATE as previous_SVCDATE
+	FROM temp_visit_op a
+	INNER JOIN temp_dx b
+	ON a.enrolid = b.enrolid AND a.flag=b.flag AND a.visit_dt-35<=b.svcdate<=a.visit_dt;
+QUIT;
+
+*Add previous dental visit date;
+PROC sql;
+	CREATE table temp_visit_op_35_1 as
+	SELECT a.*,
+			b.visit_dt as previous_dental_DATE
+	FROM temp_visit_op_35 a
+	INNER JOIN eligible_visit b
+	ON a.enrolid = b.enrolid AND  a.visit_dt>b.visit_dt;
+QUIT;
+
+DATA temp_visit_op_35_2;
+	SET temp_visit_op_35_1;
+	IF previous_dental_DATE=previous_SVCDATE THEN DELETE;
+	IF previous_dental_DATE=visit_dt THEN DELETE;
+RUN;
+
+
+PROC sql;
+	CREATE table flag_num_35 as
+	SELECT min(visit_id) as visit_id,
+			count(flag) as flag_num
+	FROM temp_visit_op_35_2
+	GROUP BY visit_id;
+QUIT;
+
+DATA flag_num_35;
+	SET flag_num_35;
+	IF flag_num=1 THEN DELETE;
+RUN;
+
+PROC sql;
+	CREATE table refil_def_2 as
+	SELECT min(visit_id) as visit_id,
+			1 as refil_def_2
+	FROM flag_num_35
+	GROUP BY visit_id;
+QUIT;
+
+*Merge back refil criteria to the eligible visit id list;
+PROC sql;
+	CREATE table id_list1 as
+	SELECT a.*,
+		b.*
+	FROM eligible_visit a
+	LEFT JOIN refil_def_1 b
+	ON a.visit_id=b.visit_id;
+QUIT;
+
+PROC sql;
+	CREATE table id_list2 as
+	SELECT a.*,
+		b.*
+	FROM id_list1 a
+	LEFT JOIN refil_def_2 b
+	ON a.visit_id=b.visit_id;
+QUIT;
+
+DATA id_list3;
+	SET id_list2;
+	IF refil_def_1=1 AND refil_def_2=1 THEN DELETE;
+RUN;
+*NOTE: There were 742589 observations read from the data set WORK.ID_LIST2.
+NOTE: The data set WORK.ID_LIST3 has 739700 observations and 11 variables.;
+
+*Add back the flag and prescriptions;
+PROC sql;
+	CREATE table temp_visit_op as
+	SELECT a.*,
+		b.svcdate,
+		b.flag,
+		b.ndcnum,
+		b.METQTY,
+		b.SEQNUM,
+		b.DAYSUPP
+	FROM id_list3 a
+	INNER JOIN temp_dx b
+	ON a.enrolid = b.enrolid AND a.visit_dt=b.svcdate;
+QUIT;
+* OPioid Rx number is 744226;
+* unique pt:  605085
+;
+PROC sql;
+	CREATE table temp as
+	SELECT min(enrolid)
+	FROM id_list3
+	GROUP BY enrolid;
+QUIT;
+
+*remove not tablet or capsules;
+
+PROC sql;
+	CREATE table temp_visit_op as
+	SELECT a.*,
+		b.MSTFMDS,
+		b.STRNGTH
+	FROM temp_visit_op a
+	LEFT JOIN OP_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+*Eligible RX is 744226;
+DATA temp_visit_op;
+	SET temp_visit_op;
+	IF MSTFMDS="Elixir" THEN DELETE;
+	IF MSTFMDS="Kit" THEN DELETE;
+	IF MSTFMDS="Solution" THEN DELETE;
+	IF MSTFMDS="Spray" THEN DELETE;
+	IF MSTFMDS="Powder" THEN DELETE;
+RUN;
+*Eligible Opioid Rx is  742277;
+DATA temp_visit_op_ome;
+	SET temp_visit_op;
+	IF flag="CODEINE" THEN ratio=0.15;
+	IF flag="DIHYDRO" THEN ratio=0.25;
+	IF flag="FENTANY" THEN ratio=7.2;
+	IF flag="HYDROCO" THEN ratio=1;
+	IF flag="HYDROMO" THEN ratio=4;
+	IF flag="LEVORPH" THEN ratio=11;
+	IF flag="MEPERID" THEN ratio=0.1;
+	IF flag="METHADO" THEN ratio=4;
+	IF flag="MORPHIN" THEN ratio=1;
+	IF flag="OXYCODO" THEN ratio=1.5;
+	IF flag="OXYMORP" THEN ratio=3;
+	IF flag="TAPENTA" THEN ratio=0.4;
+	IF flag="TRAMADO" THEN ratio=0.1;
+IF STRNGTH="10 MG" THEN STR=10  ;
+IF STRNGTH="10 MG-200 MG" THEN STR=10  ;
+IF STRNGTH="100 MCG/1 HR" THEN STR=100  ;
+IF STRNGTH="100 MG" THEN STR=100  ;
+IF STRNGTH="100 MG-4 MG" THEN STR= 4 ;
+IF STRNGTH="12 MCG/1 HR" THEN STR= 12 ;
+IF STRNGTH="12 MG" THEN STR=  12;
+IF STRNGTH="120 MG" THEN STR= 120 ;
+IF STRNGTH="15 MG" THEN STR= 15 ;
+IF STRNGTH="150 MG" THEN STR= 150 ;
+IF STRNGTH="16 MG" THEN STR= 16 ;
+IF STRNGTH="2 MG" THEN STR= 2 ;
+IF STRNGTH="2.5 MG-200 MG" THEN STR= 2.5 ;
+IF STRNGTH="20 MG" THEN STR= 20 ;
+IF STRNGTH="200 MG" THEN STR= 200 ;
+IF STRNGTH="25 MCG/1 HR" THEN STR= 25 ;
+IF STRNGTH="250 MG" THEN STR= 250 ;
+IF STRNGTH="30 MG" THEN STR= 30 ;
+IF STRNGTH="300 MG" THEN STR= 300 ;
+IF STRNGTH="300 MG-10 MG" THEN STR= 10 ;
+IF STRNGTH="300 MG-15 MG" THEN STR= 15 ;
+IF STRNGTH="300 MG-30 MG" THEN STR= 30 ;
+IF STRNGTH="300 MG-5 MG" THEN STR= 5 ;
+IF STRNGTH="300 MG-50 MG-40 MG-30 MG" THEN STR= 50 ;
+IF STRNGTH="300 MG-60 MG" THEN STR= 60 ;
+IF STRNGTH="300 MG-7.5 MG" THEN STR= 7.5 ;
+IF STRNGTH="32 MG" THEN STR= 32 ;
+IF STRNGTH="320.5 MG-30 MG-16 MG" THEN STR= 30 ;
+IF STRNGTH="325 MG-10 MG" THEN STR= 10 ;
+IF STRNGTH="325 MG-2.5 MG" THEN STR= 2.5 ;
+IF STRNGTH="325 MG-200 MG-16 MG" THEN STR= 16 ;
+IF STRNGTH="325 MG-37.5 MG" THEN STR= 37.5 ;
+IF STRNGTH="325 MG-4.5 MG-0.38 MG" THEN STR= 4.5 ;
+IF STRNGTH="325 MG-4.8355 MG" THEN STR= 4.8355 ;
+IF STRNGTH="325 MG-5 MG" THEN STR=  5;
+IF STRNGTH="325 MG-50 MG-40 MG-30 MG" THEN STR= 50 ;
+IF STRNGTH="325 MG-7.5 MG" THEN STR= 7.5 ;
+IF STRNGTH="356.4 MG-30 MG-16 MG" THEN STR= 30 ;
+IF STRNGTH="4 MG" THEN STR= 4 ;
+IF STRNGTH="40 MG" THEN STR= 40 ;
+IF STRNGTH="400 MG-10 MG" THEN STR= 10 ;
+IF STRNGTH="400 MG-5 MG" THEN STR= 5 ;
+IF STRNGTH="45 MG" THEN STR= 45 ;
+IF STRNGTH="5 MG" THEN STR= 5 ;
+IF STRNGTH="5 MG-200 MG" THEN STR= 5 ;
+IF STRNGTH="50 MCG/1 HR" THEN STR= 50 ;
+IF STRNGTH="50 MG" THEN STR= 50 ;
+IF STRNGTH="50 MG-25 MG" THEN STR= 50 ;
+IF STRNGTH="500 MG-10 MG" THEN STR= 10 ;
+IF STRNGTH="500 MG-2.5 MG" THEN STR= 2.5 ;
+IF STRNGTH="500 MG-5 MG" THEN STR= 5 ;
+IF STRNGTH="500 MG-7.5 MG" THEN STR= 7.5 ;
+IF STRNGTH="60 MG" THEN STR= 60 ;
+IF STRNGTH="650 MG-10 MG" THEN STR= 10 ;
+IF STRNGTH="650 MG-7.5 MG" THEN STR= 7.5 ;
+IF STRNGTH="660 MG-10 MG" THEN STR= 10 ;
+IF STRNGTH="7.5 MG-200 MG" THEN STR= 7.5 ;
+IF STRNGTH="712.8 MG-60 MG-32 MG" THEN STR= 60 ;
+IF STRNGTH="75 MCG/1 HR" THEN STR= 75 ;
+IF STRNGTH="75 MG" THEN STR= 75 ;
+IF STRNGTH="750 MG-10 MG" THEN STR= 10 ;
+IF STRNGTH="750 MG-7.5 MG" THEN STR= 7.5 ;
+IF STRNGTH="8 MG" THEN STR= 8 ;
+IF STRNGTH="80 MG" THEN STR= 80 ;
+IF STRNGTH="90 MG" THEN STR= 90 ;
+OME=METQTY*str*ratio;
+RUN;
+
+PROC sql;
+	CREATE table ome_list as
+	SELECT min(visit_id) as visit_id,
+		sum(OME) as total_ome
+	FROM temp_visit_op_ome
+	GROUP BY visit_id;
+QUIT;
+
+PROC MEANS DATA=myfile.opoid_list_15_aug MEAN STD p1 P25 MEDIAN P75 p99;
+CLASS index_year;
+	VAR total_ome;
+RUN;
+
+PROC FREQ DATA=myfile.opoid_list_15_aug;
+TABLE ome_cat*index_year/nocol norow nopercent;
+RUN;
+*1st Pctl 25th Pctl Median 75th Pctl 99th Pctl 
+36.0000000 75.0000000 100.0000000 150.0000000 1000.00 
+;
+
+DATA ome_list;
+	SET ome_list;
+	IF 36<=total_ome<=1000;
+RUN;
+*NOTE: There were 737812 observations read from the data set WORK.OME_LIST.
+NOTE: The data set WORK.OME_LIST has 724682 observations and 2 variables.
+;
+
+PROC sql;
+	CREATE table myfile.opoid_list_15_aug as
+	SELECT a.*,
+			b.*
+	FROM temp_visit_op_ome a
+	INNER JOIN ome_list b
+	ON a.visit_id=b.visit_id;
+QUIT;
+
+*add baseline character;
+PROC sql;
+	CREATE table myfile.opoid_list_15_aug as
+	SELECT a.*,
+			b.*
+	FROM myfile.opoid_list_15_aug a
+	LEFT JOIN myfile.all_id_list b
+ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA myfile.opoid_list_15_aug;
+	SET myfile.opoid_list_15_aug;
+	index_year=YEAR(visit_dt);
+	age=index_year-DOBYR;
+	IF age<=4 	THEN age_cat=1;
+	ELSE IF age<=9 	THEN age_cat=2;
+	ELSE IF age<=14 	THEN age_cat=3;
+	ELSE IF age<=19 	THEN age_cat=4;
+	ELSE IF age<=24 	THEN age_cat=5;
+	ELSE IF age<=29 	THEN age_cat=6;
+	ELSE IF age<=34 	THEN age_cat=7;
+	ELSE IF age<=39 	THEN age_cat=8;
+	ELSE IF age<=44 	THEN age_cat=9;
+	ELSE IF age<=49 	THEN age_cat=10;
+	ELSE IF age<=54 	THEN age_cat=11;
+	ELSE IF age<=59 	THEN age_cat=12;
+	ELSE IF age<=64 	THEN age_cat=13;
+	ELSE IF age<=69 	THEN age_cat=14;
+	ELSE IF age<=74 	THEN age_cat=15;
+	ELSE IF age<=79 	THEN age_cat=16;
+	ELSE IF age<=84 	THEN age_cat=17;
+	ELSE IF age>=85 	THEN age_cat=18;
+	IF age<=18 THEN DELETE;
+	IF total_ome<100 THEN ome_cat=1;
+	ELSE IF total_ome<500 THEN ome_cat=2;
+	ELSE IF total_ome<=1000 THEN ome_cat=3;
+RUN;
+
+*Add proc type to the visits;
+*all dental visit data;
+libname dn "E:\Truven Dental\Data";
+
+data dental_claims;
+set dn.Dnmcn113 dn.Dncen113
+	dn.Dnmcn123 dn.Dncen123
+	dn.Dnmcn133 dn.Dncen133
+	dn.Dnmcn143 dn.Dncen143
+	dn.Dnmcn152 dn.Dncen152; 
+KEEP enrolid SVCDATE PROC1;
+run; 
+
+*define type of procedures;
+DATA dental_claims;
+	SET dental_claims;
+	if PROC1 in ("D0120","D0140","D0145","D0150","D0160","D0170","D0171","D0180","D0190","D0191","D0210","D0220","D0230","D0240","D0250",
+				"D0251","D0270","D0272","D0273","D0274","D0277","D0290","D0310","D0320","D0321","D0322","D0330","D0340","D0350","D0351",
+				"D0364","D0365","D0366","D0367","D0368","D0369","D0370","D0371","D0380","D0381","D0382","D0383","D0384","D0385","D0386",
+				"D0391","D0393","D0394","D0395","D0415","D0416","D0417","D0418","D0422","D0423","D0425","D0431","D0460","D0470","D0601",
+				"D0602","D0603","D0472","D0473","D0474","D0480","D0486","D0475","D0476","D0477","D0478","D0479","D0481","D0482","D0483",
+				"D0484","D0485","D0502","D0999") then type = "DIAGNOSTIC";
+	if PROC1 in ("D1110","D1353","D1352","D1354","D1510","D1515","D1520","D1525","D1550","D1555","D1999") then type = "PREVENTIVE";
+	if PROC1 in ("D2140","D2150","D2160","D2161","D2330","D2331","D2332","D2335","D2390","D2391","D2392","D2393","D2394","D2410","D2420",
+				"D2430","D2510","D2520","D2530","D2542","D2543","D2544","D2610","D2620","D2630","D2642","D2643","D2644","D2650","D2651",
+				"D2652","D2662","D2663","D2664","D2710","D2712","D2720","D2721","D2722","D2740","D2750","D2751","D2752","D2780","D2781",
+				"D2782","D2783","D2790","D2791","D2792","D2794","D2799","D2990","D2910","D2915","D2920","D2921","D2929","D2930","D2931",
+				"D2932","D2933","D2934","D2940","D2941","D2949","D2950","D2951","D2952","D2953","D2954","D2955","D2957","D2960","D2961",
+				"D2962","D2971","D2975","D2980","D2981","D2982","D2983","D2999") then type = "RESTORATIVE";
+	if PROC1 in ("D3110","D3120","D3220","D3221","D3222","D3230","D3240","D3310","D3320","D3330","D3331","D3332","D3333","D3346","D3347",
+				"D3348","D3351","D3352","D3353","D3355","D3356","D3357","D3410","D3421","D3425","D3426","D3427","D3428","D3429","D3430",
+				"D3431","D3432","D3450","D3460","D3470","D3910","D3920","D3950","D3999") then type = "ENDODONTICS";
+	if PROC1 in ("D4210","D4211","D4212","D4230","D4231","D4240","D4241","D4245","D4249","D4260","D4261","D4263","D4264","D4265","D4266",
+				"D4267","D4268","D4270","D4273","D4283","D4275","D4285","D4274","D4276","D4277","D4278","D4320","D4321","D4341","D4342",
+				"D4355","D4381","D4910","D4920","D4921","D4999") then type = "PERIODONTICS";
+	if PROC1 in ("D5110","D5120","D5130","D5140","D5211","D5212","D5213","D5214","D5221","D5222","D5223","D5224","D5225","D5226","D5281",
+				"D5410","D5411","D5421","D5510","D5520","D5610","D5620","D5630","D5640","D5650","D5660","D5670","D5671","D5710","D5711",
+				"D5720","D5721","D5730","D5731","D5740","D5741","D5750","D5751","D5760","D5761","D5810","D5811","D5820","D5821","D5850",
+				"D5851","D5862","D5863","D5864","D5865","D5866","D5867","D5875","D5899") then type = "PROSTHODONTICS_Removable";
+	if PROC1 in ("D5992","D5993","D5914","D5927","D5987","D5924","D5925","D5912","D5911","D5919","D5929","D5951","D5934","D5935","D5913",
+				"D5926","D5922","D5932","D5936","D5933","D5931","D5916","D5923","D5915","D5928","D5954","D5955","D5958","D5959","D5985",
+				"D5984","D5953","D5960","D5952","D5988","D5982","D5937","D5986","D5994","D5983","D5991","D5999") then type = "MAXILLOFACIAL";
+	if PROC1 in ("D6190","D6010","D6011","D6012","D6013","D6040","D6050","D6100","D6101","D6102","D6103","D6104","D6055","D6056","D6057",
+				"D6051","D6052","D6110","D6111","D6112","D6113","D6114","D6115","D6116","D6117","D6058","D6059","D6060","D6061","D6062",
+				"D6063","D6064","D6094","D6065","D6066","D6067","D6068","D6069","D6070","D6071","D6072","D6073","D6074","D6194","D6075",
+				"D6076","D6077","D6080","D6090","D6095","D6091","D6092","D6093","D6199") then type = "IMPLANT";
+	if PROC1 in ("D6205","D6210","D6211","D6212","D6214","D6240","D6241","D6242","D6245","D6250","D6251","D6252","D6253","D6545","D6548",
+				"D6549","D6600","D6601","D6602","D6603","D6604","D6605","D6606","D6607","D6608","D6609","D6610","D6611","D6612","D6613",
+				"D6614","D6615","D6624","D6634","D6710","D6720","D6721","D6722","D6740","D6750","D6751","D6752","D6780","D6781","D6782",
+				"D6783","D6790","D6791","D6792","D6794","D6793","D6920","D6930","D6940","D6950","D6980","D6985","D6999") then type = "PROSTHODONTICS_FIXED";
+	if PROC1 in ("D7111","D7140","D7210","D7220","D7230","D7240","D7241","D7250","D7251","D7260","D7261","D7270","D7272","D7280","D7282",
+				"D7283","D7285","D7286","D7287","D7288","D7290","D7291","D7292","D7293","D7294","D7295","D7310","D7311","D7320","D7321",
+				"D7340","D7350","D7410","D7411","D7412","D7413","D7414","D7415","D7440","D7441","D7450","D7451","D7460","D7461","D7465",
+				"D7471","D7472","D7473","D7485","D7490","D7510","D7511","D7520","D7521","D7530","D7540","D7550","D7560","D7610","D7620",
+				"D7630","D7640","D7650","D7660","D7670","D7671","D7680","D7710","D7720","D7730","D7740","D7750","D7760","D7770","D7771",
+				"D7780","D7810","D7820","D7830","D7840","D7850","D7852","D7854","D7856","D7858","D7860","D7865","D7870","D7871","D7872",
+				"D7873","D7874","D7875","D7876","D7877","D7880","D7881","D7899","D7910","D7911","D7912","D7920","D7921","D7940","D7941",
+				"D7943","D7944","D7945","D7946","D7947","D7948","D7949","D7950","D7951","D7952","D7953","D7955","D7960","D7963","D7970",
+				"D7971","D7972","D7980","D7981","D7982","D7983","D7990","D7991","D7995","D7996","D7997","D7998","D7999") then type = "ORAL";
+	if PROC1 in ("D8010","D8020","D8030","D8040","D8050","D8060","D8070","D8080","D8090","D8210","D8220","D8660","D8670","D8680","D8681",
+				"D8690","D8691","D8692","D8693","D8694","D8999") then type = "ORTHODONTICS";
+	if PROC1 in ("D9110","D9120","D9210","D9211","D9212","D9215","D9219","D9223","D9230","D9243","D9248","D9310","D9410","D9420","D9430",
+				"D9440","D9450","D9610","D9612","D9630","D9910","D9911","D9920","D9930","D9932","D9933","D9934","D9935","D9940","D9941",
+				"D9942","D9943","D9950","D9951","D9952","D9970","D9971","D9972","D9973","D9974","D9975","D9985","D9986","D9987","D9999") then type = "ADJUNCTIVE";
+	visit_id = catx('_', enrolid, SVCDATE);
+RUN;
+PROC SQL;
+CREATE TABLE myfile.dental_proc_type_op as
+SELECT a.visit_id,
+		b.type
+FROM myfile.opoid_list_15_aug a
+INNER JOIN dental_claims b
+ON a.visit_id = b.visit_id;
+QUIT;
+
+PROC SQL;
+CREATE TABLE proc_type as
+SELECT min(visit_id) as visit_id,
+		min(type) as type
+FROM myfile.dental_proc_type_op  
+GROUP BY visit_id, type;
+QUIT;
+
+PROC FREQ DATA=proc_type;
+	TABLE type;
+RUN;
+
+DATA proc_type_1;
+	SET proc_type;
+	IF type="ADJUNCTIVE";
+	ADJUNCTIVE=1;
+	RUN;
+PROC sql;
+	CREATE table id_list1 as
+	SELECT a.*,
+			b.*
+	FROM myfile.opoid_list_15_aug a
+	LEFT JOIN proc_type_1 b
+	ON a.visit_id=b.visit_id;
+QUIT;
+
+DATA proc_type_2;
+	SET proc_type;
+	IF type="DIAGNOSTIC";
+	DIAGNOSTIC=1;
+	RUN;
+PROC sql;
+	CREATE table id_list2 as
+	SELECT a.*,
+			b.*
+	FROM id_list1 a
+	LEFT JOIN proc_type_2 b
+	ON a.visit_id=b.visit_id;
+QUIT;
+
+DATA proc_type_3;
+	SET proc_type;
+	IF type="ENDODONTIC";
+	ENDODONTIC=1;
+	RUN;
+PROC sql;
+	CREATE table id_list3 as
+	SELECT a.*,
+			b.*
+	FROM id_list2 a
+	LEFT JOIN proc_type_3 b
+	ON a.visit_id=b.visit_id;
+QUIT;
+
+DATA proc_type_4;
+	SET proc_type;
+	IF type="IMPLANT";
+	IMPLANT=1;
+	RUN;
+PROC sql;
+	CREATE table id_list4 as
+	SELECT a.*,
+			b.*
+	FROM id_list3 a
+	LEFT JOIN proc_type_4 b
+	ON a.visit_id=b.visit_id;
+QUIT;
+
+DATA proc_type_5;
+	SET proc_type;
+	IF type="MAXILLOFAC";
+	MAXILLOFAC=1;
+	RUN;
+PROC sql;
+	CREATE table id_list5 as
+	SELECT a.*,
+			b.*
+	FROM id_list4 a
+	LEFT JOIN proc_type_5 b
+	ON a.visit_id=b.visit_id;
+QUIT;
+
+DATA proc_type_6;
+	SET proc_type;
+	IF type="ORAL";
+	ORAL=1;
+	RUN;
+PROC sql;
+	CREATE table id_list6 as
+	SELECT a.*,
+			b.*
+	FROM id_list5 a
+	LEFT JOIN proc_type_6 b
+	ON a.visit_id=b.visit_id;
+QUIT;
+
+DATA proc_type_7;
+	SET proc_type;
+	IF type="ORTHODONTI";
+	ORTHODONTI=1;
+	RUN;
+PROC sql;
+	CREATE table id_list7 as
+	SELECT a.*,
+			b.*
+	FROM id_list6 a
+	LEFT JOIN proc_type_7 b
+	ON a.visit_id=b.visit_id;
+QUIT;
+
+DATA proc_type_8;
+	SET proc_type;
+	IF type="PERIODONTI";
+	PERIODONTI=1;
+	RUN;
+PROC sql;
+	CREATE table id_list8 as
+	SELECT a.*,
+			b.*
+	FROM id_list7 a
+	LEFT JOIN proc_type_8 b
+	ON a.visit_id=b.visit_id;
+QUIT;
+
+DATA proc_type_9;
+	SET proc_type;
+	IF type="PREVENTIVE";
+	PREVENTIVE=1;
+	RUN;
+PROC sql;
+	CREATE table id_list9 as
+	SELECT a.*,
+			b.*
+	FROM id_list8 a
+	LEFT JOIN proc_type_9 b
+	ON a.visit_id=b.visit_id;
+QUIT;
+
+DATA proc_type_10;
+	SET proc_type;
+	IF type="PROSTHODON";
+	PROSTHODON=1;
+	RUN;
+PROC sql;
+	CREATE table id_list10 as
+	SELECT a.*,
+			b.*
+	FROM id_list9 a
+	LEFT JOIN proc_type_10 b
+	ON a.visit_id=b.visit_id;
+QUIT;
+
+DATA proc_type_11;
+	SET proc_type;
+	IF type="RESTORATIV";
+	RESTORATIV=1;
+	RUN;
+PROC sql;
+	CREATE table id_list11 as
+	SELECT a.*,
+			b.*
+	FROM id_list10 a
+	LEFT JOIN proc_type_11 b
+	ON a.visit_id=b.visit_id;
+QUIT;
+
+DATA myfile.opoid_list_15_aug_1;
+	SET id_list11;
+	missing=1;
+	IF max(ADJUNCTIVE,DIAGNOSTIC,ENDODONTIC,IMPLANT,MAXILLOFAC,
+ORAL,ORTHODONTI,PERIODONTI,PREVENTIVE,PROSTHODON,RESTORATIV)=1 THEN missing=0;
+RUN;
+
+PROC MEANS DATA=myfile.opoid_list_15_aug MEDIAN P25 P75;
+	CLASS index_year;
+	VAR age;
+RUN;
+
+PROC FREQ DATA=myfile.opoid_list_15_aug_1;
+	TABLE ADJUNCTIVE*index_year
+DIAGNOSTIC*index_year
+ENDODONTIC*index_year
+IMPLANT*index_year
+MAXILLOFAC*index_year
+ORAL*index_year
+ORTHODONTI*index_year
+PERIODONTI*index_year
+PREVENTIVE*index_year
+PROSTHODON*index_year
+RESTORATIV*index_year
+INDSTRY*index_year
+EESTATU*index_year/nocol norow nopercent;
+RUN;
