@@ -1,0 +1,87 @@
+LIBNAME myfile "F:\User Folders\jzhou86\Suda R01\RawData";
+
+/*extracting chemotherapy*/
+libname ccae09 "E:\Truven Data\CCAE\2009";
+libname ccae10 "E:\Truven Data\CCAE\2010";
+libname ccae11 "E:\Truven Data\CCAE\2011";
+libname ccae12 "E:\Truven Data\CCAE\2012";
+libname ccae13 "E:\Truven Data\CCAE\2013";
+libname ccae14 "E:\Truven Data\CCAE\2014";
+libname ccae15 "E:\Truven Data\CCAE\2015";
+
+libname mdcr09 "E:\Truven Data\MDCR\2009";
+libname mdcr10 "E:\Truven Data\MDCR\2010";
+libname mdcr11 "E:\Truven Data\MDCR\2011";
+libname mdcr12 "E:\Truven Data\MDCR\2012";
+libname mdcr13 "E:\Truven Data\MDCR\2013";
+libname mdcr14 "E:\Truven Data\MDCR\2014";
+libname mdcr15 "E:\Truven Data\MDCR\2015";
+**************************************************************************;
+/*outpatient*/
+%macro opclms (in = , out = ); 
+options compress = on reuse = yes; 
+data &out. (keep = enrolid SVCDATE proc1);
+set &in.;
+if proc1 in: ('J9');
+run;
+%mend;
+
+%opclms   (in = ccae09.Ccaeo093, out = chemo_c09_o);
+%opclms   (in = ccae10.Ccaeo103, out = chemo_c10_o);
+%opclms   (in = ccae11.Ccaeo113, out = chemo_c11_o);
+%opclms   (in = ccae12.Ccaeo122, out = chemo_c12_o);
+%opclms   (in = ccae13.Ccaeo131, out = chemo_c13_o);
+%opclms   (in = ccae14.Ccaeo142, out = chemo_c14_o);
+%opclms   (in = ccae15.Ccaeo151, out = chemo_c15_o);
+%opclms   (in = mdcr09.Mdcro093, out = chemo_m09_o);
+%opclms   (in = mdcr10.Mdcro103, out = chemo_m10_o);
+%opclms   (in = mdcr11.Mdcro113, out = chemo_m11_o);
+%opclms   (in = mdcr12.Mdcro122, out = chemo_m12_o);
+%opclms   (in = mdcr13.Mdcro131, out = chemo_m13_o);
+%opclms   (in = mdcr14.Mdcro142, out = chemo_m14_o);
+%opclms   (in = mdcr15.Mdcro151, out = chemo_m15_o);
+
+%macro ipclms (in = , out = ); 
+options compress = on reuse = yes; 
+data &out. (keep = enrolid ADMDATE proc1 proc2 proc3 proc4 proc5 proc6 proc7 proc8 proc9 proc10 proc11 proc12 proc13 proc14 proc15);
+set &in.;
+array proc{*} proc1 proc2 proc3 proc4 proc5 proc6 proc7 porc8 proc9 proc10 proc11 proc12 proc13 proc14 proc15;
+do j = 1 to dim(proc); 
+	if proc{j} in: ('J9') then chemo = 1; 
+end; 
+if chemo = 1; 
+run; 
+%mend; 
+
+%opclms   (in = ccae09.Ccaes093, out = chemo_c09_i);
+%opclms   (in = ccae10.Ccaes103, out = chemo_c10_i);
+%opclms   (in = ccae11.Ccaes113, out = chemo_c11_i);
+%opclms   (in = ccae12.Ccaes122, out = chemo_c12_i);
+%opclms   (in = ccae13.Ccaes131, out = chemo_c13_i);
+%opclms   (in = ccae14.Ccaes142, out = chemo_c14_i);
+%opclms   (in = ccae15.Ccaes151, out = chemo_c15_i);
+%opclms   (in = mdcr09.Mdcrs093, out = chemo_m09_i);
+%opclms   (in = mdcr10.Mdcrs103, out = chemo_m10_i);
+%opclms   (in = mdcr11.Mdcrs113, out = chemo_m11_i);
+%opclms   (in = mdcr12.Mdcrs122, out = chemo_m12_i);
+%opclms   (in = mdcr13.Mdcrs131, out = chemo_m13_i);
+%opclms   (in = mdcr14.Mdcrs142, out = chemo_m14_i);
+%opclms   (in = mdcr15.Mdcrs151, out = chemo_m15_i);
+
+LIBNAME myfile "F:\User Folders\jzhou86\Suda R01\RawData";
+
+data chemo_clms;
+set chemo_c09_i chemo_c10_i chemo_c11_i chemo_c12_i chemo_c13_i chemo_c14_i chemo_c15_i chemo_m09_i chemo_m10_i chemo_m11_i chemo_m12_i chemo_m13_i chemo_m14_i chemo_m15_i
+	chemo_c09_o chemo_c10_o chemo_c11_o chemo_c12_o chemo_c13_o chemo_c14_o chemo_c15_o chemo_m09_o chemo_m10_o chemo_m11_o chemo_m12_o chemo_m13_o chemo_m14_o chemo_m15_o;
+KEEP enrolid SVCDATE DISDATE;
+run; 
+
+*Merge with the id list;
+
+PROC SQL;
+	CREATE table myfile.final_chemo_list as
+	SELECT a.*
+	FROM chemo_clms a 
+	INNER JOIN myfile.id_list_0807 b
+	ON a.enrolid = b.enrolid;
+QUIT;
