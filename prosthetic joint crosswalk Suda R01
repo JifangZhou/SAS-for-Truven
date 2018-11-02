@@ -1,0 +1,200 @@
+/*prosthetic joint crosswalk*/
+data pjdi9; 
+set ks.Icd9toicd10cmgem; 
+if icd9cm in ('V436','V4360','V4361','V4362','V4363','V4364','V4365','V4366','V4369','99666','99667','99669');
+run; 
+/*NOTE: There were 23912 observations read from the data set KS.ICD9TOICD10CMGEM.
+NOTE: The data set WORK.PJDI9 has 12 observations and 8 variables.
+*/
+
+data pjdi10; 
+set ks.Icd10cmtoicd9gem; 
+if icd9cm in ('V436','V4360','V4361','V4362','V4363','V4364','V4365','V4366','V4369','99666','99667','99669');
+run; 
+/*NOTE: There were 78838 observations read from the data set KS.ICD10CMTOICD9GEM.
+NOTE: The data set WORK.PJDI10 has 53 observations and 8 variables.
+*/
+proc freq data = pjdi9; tables flags; run; 
+/*
+All five flags 
+flags Frequency Percent Cumulative
+Frequency Cumulative
+Percent 
+00000 1 8.33 1 8.33 
+10000 11 91.67 12 100.00 
+*/
+proc freq data = pjdi10; tables flags; run; 
+/*All five flags 
+flags Frequency Percent Cumulative
+Frequency Cumulative
+Percent 
+00000 1 1.89 1 1.89 
+10000 52 98.11 53 100.00 
+*/
+data ks.pjd_codes (keep = icd9cm icd10cm); 
+set pjdi10 pjdi9; 
+run; 
+/*NOTE: There were 53 observations read from the data set WORK.PJDI10.
+NOTE: There were 12 observations read from the data set WORK.PJDI9.
+NOTE: The data set KS.PJD_CODES has 65 observations and 2 variables.
+*/
+proc sort data = ks.pjd_codes nodupkey; by icd9cm icd10cm; run; 
+/*NOTE: There were 65 observations read from the data set KS.PJD_CODES.
+NOTE: 12 observations with duplicate key values were deleted.
+NOTE: The data set KS.PJD_CODES has 53 observations and 2 variables.
+*/
+data ks.pjd_codes; 
+set ks.pjd_codes; 
+icd9_copy = icd9cm; 
+icd10_copy = icd10cm; 
+run; 
+/*save as HTML and export to Excel*/
+data pji9; 
+set ks.pjd_codes; 
+keep  icd9cm; 
+run; 
+
+data pji9;
+set pji9; 
+rename  icd9cm = dx; 
+run; 
+
+proc sort data = pji9 nodupkey; by dx; run; 
+/*NOTE: There were 53 observations read from the data set WORK.PJI9.
+NOTE: 42 observations with duplicate key values were deleted.
+NOTE: The data set WORK.PJI9 has 11 observations and 1 variables.
+*/
+
+data pji10; 
+set ks.pjd_codes; 
+keep  icd10cm; 
+run; 
+
+data pji10;
+set pji10;
+rename  icd10cm = dx; 
+run; 
+
+proc sort data = pji10 nodupkey; by dx; run; 
+/*NOTE: There were 53 observations read from the data set WORK.PJI10.
+NOTE: 0 observations with duplicate key values were deleted.
+*/
+data ks.pjddxcodes; 
+set pji10 pji9; 
+run;
+/*NOTE: There were 53 observations read from the data set WORK.PJI10.
+NOTE: There were 11 observations read from the data set WORK.PJI9.
+NOTE: The data set KS.PJDDXCODES has 64 observations and 1 variables.
+*/
+*****************************************************************************;
+/*now run for ICD9P*/
+/*('815','8151','8152','8154','8156','8157','8180','8181','8184','819')
+*/
+data pji9_pcs; 
+set ks.Gem_i9pcs; 
+if source in ('815','8151','8152','8154','8156','8157','8180','8181','8184','819'); 
+run; 
+
+proc freq; tables flags; run; 
+/*Flags Frequency Percent Cumulative
+Frequency Cumulative
+Percent 
+10000 122 100.00 122 100.00 
+*/
+
+data pji10_pcs;
+set ks.Gem_pcsi9;
+if target in ('815','8151','8152','8154','8156','8157','8180','8181','8184','819'); 
+run; 
+/*NOTE: There were 82760 observations read from the data set KS.GEM_PCSI9.
+NOTE: The data set WORK.PJI10_PCS has 200 observations and 3 variables.
+*/
+proc freq; tables flags; run; 
+/*
+The FREQ Procedure
+
+Flags Frequency Percent Cumulative
+Frequency Cumulative
+Percent 
+10000 146 73.00 146 73.00 
+10111 54 27.00 200 100.00 
+*/
+data pji9_pcs;
+set pji9_pcs;
+rename Source = icd9p;
+rename target = icd10p;
+run; 
+
+data pji9_pcs;
+set pji9_pcs;
+icd9pcs = put(icd9p, 6.);
+run;
+
+data pji9_pcs;
+set pji9_pcs;
+drop icd9p;
+run;
+data pji9_pcs;
+set pji9_pcs;
+rename icd9pcs = icd9p;
+run;
+
+
+data pji10_pcs;
+set  pji10_pcs;
+rename source = icd10p;
+rename target = icd9p;
+run;
+
+data ks.pjd_pcodes (keep = icd9p icd10p); 
+set  pji9_pcs pji10_pcs; 
+run; 
+/*NOTE: There were 122 observations read from the data set WORK.PJI9_PCS.
+NOTE: There were 200 observations read from the data set WORK.PJI10_PCS.
+NOTE: The data set KS.PJD_PCODES has 322 observations and 2 variables.
+*/
+proc sort data = ks.pjd_pcodes nodupkey; by icd9p icd10p; run; 
+/*NOTE: There were 322 observations read from the data set KS.PJD_PCODES.
+NOTE: 24 observations with duplicate key values were deleted.
+NOTE: The data set KS.PJD_PCODES has 298 observations and 2 variables.
+*/
+/*take this to STATA and get descriptions*/
+/*used icd10 generate and icd9p generate and excel shared on Box*/
+
+data pjpi9; 
+set ks.Pjd_pcodes; 
+keep  icd9p; 
+run; 
+
+data pjpi9;
+set pjpi9;
+rename  icd9p = proc; 
+run; 
+
+proc sort data = pjpi9 nodupkey; by proc; run; 
+/*NOTE: There were 298 observations read from the data set WORK.PJPI9.
+NOTE: 281 observations with duplicate key values were deleted.
+NOTE: The data set WORK.PJPI9 has 17 observations and 1 variables.
+*/
+data pjpi10; 
+set ks.Pjd_pcodes; 
+keep  icd10p; 
+run; 
+
+data pjpi10;
+set pjpi10;
+rename  icd10p = proc; 
+run; 
+
+proc sort data = pjpi10 nodupkey; by proc; run; 
+/*NOTE: There were 298 observations read from the data set WORK.PJPI10.
+NOTE: 120 observations with duplicate key values were deleted.
+NOTE: The data set WORK.PJPI10 has 178 observations and 1 variables.
+*/
+data ks.pjdpcodes; 
+set pjpi10 pjpi9; 
+run;
+/*NOTE: There were 178 observations read from the data set WORK.PJPI10.
+NOTE: There were 17 observations read from the data set WORK.PJPI9.
+NOTE: The data set KS.PJDPCODES has 195 observations and 1 variables.
+*/
