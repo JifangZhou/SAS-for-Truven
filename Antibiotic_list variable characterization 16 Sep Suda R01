@@ -1,0 +1,48 @@
+LIBNAME myfile "F:\User Folders\jzhou86\Suda R01\RawData";
+
+DATA id_list;
+	SET myfile.analytical_cohort_abx_15oct;
+RUN;
+
+
+PROC MEANS DATA=id_list MEAN STD MEDIAN P25 P75;
+	VAR age;
+RUN;
+PROC MEANS DATA=id_list MEAN STD MEDIAN P25 P75;
+	CLASS index_year;
+	VAR age ;
+RUN;
+
+
+PROC FREQ DATA=id_list;
+	TABLE sex*index_year
+		region*index_year
+		inappropriate_abx*index_year
+DIAGNOSTIC*index_year 
+PREVENTIVE*index_year
+RESTORATIV*index_year
+ORAL*index_year
+PERIODONTI*index_year
+ADJUNCTIVE*index_year
+ENDODONTIC*index_year
+IMPLANT*index_year
+PROSTHODON*index_year
+ORTHODONTI*index_year
+MAXILLOFAC*index_year
+missing*index_year
+inappropriate_abx*index_year
+/nocol norow nopercent;
+RUN;
+
+
+
+PROC FREQ DATA=id_list;
+	TABLE 	EECLASS*index_year
+			EESTATU*index_year
+			INDSTRY*index_year
+/nocol norow nopercent;
+RUN;
+
+
+
+
