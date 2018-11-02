@@ -1,0 +1,116 @@
+/*Crosswalk for cardiac conditions and prosthetic joints*/
+/*1. Cardiac conditions*/
+libname aa "F:\User Folders\jzhou86\Suda R01\Antibiotics\SAS Codes_JZ_revised\RawData"; 
+data cci9; 
+set aa.Icd9toicd10cmgem; 
+if icd9cm in ('4210', '4211', '4219', 'V1259', '4240', '4243', '0390', '03921', '03835', '03845', '03885', '03995', '03721', '03722', '03723', '08842', '08843', '08844', 
+'08850', '08851', '08852', '08853', '08854', '08855', '08856', '08857', '08858', '08859', '03961', 'V1365', 'V433', '03751', 'V421', '99683', '41406', '41407') or 
+icd9cm in: ('4229', '4249', '745', '746', '7470', '7471', '7472', '7473', '7474', '7475', '7476', '7478', '7479', '035'); 
+run; 
+/*NOTE: There were 23912 observations read from the data set AA.ICD9TOICD10CMGEM.
+NOTE: The data set WORK.CCI9 has 100 observations and 8 variables.
+*/
+data cc10; 
+set aa.Icd10cmtoicd9gem;
+if icd9cm in ('4210', '4211', '4219', 'V1259', '4240', '4243', '0390', '03921', '03835', '03845', '03885', '03995', '03721', '03722', '03723', '08842', '08843', '08844', 
+'08850', '08851', '08852', '08853', '08854', '08855', '08856', '08857', '08858', '08859', '03961', 'V1365', 'V433', '03751', 'V421', '99683', '41406', '41407') or 
+icd9cm in: ('4229', '4249', '745', '746', '7470', '7471', '7472', '7473', '7474', '7475', '7476', '7478', '7479', '035'); 
+run;  
+/*NOTE: There were 78838 observations read from the data set AA.ICD10CMTOICD9GEM.
+NOTE: The data set WORK.CC10 has 145 observations and 8 variables.
+*/
+proc freq data = cci9; 
+tables flags; 
+run; 
+/* The FREQ Procedure
+
+                                          All five flags
+
+                                                      Cumulative    Cumulative
+                    flags    Frequency     Percent     Frequency      Percent
+                    ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                    00000          32       32.00            32        32.00
+                    10000          68       68.00           100       100.00
+
+                                          The SAS System
+*/
+proc freq data = cc10; 
+tables flags; 
+run; 
+/*  The FREQ Procedure
+
+                                          All five flags
+
+                                                      Cumulative    Cumulative
+                    flags    Frequency     Percent     Frequency      Percent
+                    ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                    00000          32       22.07            32        22.07
+                    10000         100       68.97           132        91.03
+                    10111           9        6.21           141        97.24
+                    10112           4        2.76           145       100.00
+
+
+*/
+
+libname ks "F:\User Folders\jzhou86\Suda R01\Antibiotics\SAS Codes_JZ_revised\RawData"; 
+DATA ks.cc10;
+	SET cc10;
+DATA ks.cci9;
+	SET cci9;
+RUN;
+data ks.cc_codes (keep = icd9cm icd10cm); 
+set ks.cc10 ks.cci9; 
+run; 
+/*NOTE: There were 145 observations read from the data set KS.CC10.
+NOTE: There were 100 observations read from the data set KS.CCI9.
+NOTE: The data set KS.CC_CODES has 245 observations and 2 variables.
+*/
+
+proc sort data = ks.cc_codes nodupkey; by icd9cm icd10cm; run; 
+/*NOTE: There were 245 observations read from the data set KS.CC_CODES.
+NOTE: 98 observations with duplicate key values were deleted.
+NOTE: The data set KS.CC_CODES has 147 observations and 2 variables.
+*/
+data ks.cc_codes; 
+set ks.cc_codes; 
+icd9_copy = icd9cm; 
+icd10_copy = icd10cm; 
+run; 
+/*NOTE: There were 147 observations read from the data set KS.CC_CODES.
+NOTE: The data set KS.CC_CODES has 147 observations and 4 variables.
+*/
+
+data i9; 
+set ks.cc_codes; 
+keep  icd9cm; 
+run; 
+
+data i9;
+set i9; 
+rename  icd9cm = dx; 
+run; 
+
+proc sort data = i9 nodupkey; by dx; run; 
+/*NOTE: There were 147 observations read from the data set WORK.I9.
+NOTE: 64 observations with duplicate key values were deleted.
+NOTE: The data set WORK.I9 has 83 observations and 1 variables.
+*/
+data i10; 
+set ks.cc_codes; 
+keep  icd10cm; 
+run; 
+
+data i10;
+set i10; 
+rename  icd10cm = dx; 
+run; 
+
+proc sort data = i10 nodupkey; by dx; run; 
+/*NOTE: There were 147 observations read from the data set WORK.I10.
+NOTE: 15 observations with duplicate key values were deleted.
+NOTE: The data set WORK.I10 has 132 observations and 1 variables.
+*/
+data ks.ccdxcodes; 
+set i10 i9; 
+run; 
+/*use this to extract claims from medical domain*/
