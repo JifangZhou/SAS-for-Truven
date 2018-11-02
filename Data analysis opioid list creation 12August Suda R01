@@ -1,0 +1,345 @@
+*Assessment of time interval from the index visits;
+LIBNAME myfile "F:\User Folders\jzhou86\Suda R01\RawData";
+LIBNAME codlist "F:\User Folders\jzhou86\Suda R01\RawData\Code list";
+LIBNAME workingD "F:\User Folders\jzhou86\Suda R01\RawData\Working Directory";
+
+*Opioid list creation;
+*same day opioid prescription;
+DATA eligible_visit;
+	SET myfile.eligible_visit_list_0806;
+	visit_id = catx('_', enrolid, visit_dt);
+RUN;
+DATA id_list;
+	SET myfile.id_list_0807;
+DATA op_rx;
+	SET myfile.rx_op_list;
+DATA op_ndc;
+	SET codlist.opioid_list;
+RUN;
+
+PROC sql;
+	CREATE table temp_dx as
+	SELECT a.*,
+		b.flag
+	FROM op_rx a
+	INNER JOIN op_ndc b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+PROC sql;
+	CREATE table temp_visit_op as
+	SELECT a.*,
+		b.svcdate,
+		b.flag,
+		b.ndcnum,
+		b.METQTY
+	FROM eligible_visit a
+	INNER JOIN temp_dx b
+	ON a.enrolid = b.enrolid AND a.visit_dt=b.svcdate;
+QUIT;
+*NOTE: Table WORK.TEMP_VISIT_OP created, with 1434998 rows and 10 columns.;
+* Number of visits  1418212
+*Number of unique patients 1077834;
+
+PROC sql;
+	CREATE table num_est as
+	SELECT min(visit_id) as visit_id,
+			min(enrolid) as enrolid,
+			min(visit_dt) as visit_dt
+	FROM temp_visit_op
+	GROUP BY visit_id;
+QUIT;
+
+***Assessment of encounters with medical encounters in the last 7 days;
+options compress = on reuse = yes; 
+%macro opclms (in = , out = ); 
+PROC sql;
+	CREATE table &out. as
+	SELECT a.*
+	FROM num_est a
+	INNER JOIN &in. b
+	ON a.enrolid = b.enrolid AND (0<=a.visit_dt-b.admdate<=7 OR 0<=a.visit_dt-b.DISDATE<=7);
+QUIT;
+%mend; 
+%opclms   (in = myfile.dental_ccaei_09, out = c09_i);
+%opclms   (in = myfile.dental_ccaei_10, out = c10_i);
+%opclms   (in = myfile.dental_ccaei_11, out = c11_i);
+%opclms   (in = myfile.dental_ccaei_12, out = c12_i);
+%opclms   (in = myfile.dental_ccaei_13, out = c13_i);
+%opclms   (in = myfile.dental_ccaei_142, out = c14_i);
+%opclms   (in = myfile.dental_ccaei_151, out = c15_i);
+
+%opclms  (in = myfile.dental_mdcri_09, out = m09_i);
+%opclms  (in = myfile.dental_mdcri_10, out = m10_i);
+%opclms  (in = myfile.dental_mdcri_11, out = m11_i);
+%opclms  (in = myfile.dental_mdcri_12, out = m12_i);
+%opclms  (in = myfile.dental_mdcri_13, out = m13_i);
+%opclms  (in = myfile.dental_mdcri_142, out = m14_i);
+%opclms  (in = myfile.dental_mdcri_151, out = m15_i);
+
+data myfile.medical_ipt_7day; 
+set c09_i c10_i c11_i c12_i c13_i c14_i c15_i
+	m09_i m10_i m11_i m12_i m13_i m14_i m15_i;
+RUN;
+*NOTE: There were 0 observations read from the data set WORK.C09_I.
+NOTE: There were 4 observations read from the data set WORK.C10_I.
+NOTE: There were 536 observations read from the data set WORK.C11_I.
+NOTE: There were 522 observations read from the data set WORK.C12_I.
+NOTE: There were 391 observations read from the data set WORK.C13_I.
+NOTE: There were 380 observations read from the data set WORK.C14_I.
+NOTE: There were 347 observations read from the data set WORK.C15_I.
+NOTE: There were 0 observations read from the data set WORK.M09_I.
+NOTE: There were 3 observations read from the data set WORK.M10_I.
+NOTE: There were 66 observations read from the data set WORK.M11_I.
+NOTE: There were 69 observations read from the data set WORK.M12_I.
+NOTE: There were 64 observations read from the data set WORK.M13_I.
+NOTE: There were 62 observations read from the data set WORK.M14_I.
+NOTE: There were 31 observations read from the data set WORK.M15_I.
+NOTE: The data set MYFILE.MEDICAL_IPT_7DAY has 2475 observations and 3 variables.;
+
+
+%macro opclms (in = , out = ); 
+PROC sql;
+	CREATE table &out. as
+	SELECT a.*
+	FROM num_est a
+	INNER JOIN &in. b
+	ON a.enrolid = b.enrolid AND 0<=a.visit_dt-b.svcdate<=7;
+QUIT;
+%mend; 
+%opclms   (in = myfile.dental_ccaeo_09, out = c09_o);
+%opclms   (in = myfile.dental_ccaeo_10, out = c10_o);
+%opclms   (in = myfile.dental_ccaeo_11, out = c11_o);
+%opclms   (in = myfile.dental_ccaeo_12, out = c12_o);
+%opclms   (in = myfile.dental_ccaeo_13, out = c13_o);
+%opclms   (in = myfile.dental_ccaeo_142, out = c14_o);
+%opclms   (in = myfile.dental_ccaeo_151, out = c15_o);
+
+%opclms  (in = myfile.dental_mdcro_09, out = m09_o);
+%opclms  (in = myfile.dental_mdcro_10, out = m10_o);
+%opclms  (in = myfile.dental_mdcro_11, out = m11_o);
+%opclms  (in = myfile.dental_mdcro_12, out = m12_o);
+%opclms  (in = myfile.dental_mdcro_13, out = m13_o);
+%opclms  (in = myfile.dental_mdcro_142, out = m14_o);
+%opclms  (in = myfile.dental_mdcro_151, out = m15_o);
+
+data myfile.medical_opt_7day; 
+set c09_o c10_o c11_o c12_o c13_o c14_o c15_o
+	m09_o m10_o m11_o m12_o m13_o m14_o m15_o;
+RUN;
+*NOTE: There were 0 observations read from the data set WORK.C09_O.
+NOTE: There were 1196 observations read from the data set WORK.C10_O.
+NOTE: There were 301965 observations read from the data set WORK.C11_O.
+NOTE: There were 348185 observations read from the data set WORK.C12_O.
+NOTE: There were 301772 observations read from the data set WORK.C13_O.
+NOTE: There were 319563 observations read from the data set WORK.C14_O.
+NOTE: There were 284769 observations read from the data set WORK.C15_O.
+NOTE: There were 0 observations read from the data set WORK.M09_O.
+NOTE: There were 120 observations read from the data set WORK.M10_O.
+NOTE: There were 37855 observations read from the data set WORK.M11_O.
+NOTE: There were 42676 observations read from the data set WORK.M12_O.
+NOTE: There were 44414 observations read from the data set WORK.M13_O.
+NOTE: There were 44714 observations read from the data set WORK.M14_O.
+NOTE: There were 22873 observations read from the data set WORK.M15_O.
+NOTE: The data set MYFILE.MEDICAL_OPT_7DAY has 1750102 observations and 3 variables.;
+
+*create a list of vists associated with 7 day medical encounters;
+DATA all_visits;
+	SET workingD.medical_opt_7day workingD.medical_ipt_7day;
+RUN;
+
+*create a list for exclusion;
+PROC sql;
+	CREATE table visit_exclusion as
+	SELECT min(visit_id) as visit_id,
+			1 as Day_7_medical
+	FROM all_visits
+	GROUP BY visit_id;
+QUIT;
+*NOTE: Table WORK.VISIT_EXCLUSION created, with 375938 rows and 1 columns.;
+PROC sql;
+	CREATE table visit_id_list as
+	SELECT a.*,
+		b.Day_7_medical as Day_7_medical
+	FROM num_est a
+	LEFT JOIN visit_exclusion b
+	ON a.visit_id = b.visit_id;
+QUIT;
+
+*Hospice visit last year to be excluded;
+DATA hospice_list;
+	SET workingD.all_hospice;
+RUN;
+PROC sql;
+	CREATE table visit_exclusion as
+	SELECT a.*
+	FROM temp a
+	INNER JOIN hospice_list b
+	ON a.enrolid = b.enrolid AND 0<=a.visit_dt-b.hospice_date<=365;
+QUIT;
+
+PROC sql;
+	CREATE table visit_exclusion as
+	SELECT min(visit_id) as visit_id,
+			1 as Day_365_hospice
+	FROM visit_exclusion
+	GROUP BY visit_id;
+QUIT;
+
+PROC sql;
+	CREATE table visit_id_list as
+	SELECT a.*,
+		b.Day_365_hospice as Day_365_hospice
+	FROM temp a
+	LEFT JOIN visit_exclusion b
+	ON a.visit_id = b.visit_id;
+QUIT;
+
+*** Chronic pain last year;
+DATA chronic_pain;
+	SET workingD.all_chronic_pain;
+RUN;
+PROC sql;
+	CREATE table visit_exclusion as
+	SELECT a.*
+	FROM temp a
+	INNER JOIN chronic_pain b
+	ON a.enrolid = b.enrolid AND 0<=a.visit_dt-b.chronic_pain_date<=365;
+QUIT;
+
+PROC sql;
+	CREATE table visit_exclusion as
+	SELECT min(visit_id) as visit_id,
+			1 as Day_365_chronic_pain
+	FROM visit_exclusion
+	GROUP BY visit_id;
+QUIT;
+
+PROC sql;
+	CREATE table visit_id_list as
+	SELECT a.*,
+		b.Day_365_chronic_pain as Day_365_chronic_pain
+	FROM temp a
+	LEFT JOIN visit_exclusion b
+	ON a.visit_id = b.visit_id;
+QUIT;
+
+*** Excluding pt with SCD at any time;
+DATA SCD_list;
+	SET workingD.SCD_list;
+RUN;
+PROC sql;
+	CREATE table visit_exclusion as
+	SELECT a.*
+	FROM temp a
+	INNER JOIN SCD_list b
+	ON a.enrolid = b.enrolid ;
+QUIT;
+
+PROC sql;
+	CREATE table visit_exclusion as
+	SELECT min(visit_id) as visit_id,
+			1 as SCD
+	FROM visit_exclusion
+	GROUP BY visit_id;
+QUIT;
+
+PROC sql;
+	CREATE table visit_id_list as
+	SELECT a.*,
+		b.*
+	FROM temp a
+	LEFT JOIN visit_exclusion b
+	ON a.visit_id = b.visit_id;
+QUIT;
+
+DATA myfile.opioid_interim_list;
+	SET temp;
+RUN;
+
+*** Diagnosis of pain on same day with the dental visit;
+DATA pain_visit;
+	SET workingD.all_pain_n workingD.all_pain_n;
+RUN;
+PROC sql;
+	CREATE table visit_exclusion as
+	SELECT a.*
+	FROM temp a
+	INNER JOIN pain_visit b
+	ON a.enrolid = b.enrolid AND a.visit_dt=b.svcdate;
+QUIT;
+
+PROC sql;
+	CREATE table visit_exclusion as
+	SELECT min(visit_id) as visit_id,
+			1 as Same_day_pain
+	FROM visit_exclusion
+	GROUP BY visit_id;
+QUIT;
+
+PROC sql;
+	CREATE table visit_id_list as
+	SELECT a.*,
+		b.*
+	FROM temp a
+	LEFT JOIN visit_exclusion b
+	ON a.visit_id = b.visit_id;
+QUIT;
+
+*** Exclude chemotherapy over the past 30 days;
+DATA chemo_list;
+	SET workingD.chemo_list;
+RUN;
+PROC sql;
+	CREATE table visit_exclusion as
+	SELECT a.*
+	FROM temp a
+	INNER JOIN chemo_list b
+	ON a.enrolid = b.enrolid AND 0<=a.visit_dt-b.chemo_date<=30;
+QUIT;
+
+PROC sql;
+	CREATE table visit_exclusion as
+	SELECT min(visit_id) as visit_id,
+			1 as Day_30_chemo
+	FROM visit_exclusion
+	GROUP BY visit_id;
+QUIT;
+
+PROC sql;
+	CREATE table visit_id_list as
+	SELECT a.*,
+		b.*
+	FROM temp a
+	LEFT JOIN visit_exclusion b
+	ON a.visit_id = b.visit_id;
+QUIT;
+
+***Export interim results;
+	DATA myfile.interim_opioid_12Aug;
+		SET temp;RUN;
+
+DATA temp;
+	SET visit_id_list;
+	IF Day_7_medical=.;
+	IF Day_365_hospice=.;
+	IF Day_365_chronic_pain=.;
+	IF SCD=.;
+	IF Same_day_pain=.;
+	IF Day_30_chemo=.;
+RUN;
+
+PROC sql;
+	CREATE table num_est as
+	SELECT min(visit_id) as visit_id
+	FROM temp
+	GROUP BY visit_id;
+QUIT;
+
+PROC sql;
+	CREATE table num_est as
+	SELECT min(enrolid) as enrolid
+	FROM temp
+	GROUP BY enrolid;
+QUIT;
+
