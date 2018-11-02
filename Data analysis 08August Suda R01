@@ -1,0 +1,42 @@
+*Assessment of time interval from the index visits;
+LIBNAME myfile "F:\User Folders\jzhou86\Suda R01\RawData";
+LIBNAME codlist "F:\User Folders\jzhou86\Suda R01\RawData\Code list";
+DATA ccpj;
+	SET myfile.final_ccpjpain_list;
+	IF encounter_dt=. THEN DELETE;
+RUN;
+DATA cc;
+	SET ccpj;
+	IF cc=1;
+DATA pj;
+	SET ccpj;
+	IF pj=1;
+RUN;
+
+PROC sql;
+	CREATE table myfile.cc_list as
+	SELECT min(enrolid) as enrolid,
+			min(encounter_dt) as cc_date
+	FROM cc
+	GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table myfile.pj_list as
+	SELECT min(enrolid) as enrolid,
+			min(encounter_dt) as pj_date
+	FROM pj
+	GROUP BY enrolid;
+QUIT;
+
+DATA chemo;
+	SET myfile.final_chemo_list;
+RUN;
+
+PROC sql;
+	CREATE table myfile.chemo_list as
+	SELECT min(enrolid) as enrolid,
+			min(SVCDATE) as chemo_date
+	FROM chemo
+	GROUP BY enrolid, SVCDATE;
+QUIT;
