@@ -1,0 +1,1331 @@
+/*Antibiotic cohort was built and Table 1 generated on 4/12
+Greg pointed out in meeting on 4/12 that sulfasalazine should not be included. 
+So the cohort needs to be built from scratch again excluding claims for sulfasalazine
+*/
+/*using code from "extracting antibiotic dispensings_25mar18*/
+/*and updating relevant bits*/
+libname ks "F:\User Folders\jzhou86\Suda R01\Antibiotics\SAS Codes_JZ_revised\RawData"; 
+libname rb "E:\Truven Data";
+libname ccae14 "E:\Truven Data\CCAE\2014";
+libname mdcr14 "E:\Truven Data\MDCR\2014";
+libname ccae15 "E:\Truven Data\CCAE\2015";
+libname mdcr15 "E:\Truven Data\MDCR\2015";
+
+proc sql;
+create table abstack_gennme as 
+select a.*,b.GENNME from 
+ks.abstack as a
+left join 
+rb.redbook as b
+on a.NDCNUM = b.NDCNUM; 
+quit; 
+
+proc sql;
+create view sfz as 
+select gennme
+from abstack_gennme
+where gennme like '%Sulfasalazine%'; 
+quit;
+ 
+data abstack_gennme; 
+set abstack_gennme; 
+if gennme = 'Sulfasalazine' then delete; 
+run; 
+/*NOTE: There were 48921623 observations read from the data set WORK.ABSTACK_GENNME.
+NOTE: The data set WORK.ABSTACK_GENNME has 48707313 observations and 6 variables.
+*/
+
+%macro neg (data = , clean = ); 
+proc sort data = &data.; by enrolid ndcnum svcdate; run;
+
+data test2;
+set &data.;
+by enrolid ndcnum svcdate;
+if first.enrolid then index=1;
+else index+1;
+run;
+
+proc sql;
+create table test3 as
+select test2.*, 
+	next.NDCNUM as next_NDCNUM,
+	next.DAYSUPP as next_DAYSUPP,
+	next.METQTY as next_METQTY,
+	next.SVCDATE as next_SVCDATE
+	from test2
+left join test2 as next
+	on test2.enrolid = next.enrolid
+	and
+	test2.index= next.index-1;
+quit;
+
+data test4;
+set test3;
+if next_NDCNUM=. then next_NDCNUM=ndcnum;
+if next_DAYSUPP=. then next_DAYSUPP=DAYSUPP;
+if next_METQTY=. then next_METQTY=METQTY;
+run;
+
+data &clean.;
+set test4;
+by enrolid;
+if (DAYSUPP>0 and NDCNUM=next_NDCNUM and DAYSUPP = next_DAYSUPP*(-1) and  METQTY = next_METQTY*(-1) and SVCDATE<=next_SVCDATE-31) then delete;
+if DAYSUPP<0 then delete;
+if DAYSUPP=0 then delete;
+run;
+
+proc freq data=&clean.;
+table DAYSUPP/list missing; run; 
+
+%mend; 
+%neg (data = abstack_gennme, clean = clean_abstack); 
+/*NOTE: There were 48707313 observations read from the data set WORK.TEST4.
+NOTE: The data set WORK.CLEAN_ABSTACK has 48411652 observations and 11 variables.
+*/
+/*drop variables added in the cleaning process*/
+data clean_abstack;
+set clean_abstack;
+drop index--next_SVCDATE;
+run;
+/*NOTE: There were 48623275 observations read from the data set WORK.CLEAN_ABSTACK.
+NOTE: The data set WORK.CLEAN_ABSTACK has 48623275 observations and 5 variables.
+NOTE: Compressing data set WORK.CLEAN_ABSTACK increased size by 42.26 percent.
+      Compressed is 29700 pages; un-compressed would require 20878 pages.
+NOTE: DATA statement used (Total process time):
+      real time           29.24 seconds
+      cpu time            21.61 seconds
+*/
+data clean_abstack;
+set clean_abstack;
+rename SVCDATE = abrx_dt; 
+run; 
+
+data clean_abstack;
+set clean_abstack;
+label abrx_dt = 'ABx date'; 
+rename NDCNUM = ab_NDCNUM; 
+rename DAYSUPP = ab_DAYSUPP; 
+rename METQTY = ab_METQTY; 
+run;
+
+data ab_visits1; 
+set ks.Dedup_visits; 
+if domain in ('N','O'); 
+run;
+/*NOTE: There were 8706371 observations read from the data set KS.DEDUP_VISITS.
+NOTE: The data set WORK.AB_VISITS1 has 8703676 observations and 5 variables.
+*/
+/*Ready for eligible visits*/
+/*first do a cartesian join to get antibiotic rxs for each visit*/
+
+proc sql;
+create table abrx_visits as 
+select *
+from ab_visits1 as a join clean_abstack as b
+on a.enrolid = b.enrolid; 
+quit; 
+/*NOTE: Table WORK.ABRX_VISITS created, with 15831007 rows and 10 columns.
+*/
+data abrx_visits; 
+set abrx_visits; 
+dif = abrx_dt - visit_dt; 
+abrx = ifn(-7 <= dif <= 7,1,0);
+run; 
+
+proc sql;
+create table abrx_visits2 as 
+select 
+enrolid,
+visit_dt,
+max(abrx) as abx
+from abrx_visits
+group by enrolid,visit_dt; 
+quit;  
+/*NOTE: Table WORK.ABRX_VISITS2 created, with 5331326 rows and 3 columns.
+*/
+proc freq data = abrx_visits2; tables abx; run;
+/*
+                                        The FREQ Procedure
+
+                                                     Cumulative    Cumulative
+                     abx    Frequency     Percent     Frequency      Percent
+                     ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                       0     4563453       85.60       4563453        85.60
+                       1      767873       14.40       5331326       100.00
+
+*/
+proc means n min max median p25 p75 p99 mean std data =  abrx_visits; var dif; run; 
+/* The MEANS Procedure
+
+                                     Analysis Variable : dif
+
+       N        Minimum        Maximum         Median      25th Pctl      75th Pctl      99th Pctl
+ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+15831007   -729.0000000    364.0000000   -151.0000000   -342.0000000      2.0000000    292.0000000
+ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+
+                                     Analysis Variable : dif
+
+                                           Mean         Std Dev
+                                   ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                                   -165.7697491     229.8072209
+                                   ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+
+*/
+/*next criterion: exclude hospitalization in the last 14 days of antibiotic dispensing*/
+data ks_ip; 
+set ks.ks_allio; 
+if filetype = 'I'; 
+run; 
+/*NOTE: There were 582905292 observations read from the data set KS.KS_ALLIO.
+NOTE: The data set WORK.KS_IP has 4692179 observations and 3 variables.
+*/
+/*cartesian join all hospitalizations to visits + antibiotics*/
+/*be careful cuz antibiotics are +/-7 days here*/
+/*difference between the opioid cohort and this cohort: dif = encounter - abx not encounter - visit*/
+data ab7; 
+set abrx_visits;
+if -7 <= dif <= 7; 
+run;
+/*NOTE: There were 15831007 observations read from the data set WORK.ABRX_VISITS.
+NOTE: The data set WORK.AB7 has 837317 observations and 12 variables.
+*/
+proc sort data = ab7 out = ab72 nodupkey; by enrolid visit_dt; run; 
+/*NOTE: There were 837317 observations read from the data set WORK.AB7.
+NOTE: 69444 observations with duplicate key values were deleted.
+NOTE: The data set WORK.AB72 has 767873 observations and 12 variables.
+*/
+proc sort data = ab7; by enrolid visit_dt abrx_dt; run; 
+/*cartesian join all [rx+visit] to all IP*/
+proc sql;
+create table hosp as 
+select *
+from ab7 as a join ks_ip as b
+on a.enrolid = b.enrolid; 
+quit;
+/*NOTE: Table WORK.HOSP created, with 168365 rows and 14 columns.
+*/
+proc sort data = hosp; by enrolid visit_dt abrx_dt encounter_dt; run; 
+
+data hosp; 
+set hosp; 
+hospdif = encounter_dt - abrx_dt; 
+run; 
+
+data hosp; 
+set hosp; 
+hosp = ifn (-14 <= hospdif <= 0, 1,0); 
+run; 
+
+proc sql; 
+create table excl_hosp as 
+select 
+enrolid, 
+visit_dt,
+max(hosp) as priorhosp_14days
+from hosp 
+group by enrolid,visit_dt; 
+quit; 
+/*NOTE: Table WORK.EXCL_HOSP created, with 102283 rows and 3 columns.
+*/
+proc freq; tables priorhosp_14days; run; 
+/*  The FREQ Procedure
+
+                                                           Cumulative    Cumulative
+              priorhosp_14days    Frequency     Percent     Frequency      Percent
+              ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                             0       99050       96.84         99050        96.84
+                             1        3233        3.16        102283       100.00
+*/
+/*take this priorhosp variable back to dataset where number of visits was 767873.*/
+
+data keys_step3; 
+set abrx_visits2;
+if abx = 1; 
+run; 
+/*NOTE: There were 5331326 observations read from the data set WORK.ABRX_VISITS2.
+NOTE: The data set WORK.KEYS_STEP3 has 767873 observations and 3 variables.
+*/
+proc sql; 
+create table keys_step4 as 
+select a.*, b.priorhosp_14days
+from keys_step3 as a 
+left join 
+excl_hosp as b 
+on (a.enrolid = b.enrolid) and (a.visit_dt = b.visit_dt); 
+quit; 
+/*NOTE: Table WORK.KEYS_STEP4 created, with 767873 rows and 4 columns.
+*/
+proc freq; tables priorhosp_14days/missing; run; 
+/*   The FREQ Procedure
+
+                                                           Cumulative    Cumulative
+              priorhosp_14days    Frequency     Percent     Frequency      Percent
+              ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                             .      665590       86.68        665590        86.68
+                             0       99050       12.90        764640        99.58
+                             1        3233        0.42        767873       100.00
+
+*/
+data keys_step4; 
+set keys_step4; 
+if priorhosp_14days = 1 then delete; 
+run; 
+/*NOTE: There were 767873 observations read from the data set WORK.KEYS_STEP4.
+NOTE: The data set WORK.KEYS_STEP4 has 764640 observations and 4 variables.
+*/
+/*Next exclusion criteria: Exclude visits if there is a record of extraoral infectious disease ICD codes (using medical domain) that occurs 2 weeks prior to the eligible antibiotic dispensing */
+data ipdx (keep = enrolid ADMDATE dx1--dx15); 
+set  ccae15.Ccaei151 mdcr15.Mdcri151 ccae14.Ccaei142 mdcr14.Mdcri142;
+if enrolid = . then delete;
+run; 
+/*NOTE: There were 1389315 observations read from the data set CCAE15.CCAEI151.
+NOTE: There were 436641 observations read from the data set MDCR15.MDCRI151.
+NOTE: There were 2208544 observations read from the data set CCAE14.CCAEI142.
+NOTE: There were 676896 observations read from the data set MDCR14.MDCRI142.
+NOTE: The data set WORK.IPDX has 4701453 observations and 17 variables.
+*/
+
+data opdx (keep = enrolid SVCDATE dx1 dx2 dx3 dx4);
+set ccae15.Ccaeo151 mdcr15.Mdcro151 ccae14.Ccaeo142 mdcr14.Mdcro142 ; 
+if enrolid = . then delete; 
+run; 
+/*NOTE: There were 599918568 observations read from the data set CCAE15.CCAEO151.
+NOTE: There were 121473554 observations read from the data set MDCR15.MDCRO151.
+NOTE: There were 955355512 observations read from the data set CCAE14.CCAEO142.
+NOTE: There were 193215362 observations read from the data set MDCR14.MDCRO142.
+NOTE: The data set WORK.OPDX has 1869045828 observations and 6 variables.
+*/
+data extraoraldx; 
+set ipdx opdx;
+run;
+/*NOTE: There were 4701453 observations read from the data set WORK.IPDX.
+NOTE: There were 1869045828 observations read from the data set WORK.OPDX.
+NOTE: The data set WORK.EXTRAORALDX has 1873747281 observations and 18 variables.
+*/
+proc sql noprint; 
+select quote(dx)
+into :dxcodes separated by ", "
+from ks.dxcodes; 
+quit;
+
+data extraoraldx;
+set extraoraldx;
+array dx{*} dx1--dx15;
+do i = 1 to dim(dx); 
+if dx{i} in (&dxcodes) then exclude = 1; 
+end; 
+drop i;
+if exclude = 1; 
+run;
+/*NOTE: There were 1873747281 observations read from the data set WORK.EXTRAORALDX.
+NOTE: The data set WORK.EXTRAORALDX has 118727184 observations and 19 variables.
+*/
+data extraoraldx_join;
+set extraoraldx;
+id_dt = . ; 
+if ADMDATE ne . then do; 
+	id_dt = ADMDATE; 
+end; 
+if SVCDATE ne . then do; 
+	id_dt = SVCDATE; 
+end; 
+format id_dt mmddyy10.; 
+keep enrolid exclude id_dt; 
+run; 
+/*NOTE: There were 118727184 observations read from the data set WORK.EXTRAORALDX.
+NOTE: The data set WORK.EXTRAORALDX_JOIN has 118727184 observations and 3 variables.
+*/
+proc sort data = extraoraldx_join nodupkey; by enrolid id_dt; run; 
+/*NOTE: There were 118727184 observations read from the data set WORK.EXTRAORALDX_JOIN.
+NOTE: 72781587 observations with duplicate key values were deleted.
+NOTE: The data set WORK.EXTRAORALDX_JOIN has 45945597 observations and 3 variables.
+*/
+/*cartesian join all [rx+visit] to all extraoraldx*/
+/*first make an rx+visit dataset for keys_Step4*/
+proc sql;
+create table ab_step4 as 
+select * 
+from keys_step4 as a 
+left join ab7 as b
+on (a.enrolid = b.enrolid) and (a.visit_dt = b.visit_dt); 
+quit; 
+/*NOTE: Table WORK.AB_STEP4 created, with 833054 rows and 14 columns.
+*/
+proc sql;
+create table id1 as 
+select *
+from ab_step4 as a join extraoraldx_join as b
+on a.enrolid = b.enrolid; 
+quit;
+/*NOTE: Table WORK.ID1 created, with 1728664 rows and 16 columns.
+*/
+proc sort data = id1; by enrolid visit_dt abrx_dt id_dt; run; 
+
+data id1; 
+set id1; 
+iddif = id_dt - abrx_dt; 
+run; 
+
+data id1; 
+set id1; 
+id = ifn (-14 <= iddif <= 0, 1,0); 
+run; 
+
+proc sql; 
+create table excl_id as 
+select 
+enrolid, 
+visit_dt,
+max(id) as priorextraoralid_14days
+from id1 
+group by enrolid,visit_dt; 
+quit;
+/*NOTE: Table WORK.EXCL_ID created, with 420443 rows and 3 columns.
+*/
+proc freq; tables priorextraoralid_14days; run; 
+/*     The FREQ Procedure
+
+              priorextraoralid_                             Cumulative    Cumulative
+                         14days    Frequency     Percent     Frequency      Percent
+              ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                              0      323577       76.96        323577        76.96
+                              1       96866       23.04        420443       100.00
+
+*/ 
+/*take this priorID variable back to dataset where number of visits was 764k.*/
+
+proc sql; 
+create table keys_step5 as 
+select a.*, b.priorextraoralid_14days
+from keys_step4 as a 
+left join 
+excl_id as b 
+on (a.enrolid = b.enrolid) and (a.visit_dt = b.visit_dt); 
+quit; 
+/*NOTE: Table WORK.KEYS_STEP5 created, with 764640 rows and 5 columns.
+*/
+proc freq; tables priorextraoralid_14days; run; 
+/*
+                                        The FREQ Procedure
+
+              priorextraoralid_                             Cumulative    Cumulative
+                         14days    Frequency     Percent     Frequency      Percent
+              ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                              0      323577       76.96        323577        76.96
+                              1       96866       23.04        420443       100.00
+
+                                    Frequency Missing = 344197
+*/
+data keys_step5; 
+set keys_step5; 
+if priorextraoralid_14days = 1 then delete; 
+run; 
+/*NOTE: There were 764640 observations read from the data set WORK.KEYS_STEP5.
+NOTE: The data set WORK.KEYS_STEP5 has 667774 observations and 5 variables.
+*/
+
+/*	5. For the abstract only use dataset where antibiotic is dispensed -7 to 0 of dental visit 
+	6. Then restrict to days supply on antibiotic <=2 
+*/
+/*so first get antibiotic dispensings for this group*/
+
+proc sql;
+create table ab_step5 as 
+select * 
+from keys_step5 as a 
+left join ab7 as b
+on (a.enrolid = b.enrolid) and (a.visit_dt = b.visit_dt); 
+quit;
+/*NOTE: Table WORK.AB_STEP5 created, with 721366 rows and 15 columns.
+*/
+/*create histogram of antibiotic dispensings around dental visit*/
+
+proc univariate data = ab_step5; var dif; histogram/vscale = count; run; 
+/*pasted in antibiotic cohort entry_18apr18(abstract version).pptx*/
+
+data ab_step5;
+set ab_step5; 
+prophylaxis = ifn((-7<=dif<=0) and (ab_DAYSUPP <=2),1,0); 
+run; 
+
+proc univariate data = ab_step5; var dif ab_DAYSUPP; histogram; run; 
+ 
+proc freq data = ab_step5; tables dif ab_DAYSUPP; run; 
+
+proc freq; tables prophylaxis; run; 
+/*    The FREQ Procedure
+
+                                                         Cumulative    Cumulative
+                 prophylaxis    Frequency     Percent     Frequency      Percent
+                 ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                           0      690640       95.74        690640        95.74
+                           1       30726        4.26        721366       100.00
+
+*/
+/*create keys_step6 for abstract*/
+data ab_step6;
+set ab_step5; 
+if prophylaxis = 1; 
+run; 
+/*NOTE: There were 721366 observations read from the data set WORK.AB_STEP5.
+NOTE: The data set WORK.AB_STEP6 has 30726 observations and 16 variables.
+*/
+proc freq data = ab_step6; tables ab_DAYSUPP; run; 
+/*  The FREQ Procedure
+
+                                           Days Supply
+
+                                                        Cumulative    Cumulative
+                 ab_DAYSUPP    Frequency     Percent     Frequency      Percent
+                 ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                          1       21726       70.71         21726        70.71
+                          2        9000       29.29         30726       100.00
+*/
+proc freq data = ab_step6; tables dif; run; 
+/* The FREQ Procedure
+
+                                                     Cumulative    Cumulative
+                     dif    Frequency     Percent     Frequency      Percent
+                     ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                      -7        2439        7.94          2439         7.94
+                      -6        2138        6.96          4577        14.90
+                      -5        2056        6.69          6633        21.59
+                      -4        2555        8.32          9188        29.90
+                      -3        2719        8.85         11907        38.75
+                      -2        3779       12.30         15686        51.05
+                      -1        7967       25.93         23653        76.98
+                       0        7073       23.02         30726       100.00
+*/
+proc sql;
+create table keys_step6 as 
+select 
+enrolid,
+visit_dt,
+max(prophylaxis) as aa
+from ab_step6
+group by enrolid,visit_dt; 
+quit; 
+/*NOTE: Table WORK.KEYS_STEP6 created, with 29879 rows and 3 columns.
+*/
+data keys_step6;
+set keys_step6; 
+drop aa; 
+run; 
+
+proc sort data = keys_step6; by enrolid visit_dt; run; 
+
+/*cartesian join ab_step6 with all_ccpj*/
+proc sql;
+create table keys_ab_ccpj as 
+select a.enrolid, a.visit_dt, a.age, a.domain, a.ab_NDCNUM, a.ab_DAYSUPP, a.abrx_dt, a.ab_METQTY, a.dif as ab_dds_dif, b.cc, b.pj, b.encounter_dt
+from ab_step6 as a join All_ccpj as b
+on a.enrolid = b.enrolid; 
+quit;
+/*NOTE: Table WORK.KEYS_AB_CCPJ created, with 499052 rows and 12 columns.
+*/
+data keys_ab_ccpj; 
+set keys_ab_ccpj; 
+cardiac_condn = ifn ((cc=1) and (encounter_dt <= abrx_dt),1,0); 
+prosthetic_joint = ifn ((pj=1) and (encounter_dt <= abrx_dt),1,0); 
+run; 
+/*NOTE: There were 499052 observations read from the data set WORK.KEYS_AB_CCPJ.
+NOTE: The data set WORK.KEYS_AB_CCPJ has 499052 observations and 14 variables.
+*/
+proc sql; 
+create table keys_step6a 
+as
+select
+enrolid,
+visit_dt, 
+max(cardiac_condn) as cardiac,
+max(prosthetic_joint) as prosthetic
+from keys_ab_ccpj
+group by enrolid,visit_dt;
+quit; 
+/*NOTE: Table WORK.KEYS_STEP6A created, with 19006 rows and 4 columns.
+*/
+proc sql; 
+create table keys_step7 as 
+select a.*, b.cardiac, b.prosthetic
+from keys_step6 as a 
+left join 
+keys_step6a  as b 
+on (a.enrolid = b.enrolid) and (a.visit_dt = b.visit_dt); 
+quit; 
+/*NOTE: Table WORK.KEYS_STEP7 created, with 29879 rows and 4 columns.
+*/
+data keys_step7;
+set keys_step7; 
+if cardiac = . then cardiac = 0; 
+if prosthetic = . then prosthetic = 0; 
+run; 
+proc freq; tables cardiac prosthetic/missing; run; 
+/*
+                                        The FREQ Procedure
+
+                                                       Cumulative    Cumulative
+                   cardiac    Frequency     Percent     Frequency      Percent
+                   ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                         0       23246       77.80         23246        77.80
+                         1        6633       22.20         29879       100.00
+
+
+                                                        Cumulative    Cumulative
+                 prosthetic    Frequency     Percent     Frequency      Percent
+                 ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                          0       16330       54.65         16330        54.65
+                          1       13549       45.35         29879       100.00
+*/
+data keys_step7;
+set keys_step7;
+cc_pj = ifn((cardiac = 1 | prosthetic = 1),1,0); 
+run; 
+
+proc freq; tables cc_pj; run; 
+/*  The FREQ Procedure
+
+                                                      Cumulative    Cumulative
+                    cc_pj    Frequency     Percent     Frequency      Percent
+                    ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                        0       11521       38.56         11521        38.56
+                        1       18358       61.44         29879       100.00
+*/
+proc sql;
+create table ab_step7 as 
+select * 
+from keys_step7 as a 
+left join ab_step6 as b
+on (a.enrolid = b.enrolid) and (a.visit_dt = b.visit_dt); 
+quit;
+/*NOTE: Table WORK.AB_STEP7 created, with 30726 rows and 19 columns.
+*/
+proc sort data = ab_step7; by enrolid visit_dt; run; 
+/*next for abstract: 
+get generic name*/
+
+proc sql;
+create table ab_step7_drugname as 
+select a.*, b.GENNME 
+from 
+ab_step7 as a 
+left join rb.redbook as b 
+on a.ab_NDCNUM = b.NDCNUM; 
+quit; 
+/*NOTE: Table WORK.AB_STEP7_DRUGNAME created, with 30726 rows and 19 columns.
+*/
+proc freq data = ab_step7_drugname order = freq; tables GENNME; run; 
+/*     The FREQ Procedure
+
+                                        Generic Drug Name
+
+                                                                        Cumulative    Cumulative
+  GENNME                                       Frequency     Percent     Frequency      Percent
+  ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+  Amoxicillin                                     20842       67.83         20842        67.83
+  Clindamycin Hydrochloride                        4509       14.67         25351        82.51
+  Cephalexin                                       2433        7.92         27784        90.43
+  Azithromycin                                     1098        3.57         28882        94.00
+  Penicillin V Potassium                            453        1.47         29335        95.47
+  Ciprofloxacin Hydrochloride                       287        0.93         29622        96.41
+  Doxycycline Hyclate                               284        0.92         29906        97.33
+  Amoxicillin/clavulanate Potassium                 151        0.49         30057        97.82
+  Erythromycin                                      101        0.33         30158        98.15
+  Ampicillin                                         85        0.28         30243        98.43
+  Levofloxacin                                       84        0.27         30327        98.70
+  Sulfamethoxazole/trimethoprim                      66        0.21         30393        98.92
+  Cefadroxil                                         57        0.19         30450        99.10
+  Clarithromycin                                     50        0.16         30500        99.26
+  Doxycycline                                        37        0.12         30537        99.38
+  Minocycline Hydrochloride                          30        0.10         30567        99.48
+  Trimethoprim                                       23        0.07         30590        99.56
+  Erythromycin Ethylsuccinate                        21        0.07         30611        99.63
+  Ofloxacin                                          19        0.06         30630        99.69
+  Ceftriaxone Sodium                                 16        0.05         30646        99.74
+  Clindamycin Palmitate Hydrochloride                16        0.05         30662        99.79
+  Cefixime                                           14        0.05         30676        99.84
+  Cefuroxime Axetil                                  13        0.04         30689        99.88
+  Cefpodoxime Proxetil                               11        0.04         30700        99.92
+  Moxifloxacin Hydrochloride                         10        0.03         30710        99.95
+  Erythromycin Stearate                               5        0.02         30715        99.96
+  Cefaclor                                            3        0.01         30718        99.97
+  Dicloxacillin Sodium                                3        0.01         30721        99.98
+  Cefdinir                                            2        0.01         30723        99.99
+  Cefazolin Sodium                                    1        0.00         30724        99.99
+  Ciprofloxacin/ciprofloxacin Hydrochloride           1        0.00         30725       100.00
+  Clindamycin Phosphate                               1        0.00         30726       100.00
+*/
+proc freq data = ab_step7_drugname; tables GENNME; run; 
+/*results pasted agents used for prophylaxis18apr18.docx*/
+***************************************************************************************;
+/*for patients in step 7, get age and domain*/
+proc sql; 
+create table step7_agetype as 
+select a.*, b.age, b.domain from 
+keys_step7 as a 
+left join ks.dedup_visits as b 
+on (a.enrolid = b.enrolid) and (a.visit_dt = b.visit_dt); 
+quit; 
+/*NOTE: Table WORK.STEP7_AGETYPE created, with 29879 rows and 7 columns.
+*/
+proc freq data = step7_agetype; tables domain; run; 
+/*  The FREQ Procedure
+
+                                                      Cumulative    Cumulative
+                   domain    Frequency     Percent     Frequency      Percent
+                   ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                   N            29451       98.57         29451        98.57
+                   O              428        1.43         29879       100.00
+*/
+/*for patients in step7, get gender and region*/
+/*first grap just enrolids*/
+proc sort data = keys_step7 nodupkey out = enrolids_step7; by enrolid; run; 
+/*NOTE: There were 29879 observations read from the data set WORK.KEYS_STEP7.
+NOTE: 7893 observations with duplicate key values were deleted.
+NOTE: The data set WORK.ENROLIDS_STEP7 has 21986 observations and 5 variables.
+*/
+proc sql;
+create table ccaedems_step7 as 
+select enrolid,SEX,REGION from ccae15.Ccaea151 where enrolid in (select enrolid from ENROLIDS_STEP7);
+quit; 
+/*NOTE: Table WORK.CCAEDEMS_STEP7 created, with 16281 rows and 3 columns.*/
+proc sql;
+create table mdcrdems_step7 as 
+select enrolid,SEX,REGION from mdcr15.Mdcra151 where enrolid in (select enrolid from ENROLIDS_STEP7);
+quit;
+/*NOTE: Table WORK.MDCRDEMS_STEP7 created, with 6126 rows and 3 columns.*/
+data dems_step7; 
+set ccaedems_step7 mdcrdems_step7; 
+run; 
+/*NOTE: There were 16281 observations read from the data set WORK.CCAEDEMS_STEP7.
+NOTE: There were 6126 observations read from the data set WORK.MDCRDEMS_STEP7.
+NOTE: The data set WORK.DEMS_STEP7 has 22407 observations and 3 variables.
+*/
+proc sort data = dems_step7 nodupkey; by enrolid sex region; run; 
+/*NOTE: There were 22407 observations read from the data set WORK.DEMS_STEP7.
+NOTE: 421 observations with duplicate key values were deleted.
+NOTE: The data set WORK.DEMS_STEP7 has 21986 observations and 3 variables.
+*/
+*************************************************************************************************;
+/*Ok, keep this aside for joining later on*/
+/*in parallel, i want to get CDT codes associated with each visit*/
+/*	- Which dataset has these? 
+		? Dental15_O
+		? Dental_claims 
+	- What do I join by? 
+		? Enrolid = enrolid AND visit date = SVCDATE
+    - IMPORTANT: at the time of selection of visits for cohort entry (see creation of dedup_visits), if a patient had visits from dental and medical  domains on the same date, I retained their dental visit
+	so, when getting their procedure codes too, I have to make sure that the domain and the filetype are the same*/ 
+*/
+/*but both dental15_O and dental_claims were only in the temporary library so I have to get these again*/
+/*first, from the dental domain*/
+options compress = on reuse = yes;
+
+libname dn "E:\Truven Dental\Data";
+
+data dental_claims;
+set dn.Dnmcn152 dn.Dncen152; 
+if enrolid = . then delete; 
+run;
+/*NOTE: There were 3989880 observations read from the data set DN.DNMCN152.
+NOTE: There were 37135446 observations read from the data set DN.DNCEN152.
+NOTE: The data set WORK.DENTAL_CLAIMS has 41125326 observations and 57 variables.
+*/
+/*im going to extract potential variables of interest first but only work with procedure codes in the subsequent steps*/
+proc sql;
+create table nchars_step7 as 
+select enrolid,DENTPTYP,DX1,DX2,DXVER,EECLASS,EESTATU,EMPREL,FACPROF,INDSTRY,MDC,NPI,NTWKPROV,PAIDNTWK,PLANTYP,PROC1,PROCGRP,PROCMOD,PROCTYP,STDPLAC,STDPROV,SVCDATE,TOOTHCD,TOOTHSUR,TSVCDAT from DENTAL_CLAIMS where enrolid in (select enrolid from ENROLIDS_STEP7);
+quit; 
+/*NOTE: Table WORK.NCHARS_STEP7 created, with 165898 rows and 25 columns.
+*/
+libname ccae15 "E:\Truven Data\CCAE\2015"; 
+libname mdcr15 "E:\Truven Data\MDCR\2015"; 
+
+data dental15_O; 
+set ccae15.Ccaeo151 mdcr15.Mdcro151; 
+if STDPROV in (100,105,805); 
+run; 
+
+data dental15_O;
+set  dental15_O;
+if enrolid = . then delete; 
+run; 
+
+proc contents data = dental15_O; run; 
+
+proc sql;
+create table ochars_step7 as 
+select enrolid,DX1,DX2,DX3,DX4,DXVER,EECLASS,EESTATU,EMPREL,FACPROF,INDSTRY,MDC,NPI,NTWKPROV,PAIDNTWK,PLANTYP,PROC1,PROCGRP,PROCMOD,PROCTYP,STDPLAC,STDPROV,SVCDATE,TSVCDAT from dental15_O where enrolid in (select enrolid from ENROLIDS_STEP7);
+quit; 
+
+data ochars_step7; 
+set ochars_step7; 
+filetype = 'O'; 
+run; 
+
+data nchars_step7; 
+set nchars_step7; 
+filetype = 'N'; 
+run; 
+
+data chars; 
+set ochars_step7 nchars_step7; 
+run; 
+/*NOTE: There were 2300 observations read from the data set WORK.OCHARS_STEP7.
+NOTE: There were 165898 observations read from the data set WORK.NCHARS_STEP7.
+NOTE: The data set WORK.CHARS has 168198 observations and 28 variables.
+*/
+proc sql;
+create table cdt_step7 as 
+select a.enrolid,a.visit_dt, a.domain, b.proc1, b.PROCTYP from 
+Step7_agetype as a 
+left join chars as b 
+on (a.enrolid = b.enrolid) and (a.visit_dt = b.SVCDATE) and (a.domain = b.filetype); 
+quit; 
+/*NOTE: Table WORK.CDT_STEP7 created, with 78986 rows and 5 columns.
+*/
+proc freq data = cdt_step7; tables domain; run; 
+/*  The FREQ Procedure
+
+                                                      Cumulative    Cumulative
+                   domain    Frequency     Percent     Frequency      Percent
+                   ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                   N            78196       99.00         78196        99.00
+                   O              790        1.00         78986       100.00
+
+*/
+proc freq data = cdt_step7; tables proctyp/missing; run; 
+/*
+                                        The FREQ Procedure
+
+                                       Procedure Code Type
+
+                                                       Cumulative    Cumulative
+                   PROCTYP    Frequency     Percent     Frequency      Percent
+                   ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                                   207        0.26           207         0.26
+                   1               701        0.89           908         1.15
+                   7                63        0.08           971         1.23
+                   8             78015       98.77         78986       100.00
+*/
+/*are there any that are duplicates??*/
+proc sort data = cdt_step7 nodupkey; by enrolid visit_dt domain proc1 proctyp; run; 
+/*NOTE: There were 78986 observations read from the data set WORK.CDT_STEP7.
+NOTE: 8535 observations with duplicate key values were deleted.
+NOTE: The data set WORK.CDT_STEP7 has 70451 observations and 5 variables.
+*/
+/*NOTE: The infile 'F:\User Folders\sadima2\Katie Suda Dentist R01\Dentist IIR CDT Codes &
+      Description List 04_09_18.csv' is:
+
+      Filename=F:\User Folders\sadima2\Katie Suda Dentist R01\Dentist IIR CDT Codes & Description
+      List 04_09_18.csv,
+      RECFM=V,LRECL=32767,File Size (bytes)=54161,
+      Last Modified=09Apr2018:15:19:30,
+      Create Time=10Apr2018:16:57:26
+
+NOTE: 655 records were read from the infile 'F:\User Folders\sadima2\Katie Suda Dentist
+      R01\Dentist IIR CDT Codes & Description List 04_09_18.csv'.
+      The minimum record length was 24.
+      The maximum record length was 219.
+NOTE: The data set WORK.CDTDESC has 655 observations and 3 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.07 seconds
+      cpu time            0.01 seconds
+655 rows created in WORK.CDTDESC from F:\User Folders\sadima2\Katie Suda Dentist R01\Dentist IIR
+CDT Codes & Description List 04_09_18.csv.
+NOTE: WORK.CDTDESC data set was successfully created.
+NOTE: The data set WORK.CDTDESC has 655 observations and 3 variables.
+*/
+proc freq data = cdt_step7; tables proc1/missing; run; 
+/*112 missing*/
+proc freq data = cdt_step7; tables proctyp/missing; where domain = 'O'; run; 
+/*   The FREQ Procedure
+
+                                       Procedure Code Type
+
+                                                       Cumulative    Cumulative
+                   PROCTYP    Frequency     Percent     Frequency      Percent
+                   ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                                    11        1.55            11         1.55
+                   1               637       89.59           648        91.14
+                   7                63        8.86           711       100.00
+
+*/
+proc sql; 
+create table cdt_codedesc as 
+select a.*,b.Procedure_Text from 
+cdt_step7 as a 
+left join 
+Cdtdesc as b
+on a.PROC1 = b.CDT_Code; 
+quit;
+/*NOTE: Table WORK.CDT_CODEDESC created, with 70451 rows and 6 columns.
+*/
+proc freq data = cdt_codedesc; tables proc1/missing; run; 
+/*112 missing*/
+/*okay lets get visit ID*/
+/*the last time, I got all unique visits, did visitid+1, then brought back that visit id to dataset with multiple rows per visit*/
+proc sort data = cdt_codedesc nodupkey out = visits; by enrolid visit_dt; run; 
+/*NOTE: There were 70451 observations read from the data set WORK.CDT_CODEDESC.
+NOTE: 40572 observations with duplicate key values were deleted.
+NOTE: The data set WORK.VISITS has 29879 observations and 6 variables.
+*/
+data visits; 
+set visits; 
+drop domain--procedure_text; 
+run; 
+
+data visits; 
+set visits; 
+visitid+1; 
+run; 
+
+proc sql;
+create table cdt_long as 
+select * from 
+cdt_codedesc as a 
+left join visits as b 
+on (a.enrolid = b.enrolid) and (a.visit_dt = b.visit_dt); 
+quit;
+/*NOTE: Table WORK.CDT_LONG created, with 70451 rows and 7 columns.
+*/
+data cdt_long; 
+set cdt_long; 
+rename proc1 = proc; 
+run; 
+/*worked, now transpose*/
+proc transpose data = cdt_long out = cdt_wide_proc prefix = proc; 
+by visitid;
+var PROC; 
+run; 
+/*NOTE: There were 70451 observations read from the data set WORK.CDT_LONG.
+NOTE: The data set WORK.CDT_WIDE_PROC has 29879 observations and 17 variables.
+*/
+proc freq data = cdt_long; tables procedure_text/missing; run; 
+
+data cdt_long; 
+set cdt_long; 
+if procedure_text = " " then do; 
+	procedure_text = "Description not available"; 
+end; 
+run; 
+
+proc transpose data = cdt_long out = cdt_wide_desc prefix = cdt_desc; 
+by visitid;
+var procedure_text; 
+run;
+/*NOTE: There were 70451 observations read from the data set WORK.CDT_LONG.
+NOTE: The data set WORK.CDT_WIDE_DESC has 29879 observations and 16 variables.
+*/
+/*take cdt codes and description to visits dataset*/
+data cdt_wide_proc; 
+set cdt_wide_proc; 
+drop _NAME_ _LABEL_; 
+run; 
+
+data cdt_wide_desc; 
+set cdt_wide_desc; 
+drop _NAME_; 
+run; 
+
+proc sql; 
+create table vars_step7 as 
+select * from 
+visits as a 
+left join cdt_wide_desc as b on a.visitid = b.visitid
+left join cdt_wide_proc as c on a.visitid = c.visitid; 
+quit; 
+/*NOTE: Table WORK.VARS_STEP7 created, with 29879 rows and 31 columns.
+*/ 
+data vars_step7;
+set vars_step7; 
+proc1_yn = ifn(proc1 = " ", 0, 1); 
+proc2_yn = ifn(proc2 = " ", 0, 1); 
+proc3_yn = ifn(proc3 = " ", 0, 1); 
+proc4_yn = ifn(proc4 = " ", 0, 1); 
+proc5_yn = ifn(proc5 = " ", 0, 1); 
+proc6_yn = ifn(proc6 = " ", 0, 1); 
+proc7_yn = ifn(proc7 = " ", 0, 1); 
+proc8_yn = ifn(proc8 = " ", 0, 1); 
+proc9_yn = ifn(proc9 = " ", 0, 1); 
+proc10_yn = ifn(proc10 = " ", 0, 1); 
+proc11_yn = ifn(proc11 = " ", 0, 1); 
+proc12_yn = ifn(proc12 = " ", 0, 1); 
+proc13_yn = ifn(proc13 = " ", 0, 1); 
+proc14_yn = ifn(proc14 = " ", 0, 1); 
+num_procs_visit = proc1_yn  + proc2_yn  + proc3_yn  + proc4_yn  + proc5_yn  + proc6_yn  + proc7_yn  + proc8_yn  + proc9_yn  + proc10_yn  + proc11_yn  + proc12_yn  + proc13_yn  + proc14_yn ; 
+run; 
+
+proc freq data = vars_step7; tables num_procs_visit; run;
+/*  The FREQ Procedure
+
+                                                           Cumulative    Cumulative
+               num_procs_visit    Frequency     Percent     Frequency      Percent
+               ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                             0          75        0.25            75         0.25
+                             1        7026       23.51          7101        23.77
+                             2       10801       36.15         17902        59.91
+                             3        8304       27.79         26206        87.71
+                             4        2151        7.20         28357        94.91
+                             5        1133        3.79         29490        98.70
+                             6         278        0.93         29768        99.63
+                             7          72        0.24         29840        99.87
+                             8          21        0.07         29861        99.94
+                             9          10        0.03         29871        99.97
+                            11           3        0.01         29874        99.98
+                            12           1        0.00         29875        99.99
+                            13           1        0.00         29876        99.99
+                            14           3        0.01         29879       100.00
+*/
+/*age, gender, region for visits*/
+proc means data = Step7_agetype n min max mean std p25 p50 p75; var age; run; 
+/* The MEANS Procedure
+
+                                   Analysis Variable : age Age
+
+     N        Minimum        Maximum           Mean        Std Dev      25th Pctl      50th Pctl
+ ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+ 29879     19.0000000    103.0000000     58.5505204     15.0067565     52.0000000     60.0000000
+ ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+
+                                    Analysis Variable : age Age
+
+                                              75th Pctl
+                                           ƒƒƒƒƒƒƒƒƒƒƒƒ
+                                             65.0000000
+                                           ƒƒƒƒƒƒƒƒƒƒƒƒ
+
+
+*/
+proc freq data = Step7_agetype; tables domain cardiac prosthetic/missing; run; 
+/*
+  The FREQ Procedure
+
+                                                      Cumulative    Cumulative
+                   domain    Frequency     Percent     Frequency      Percent
+                   ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                   N            29451       98.57         29451        98.57
+                   O              428        1.43         29879       100.00
+
+
+                                                       Cumulative    Cumulative
+                   cardiac    Frequency     Percent     Frequency      Percent
+                   ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                         0       23246       77.80         23246        77.80
+                         1        6633       22.20         29879       100.00
+
+
+                                                        Cumulative    Cumulative
+                 prosthetic    Frequency     Percent     Frequency      Percent
+                 ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                          0       16330       54.65         16330        54.65
+                          1       13549       45.35         29879       100.00
+
+
+*/
+proc sql;
+create table step7_sexregion as 
+select a.enrolid, a.visit_dt, b.sex, b.region 
+from 
+keys_step7 as a 
+left join dems_step7 as b
+on a.enrolid = b.enrolid; /*note: dems_step7 is at patient level, so i only need to merge on enrolid*/
+quit; 
+/*NOTE: Table WORK.STEP7_SEXREGION created, with 29879 rows and 4 columns.
+*/
+proc freq data = step7_sexregion; tables sex region/missing; run; 
+/*
+                                        The FREQ Procedure
+
+                                        Gender of Patient
+
+                                                     Cumulative    Cumulative
+                     SEX    Frequency     Percent     Frequency      Percent
+                     ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                     1         13172       44.08         13172        44.08
+                     2         16707       55.92         29879       100.00
+
+
+                                             Region
+
+                                                      Cumulative    Cumulative
+                   REGION    Frequency     Percent     Frequency      Percent
+                   ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                   Northeast             4222       14.13          4222        14.13
+                   North Cent            11665       39.04         15887        53.17
+                   South                 10771       36.05         26658        89.22
+                   West                  3170       10.61         29828        99.83
+                   Unknown               51        0.17         29879       100.00
+
+*/
+/*Since everything in Table 1 is to be collapsed at visit level, I will make flags in the long file and then collapse max(flag) by enrolid, visit_dt
+For this I need to work with two long files: 
+1. to cdt_codedesc, add Specialty from Cdtdesc
+2. proc freq speciality 
+3. create flags for each speciality 
+4. collapse
+
+1. Go to drugs long file: ab_step7_drugname
+2. Create flags for: amoxicillin, clindamycin, cephalexin, azithtromycin, penicillin, doxycycline, others (this will cover 95% of 30,761 prescriptions associated with 29,914 visits)
+3. collapse to visit level*/
+
+proc sql;
+create table cdt_codedesc_groups as 
+select a.*,b.Specialty from 
+cdt_codedesc as a 
+left join cdtdesc as b 
+on a.PROC1 = b.CDT_Code; 
+quit; 
+
+proc freq data = cdt_codedesc_groups; tables Specialty/missing; run; 
+
+data cdt_codedesc_groups; 
+set cdt_codedesc_groups; 
+NA = ifn(Specialty = " ",1,0); 
+Adjunctive = ifn(Specialty = "ADJUNCTIVE",1,0);
+DIAGNOSTIC = ifn(Specialty = "DIAGNOSTIC",1,0); 
+ENDODONTICS = IFN(SPECIALTY = "ENDODONTIC",1,0); 
+IMPLANT_SERVICES = IFN(SPECIALTY = "IMPLANT SE",1,0); 
+MP = IFN(SPECIALTY = "MAXILLOFAC",1,0); 
+OMS = IFN(SPECIALTY = "ORAL AND M",1,0); 
+ORTHODONTI = IFN(SPECIALTY = "ORTHODONTI",1,0); 
+PERIODONTI = IFN(SPECIALTY = "PERIODONTI",1,0);
+PREVENTIVE = IFN(SPECIALTY = "PREVENTIVE",1,0);
+PROSTHODON = IFN(SPECIALTY = "PROSTHODON",1,0);
+RESTORATIV = IFN(SPECIALTY = "RESTORATIV",1,0); 
+run; 
+proc freq; tables 
+NA 
+Adjunctive 
+DIAGNOSTIC 
+ENDODONTICS 
+IMPLANT_SERVICES 
+MP 
+OMS 
+ORTHODONTI 
+PERIODONTI 
+PREVENTIVE 
+PROSTHODON 
+RESTORATIV 
+; 
+run; 
+/*worked*/
+proc sql; 
+create table step7_groupings as 
+select 
+enrolid,
+visit_dt, 
+max (NA ) as Not_Avail, 
+max (Adjunctive ) as Adjunct, 
+max (DIAGNOSTIC ) as Diagnostics , 
+max (ENDODONTICS ) as Endo , 
+max (IMPLANT_SERVICES ) as Implants, 
+max (MP ) as Max_prosth, 
+max (OMS ) as OMS_surgery, 
+max (ORTHODONTI ) as Orthodontics, 
+max (PERIODONTI ) as Periodontics, 
+max (PREVENTIVE ) as prev_services, 
+max (PROSTHODON ) as prosthodontics, 
+max (RESTORATIV ) as restorative
+from cdt_codedesc_groups
+group by enrolid,visit_dt; 
+quit; 
+
+proc freq data = STEP7_GROUPINGS;
+tables Not_Avail
+Adjunct
+Diagnostics 
+Endo 
+Implants
+Max_prosth
+OMS_surgery
+Orthodontics
+Periodontics
+prev_services
+prosthodontics
+restorative; 
+run; 
+
+ /*antibiotic dispensed for the table*/
+data ab_step7_drugname; 
+set ab_step7_drugname; 
+/*set all to zero*/
+Amoxicillin = 0; 
+Clindamycin = 0; 
+Cephalexin = 0; 
+Azithromycin = 0; 
+Penicillin = 0;
+Doxycycline = 0; 
+Others = 0; 
+
+IF GENNME =: 'Amoxicillin' then Amoxicillin = 1;  
+IF GENNME =: 'Clindamycin' THEN Clindamycin = 1; 
+IF GENNME =: 'Cephalexin' THEN Cephalexin = 1;
+IF GENNME =: 'Azithromycin' THEN Azithromycin = 1; 
+IF GENNME =: 'Penicillin' THEN Penicillin = 1; 
+IF GENNME =: 'Doxycycline' THEN Doxycycline = 1; 
+IF GENNME not IN: ('Amoxicillin','Clindamycin','Cephalexin','Azithromycin','Penicillin','Doxycycline') THEN OTHERS = 1; 
+
+RUN; 
+
+proc freq; tables 
+Amoxicillin
+Clindamycin 
+Cephalexin
+Azithromycin 
+Penicillin 
+Doxycycline  
+Others /missing; run; 
+
+proc sql;
+create table step7_drugs 
+as 
+select 
+enrolid,
+visit_dt,
+max(Amoxicillin) as Amox,
+max(Clindamycin) as Clinda,
+max(Cephalexin) as Cepha,
+max(Azithromycin) as Azithro,
+max(Penicillin) as Pen,
+max(Doxycycline) as Doxy,
+max(Others) as Other 
+from ab_step7_drugname
+group by enrolid,visit_dt; 
+quit; 
+
+proc freq data = step7_drugs; tables Amox Clinda Cepha Azithro Pen Doxy Other/missing; run; 
+
+/*create variable inappropriate prescribing: 
+if cc = 1 AND CDT in (Column 3, Sheet 1 of Consensus_gingival_manip_4.23.18_Sruthi.xlsx) then inappropriate = 0 
+*/
+/*first step: need one analytic dataset with: 
+Step7_agetype (enrolid, visit_dt; n = 29879)
+step7_sexregion (enrolid, visit_dt; n = 29879)
+vars_step7 (wide proc and desc; enrolid, visit_dt, visit_id; n = 29879) 
+step7_drugs (indicators for type of abx -- note; not actual rx, this is rx collapsed to visit level so one visit can have amox = 1 and other = 1; enrolid, visit_dt, n = 29879)
+step7_groupings (indicators for procedure groupings, multiple procs but collapsed to visit level so one visit can have prev = 1 and description not available  = 1; enrolid, visit_dt, n = 29879) 
+*/
+
+proc sql; 
+create table ks.abx_analytic042518 as 
+select * from 
+step7_agetype as a 
+left join step7_sexregion as b on (a.enrolid = b.enrolid) and (a.visit_dt = b.visit_dt)
+left join vars_step7 as c on (a.enrolid = c.enrolid) and (a.visit_dt = c.visit_dt)
+left join step7_drugs as d on (a.enrolid = d.enrolid) and (a.visit_dt = d.visit_dt)
+left join step7_groupings as e on (a.enrolid = e.enrolid) and (a.visit_dt = e.visit_dt); 
+quit; 
+/*NOTE: Table KS.ABX_ANALYTIC042518 created, with 29879 rows and 72 columns.
+*/
+/*import column 3, sheet 1 from the file mentioned above*/
+/*
+NOTE: WORK.GING_MANIP data set was successfully created.
+NOTE: The data set WORK.GING_MANIP has 671 observations and 1 variables.
+*/
+proc sql noprint; 
+select quote(CDT_Code)
+into :gingcodes separated by ", "
+from WORK.GING_MANIP; 
+quit;
+
+data ks.abx_analytic042518; 
+set ks.abx_analytic042518;
+gingival_manip = 0;  
+array proc {*} proc1--proc14; 
+do i = 1 to dim(proc); 
+	if proc{i} in (&gingcodes) then gingival_manip = 1; 
+end; 
+drop i; 
+run; 
+/*NOTE: There were 29879 observations read from the data set KS.ABX_ANALYTIC042518.
+NOTE: The data set KS.ABX_ANALYTIC042518 has 29879 observations and 73 variables.
+*/
+proc freq; tables gingival_manip/missing; run;  
+/*   The FREQ Procedure
+
+                                                          Cumulative    Cumulative
+               gingival_manip    Frequency     Percent     Frequency      Percent
+               ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                            0         494        1.65           494         1.65
+                            1       29385       98.35         29879       100.00
+
+
+*/
+data ks.abx_analytic042518; 
+set ks.abx_analytic042518;
+inappropriate_abx = ifn(cardiac=1 and gingival_manip = 1,0,1); 
+run; 
+
+proc freq; tables cardiac*gingival_manip*inappropriate_abx/list missing; run; 
+/*
+                                        The FREQ Procedure
+
+                               inappropriate_                             Cumulative    Cumulative
+cardiac    gingival_manip                 abx    Frequency     Percent     Frequency      Percent
+ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+      0                 0                   1         429        1.44           429         1.44
+      0                 1                   1       22817       76.36         23246        77.80
+      1                 0                   1          65        0.22         23311        78.02
+      1                 1                   0        6568       21.98         29879       100.00
+
+*/
+proc freq; tables inappropriate_abx; run; 
+/* The FREQ Procedure
+
+                inappropriate_                             Cumulative    Cumulative
+                           abx    Frequency     Percent     Frequency      Percent
+              ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                             0        6568       21.98          6568        21.98
+                             1       23311       78.02         29879       100.00
+
+*/
+proc freq; tables cardiac; run;
+/*  The FREQ Procedure
+
+                                                       Cumulative    Cumulative
+                   cardiac    Frequency     Percent     Frequency      Percent
+                   ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                         0       23246       77.80         23246        77.80
+                         1        6633       22.20         29879       100.00
+
+*/ 
+/*questions Katie has in the first draft of the abstract*/
+proc sort data =  ks.abx_analytic042518 out = pts nodupkey; by enrolid; run; 
+/*NOTE: There were 29879 observations read from the data set KS.ABX_ANALYTIC042518.
+NOTE: 7893 observations with duplicate key values were deleted.
+NOTE: The data set WORK.PTS has 21986 observations and 74 variables.
+*/ 
+proc freq data = cdt_step7; tables PROCTYP/missing; run; 
+/*    The FREQ Procedure
+
+                                       Procedure Code Type
+
+                                                       Cumulative    Cumulative
+                   PROCTYP    Frequency     Percent     Frequency      Percent
+                   ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+                                   112        0.16           112         0.16
+                   1               637        0.90           749         1.06
+                   7                63        0.09           812         1.15
+                   8             69639       98.85         70451       100.00
+*/
+/**: ICD-9-CM1: CPT3: UB92 Revenue Code6: NABSP7: HCPC8: CDT (ADA)*/
+proc freq data =  ks.abx_analytic042518; tables prosthetic; run;  
+
+libname aa "F:\User Folders\Suda_R01"; 
+proc contents data = aa.Abx_analytic042518 varnum; run;
+/*manually added definitions for every variable. see spreadsheet in a shared drive on server, called Suda RO1*/
+********************;
+/*see rose notes for meeting minutes on 4/26:
+Katie said that the first thing she wants is histogram for the 29k*/
+/*how to get histogram for 29k?
+go back to the dataset that has 30k rx and then univariate dif*/
+/*dataset: Ab_step7_drugname*/
+data Ab_step7_drugname;
+set Ab_step7_drugname;
+label dif = 'Days between dispensing and dental visit';
+run; 
+
+ title 'Dispensing of prophylactic antibiotics on or before dental visit'; proc univariate data = Ab_step7_drugname; var dif; histogram/vscale = count  endpoints = -7 to 0 by 1 odstitle = title vaxislabel = 'Number of antibiotic prescriptions';  run; 
+ /*okay i don't know why the x axis is not -7 to 0. it has to do with the tick mark, its showing 8 bins as expected but labelling them one off*/
+ /*i'm going to try this in Excel*/
