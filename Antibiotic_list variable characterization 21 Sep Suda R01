@@ -1,0 +1,87 @@
+PROC MEANS DATA=id_list MEAN STD MEDIAN P25 P75;
+	VAR age;
+RUN;
+PROC MEANS DATA=id_list MEAN STD MEDIAN P25 P75;
+	CLASS inappropriate_abx;
+	VAR age number_pcp number_special number_er number_adm;
+RUN;
+
+PROC TTEST DATA=id_list;
+	CLASS inappropriate_abx;
+	VAR age number_pcp number_special number_er number_adm;
+RUN;
+
+PROC FREQ DATA=id_list;
+	TABLE sex*inappropriate_abx
+		region*inappropriate_abx
+DIAGNOSTIC*inappropriate_abx 
+PREVENTIVE*inappropriate_abx
+RESTORATIV*inappropriate_abx
+ORAL*inappropriate_abx
+PERIODONTI*inappropriate_abx
+ADJUNCTIVE*inappropriate_abx
+ENDODONTIC*inappropriate_abx
+IMPLANT*inappropriate_abx
+PROSTHODON*inappropriate_abx
+ORTHODONTI*inappropriate_abx
+MAXILLOFAC*inappropriate_abx
+missing*inappropriate_abx
+inappropriate_abx*inappropriate_abx
+/nocol norow nopercent missing chisq;
+RUN;
+
+
+
+PROC FREQ DATA=id_list;
+	TABLE 	EECLASS*inappropriate_abx
+			EESTATU*inappropriate_abx
+			INDSTRY*inappropriate_abx
+/nocol norow nopercent missing chisq;
+RUN;
+
+PROC FREQ DATA=id_list;
+	TABLE 	EECLASS*inappropriate_abx
+			EESTATU*inappropriate_abx
+			INDSTRY*inappropriate_abx
+/nocol norow nopercent missing chisq;
+RUN;
+
+PROC FREQ DATA=id_list;
+	TABLE 	AMOXICILLIN*inappropriate_abx
+CLINDAMYCIN*inappropriate_abx
+CEPHALEXIN*inappropriate_abx
+AZITHROMYCI*inappropriate_abx
+PENICILLIN*inappropriate_abx
+DOXYCYCLINE*inappropriate_abx
+abx_other*inappropriate_abx
+gingival_manip*inappropriate_abx
+rural*inappropriate_abx
+cc_prior*inappropriate_abx
+pj_prior*inappropriate_abx
+immuno_compromise*inappropriate_abx
+diabetes_list*inappropriate_abx
+/nocol norow nopercent missing chisq;
+RUN;
+
+PROC FREQ DATA=id_list;
+	TABLE 	allergy_14*inappropriate_abx
+allergy_30*inappropriate_abx
+anaphylaxis_14*inappropriate_abx
+anaphylaxis_30*inappropriate_abx
+cdi_30*inappropriate_abx
+cdi_90*inappropriate_abx
+cdi_6m*inappropriate_abx
+cdi_12m*inappropriate_abx
+er_7*inappropriate_abx
+er_14*inappropriate_abx
+urgent_7*inappropriate_abx
+urgent_14*inappropriate_abx
+death_30*inappropriate_abx
+death_90*inappropriate_abx
+death_6m*inappropriate_abx
+death_12m*inappropriate_abx
+/nocol norow nopercent missing chisq;
+RUN;
+
+
+
