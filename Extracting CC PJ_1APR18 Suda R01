@@ -1,0 +1,339 @@
+/*extracting CC and PJ from medical domain*/
+/*dates: 2009 until date of visit*/
+/*extraction strategy: keep enrolid, SVCDATE or ADMDATE, DX1-15, PROC1-15*/
+/*for: enrolid in keys_step5*/
+proc sort data = keys_step5 out = enrolid_step5 nodupkey; by enrolid; run; 
+/*NOTE: There were 669465 observations read from the data set WORK.KEYS_STEP5.
+NOTE: 214388 observations with duplicate key values were deleted.
+NOTE: The data set WORK.ENROLID_STEP5 has 455077 observations and 5 variables.
+*/
+data enrolid_step5; set enrolid_step5; keep enrolid; run; 
+/*NOTE: There were 455077 observations read from the data set WORK.ENROLID_STEP5.
+NOTE: The data set WORK.ENROLID_STEP5 has 455077 observations and 1 variables.
+*/
+/*sort out the dx codes*/
+************************************************************************;
+/*CC dx codes: ks.Ccdxcodes*/
+proc sql noprint; 
+select quote(dx)
+into :ccdxcodes separated by ", "
+from ks.Ccdxcodes; 
+quit; 
+/*CC proc codes: 
+('33608', '33675', '33676', '33677', '33786', '33622', '33611', '33612', '33619', '33730', '33944', '33924', '62220', '62223', '33615', '33471', '33404', '92993', '92992', '0408T', 
+'0409T', '0410T', '0411T', '33210', '62190', '33933', '33722', '92982', '92984', '92921', '92990', '92995', '92996', '33788', '33332', '33321', '33330', '33320', '33755', '33762', 
+'33335', '33750', '33766', '33767', '36825', '33970', '33990', '33545', '33542', '33852', '33684', '33681', '33688', '33641', '33851', '33647', '93580', '34900', '0078T', '34805',
+'34800', '33610', '34804', '33771', '33770', '33774', '33775', '33776', '33777', '33814', '33813', '0281T', '93582', '93581', '92934', '92925', '92943', '92944', '92941', '92997',
+'92998', '33505', '33506', '33502', '33503', '33504', '35081', '35091', '35102', '35082', '35092', '35103', '0256T', '0318T', '0257T', '0262T', '0051T', '33645', '0048T', '33976',
+'33975', '33979', '0050T', '33361', '33362', '33363', '33364', '33365', '33367', '33368', '33369', '33430', '33406', '33413', '33405', '33410', '33411', '33412', '33920', '33425',
+'33426', '33427', '33418', '33419', '0343T', '33420', '33778', '33853', '33400', '33465', '33460', '33463', '33464', '33468', '33475', '33697', '33692', '33694', '33470', '33472',
+'33474', '33660', '33665', '33670', '33422', '92987', '33414', '33417', '92986', '33476', '33478', '33782', '33783', '33863', '33860', '33864',  '33780', '33781', '33779', 
+'33945', '02YA0Z0', '02YA0Z1', '02YA0Z2')
+*/
+*******************************************************************************;
+/*
+PJ dx codes: ks.Pjddxcodes
+PJ ICDP codes: ks.pjdpcodes
+*/
+proc sql noprint; 
+select quote(dx)
+into :pjdxcodes separated by ", "
+from ks.Pjddxcodes; 
+quit;
+
+proc sql noprint; 
+select quote(proc)
+into :pjpcodes separated by ", "
+from ks.pjdpcodes; 
+quit;
+/*PJ proc codes
+('01402', '27438', '27441', '27443', '27445', '27446', '27447', '27440', '27442', '27125', '27130', '27132', '27236', '27187', '27134', '27137', '27138', '29862', '27091', 
+'27486', '27487', '29877', '29880', '29881', '27488', '29871', '27310', '27030', '27134', '27137', '27138', '29862', '27091', '27486', '27487', '29877', '29880', '29881', 
+'27488', '29871', '27310', '27030', '27447', '27132', '27746', '23470', '23472', '27700', '27702', '27703', '26530', '26531', '25442', '25447', '25445', '24365', '24366',
+'25446', '22857', '22862', '22865', '22856', '22858', '22861', '22864', '23334', '23335', '24360', '24361', '24362', '24363', '25441', '25443', '25444', '25449', '27130',
+'27440', '27441', '27442', '27443', '27445', '27446')
+*/
+****************************************************************************************************************;
+libname ccae09 "E:\Truven Data\CCAE\2009";
+libname ccae10 "E:\Truven Data\CCAE\2010";
+libname ccae11 "E:\Truven Data\CCAE\2011";
+libname ccae12 "E:\Truven Data\CCAE\2012";
+libname ccae13 "E:\Truven Data\CCAE\2013";
+libname ccae14 "E:\Truven Data\CCAE\2014";
+libname ccae15 "E:\Truven Data\CCAE\2015";
+
+libname mdcr09 "E:\Truven Data\MDCR\2009";
+libname mdcr10 "E:\Truven Data\MDCR\2010";
+libname mdcr11 "E:\Truven Data\MDCR\2011";
+libname mdcr12 "E:\Truven Data\MDCR\2012";
+libname mdcr13 "E:\Truven Data\MDCR\2013";
+libname mdcr14 "E:\Truven Data\MDCR\2014";
+libname mdcr15 "E:\Truven Data\MDCR\2015";
+******************************************************************************************************************;
+%macro opclms (in = , out = ); 
+options compress = on reuse = yes; 
+data &out. (keep = enrolid SVCDATE dx1 dx2 dx3 dx4 proc1 cc pj);
+set &in.;
+/*diagnoses*/
+array dx{*} dx1 dx2 dx3 dx4;
+do i = 1 to dim(dx); 
+if dx{i} in (&ccdxcodes) then cc = 1;
+if dx{i} in (&pjdxcodes) then pj = 1; 
+end; 
+/*procedures*/
+if proc1 in ('33608', '33675', '33676', '33677', '33786', '33622', '33611', '33612', '33619', '33730', '33944', '33924', '62220', '62223', '33615', '33471', '33404', '92993', '92992', '0408T', 
+'0409T', '0410T', '0411T', '33210', '62190', '33933', '33722', '92982', '92984', '92921', '92990', '92995', '92996', '33788', '33332', '33321', '33330', '33320', '33755', '33762', 
+'33335', '33750', '33766', '33767', '36825', '33970', '33990', '33545', '33542', '33852', '33684', '33681', '33688', '33641', '33851', '33647', '93580', '34900', '0078T', '34805',
+'34800', '33610', '34804', '33771', '33770', '33774', '33775', '33776', '33777', '33814', '33813', '0281T', '93582', '93581', '92934', '92925', '92943', '92944', '92941', '92997',
+'92998', '33505', '33506', '33502', '33503', '33504', '35081', '35091', '35102', '35082', '35092', '35103', '0256T', '0318T', '0257T', '0262T', '0051T', '33645', '0048T', '33976',
+'33975', '33979', '0050T', '33361', '33362', '33363', '33364', '33365', '33367', '33368', '33369', '33430', '33406', '33413', '33405', '33410', '33411', '33412', '33920', '33425',
+'33426', '33427', '33418', '33419', '0343T', '33420', '33778', '33853', '33400', '33465', '33460', '33463', '33464', '33468', '33475', '33697', '33692', '33694', '33470', '33472',
+'33474', '33660', '33665', '33670', '33422', '92987', '33414', '33417', '92986', '33476', '33478', '33782', '33783', '33863', '33860', '33864',  '33780', '33781', '33779', 
+'33945', '02YA0Z0', '02YA0Z1', '02YA0Z2') then cc = 1; 
+if proc1 in (&pjpcodes) then pj = 1; 
+if proc1 in ('01402', '27438', '27441', '27443', '27445', '27446', '27447', '27440', '27442', '27125', '27130', '27132', '27236', '27187', '27134', '27137', '27138', '29862', '27091', 
+'27486', '27487', '29877', '29880', '29881', '27488', '29871', '27310', '27030', '27134', '27137', '27138', '29862', '27091', '27486', '27487', '29877', '29880', '29881', 
+'27488', '29871', '27310', '27030', '27447', '27132', '27746', '23470', '23472', '27700', '27702', '27703', '26530', '26531', '25442', '25447', '25445', '24365', '24366',
+'25446', '22857', '22862', '22865', '22856', '22858', '22861', '22864', '23334', '23335', '24360', '24361', '24362', '24363', '25441', '25443', '25444', '25449', '27130',
+'27440', '27441', '27442', '27443', '27445', '27446') then pj = 1; 
+
+if cc=1 | pj = 1; 
+
+run;
+%mend; 
+%opclms   (in = ccae09.Ccaeo093, out = ks.ccpj_c09_o);
+%opclms   (in = ccae10.Ccaeo103, out = ks.ccpj_c10_o);
+%opclms   (in = ccae11.Ccaeo113, out = ks.ccpj_c11_o);
+%opclms   (in = ccae12.Ccaeo122, out = ks.ccpj_c12_o);
+%opclms   (in = ccae13.Ccaeo131, out = ks.ccpj_c13_o);
+%opclms   (in = ccae14.Ccaeo142, out = ks.ccpj_c14_o);
+%opclms   (in = ccae15.Ccaeo151, out = ks.ccpj_c15_o);
+%opclms   (in = mdcr09.Mdcro093, out = ks.ccpj_m09_o);
+%opclms   (in = mdcr10.Mdcro103, out = ks.ccpj_m10_o);
+%opclms   (in = mdcr11.Mdcro113, out = ks.ccpj_m11_o);
+%opclms   (in = mdcr12.Mdcro122, out = ks.ccpj_m12_o);
+%opclms   (in = mdcr13.Mdcro131, out = ks.ccpj_m13_o);
+%opclms   (in = mdcr14.Mdcro142, out = ks.ccpj_m14_o);
+%opclms   (in = mdcr15.Mdcro151, out = ks.ccpj_m15_o);
+**************************************************************************************************************************;
+
+%macro ipclms (in = , out = ); 
+options compress = on reuse = yes; 
+data &out. (keep = enrolid ADMDATE dx1 dx2 dx3 dx4 dx5 dx6 dx7 dx8 dx9 dx10 dx11 dx12 dx13 dx14 dx15 proc1 proc2 proc3 proc4 proc5 proc6 proc7 proc8 proc9 proc10 proc11 proc12 proc13 proc14 proc15 cc pj);
+set &in.;
+/*diagnoses*/
+array dx{*} dx1 dx2 dx3 dx4 dx5 dx6 dx7 dx8 dx9 dx10 dx11 dx12 dx13 dx14 dx15;
+do i = 1 to dim(dx); 
+if dx{i} in (&ccdxcodes) then cc = 1;
+if dx{i} in (&pjdxcodes) then pj = 1; 
+end; 
+/*procedures*/
+array proc{*} proc1 proc2 proc3 proc4 proc5 proc6 proc7 porc8 proc9 proc10 proc11 proc12 proc13 proc14 proc15;
+do j = 1 to dim(proc); 
+
+if proc{j} in ('33608', '33675', '33676', '33677', '33786', '33622', '33611', '33612', '33619', '33730', '33944', '33924', '62220', '62223', '33615', '33471', '33404', '92993', '92992', '0408T', 
+'0409T', '0410T', '0411T', '33210', '62190', '33933', '33722', '92982', '92984', '92921', '92990', '92995', '92996', '33788', '33332', '33321', '33330', '33320', '33755', '33762', 
+'33335', '33750', '33766', '33767', '36825', '33970', '33990', '33545', '33542', '33852', '33684', '33681', '33688', '33641', '33851', '33647', '93580', '34900', '0078T', '34805',
+'34800', '33610', '34804', '33771', '33770', '33774', '33775', '33776', '33777', '33814', '33813', '0281T', '93582', '93581', '92934', '92925', '92943', '92944', '92941', '92997',
+'92998', '33505', '33506', '33502', '33503', '33504', '35081', '35091', '35102', '35082', '35092', '35103', '0256T', '0318T', '0257T', '0262T', '0051T', '33645', '0048T', '33976',
+'33975', '33979', '0050T', '33361', '33362', '33363', '33364', '33365', '33367', '33368', '33369', '33430', '33406', '33413', '33405', '33410', '33411', '33412', '33920', '33425',
+'33426', '33427', '33418', '33419', '0343T', '33420', '33778', '33853', '33400', '33465', '33460', '33463', '33464', '33468', '33475', '33697', '33692', '33694', '33470', '33472',
+'33474', '33660', '33665', '33670', '33422', '92987', '33414', '33417', '92986', '33476', '33478', '33782', '33783', '33863', '33860', '33864',  '33780', '33781', '33779', 
+'33945', '02YA0Z0', '02YA0Z1', '02YA0Z2') then cc = 1; 
+
+if proc{j} in (&pjpcodes) then pj = 1; 
+
+if proc{j} in ('01402', '27438', '27441', '27443', '27445', '27446', '27447', '27440', '27442', '27125', '27130', '27132', '27236', '27187', '27134', '27137', '27138', '29862', '27091', 
+'27486', '27487', '29877', '29880', '29881', '27488', '29871', '27310', '27030', '27134', '27137', '27138', '29862', '27091', '27486', '27487', '29877', '29880', '29881', 
+'27488', '29871', '27310', '27030', '27447', '27132', '27746', '23470', '23472', '27700', '27702', '27703', '26530', '26531', '25442', '25447', '25445', '24365', '24366',
+'25446', '22857', '22862', '22865', '22856', '22858', '22861', '22864', '23334', '23335', '24360', '24361', '24362', '24363', '25441', '25443', '25444', '25449', '27130',
+'27440', '27441', '27442', '27443', '27445', '27446') then pj = 1;
+end;
+
+if cc=1 | pj = 1; 
+
+run;
+%mend; 
+%ipclms  (in = ccae09.Ccaei093, out = ks.ccpj_c09_i);
+%ipclms  (in = ccae10.Ccaei103, out = ks.ccpj_c10_i);
+%ipclms  (in = ccae11.Ccaei113, out = ks.ccpj_c11_i);
+%ipclms  (in = ccae12.Ccaei122, out = ks.ccpj_c12_i);
+%ipclms  (in = ccae13.Ccaei131, out = ks.ccpj_c13_i);
+%ipclms  (in = ccae14.Ccaei142, out = ks.ccpj_c14_i);
+%ipclms  (in = ccae15.Ccaei151, out = ks.ccpj_c15_i);
+%ipclms  (in = mdcr09.Mdcri093, out = ks.ccpj_m09_i);
+%ipclms  (in = mdcr10.Mdcri103, out = ks.ccpj_m10_i);
+%ipclms  (in = mdcr11.Mdcri113, out = ks.ccpj_m11_i);
+%ipclms  (in = mdcr12.Mdcri122, out = ks.ccpj_m12_i);
+%ipclms  (in = mdcr13.Mdcri131, out = ks.ccpj_m13_i);
+%ipclms  (in = mdcr14.Mdcri142, out = ks.ccpj_m14_i);
+%ipclms  (in = mdcr15.Mdcri151, out = ks.ccpj_m15_i);
+/*
+NOTE: There were 1008239642 observations read from the data set CCAE09.CCAEO093.
+NOTE: The data set KS.CCPJ_C09_O has 5908840 observations and 9 variables.
+NOTE: There were 975916155 observations read from the data set CCAE10.CCAEO103.
+NOTE: The data set KS.CCPJ_C10_O has 5818087 observations and 9 variables.
+NOTE: There were 1077661934 observations read from the data set CCAE11.CCAEO113.
+NOTE: The data set KS.CCPJ_C11_O has 6588025 observations and 9 variables.
+NOTE: There were 1121961205 observations read from the data set CCAE12.CCAEO122.
+NOTE: The data set KS.CCPJ_C12_O has 6762869 observations and 9 variables.
+NOTE: There were 875696525 observations read from the data set CCAE13.CCAEO131.
+NOTE: The data set KS.CCPJ_C13_O has 5244800 observations and 9 variables.
+NOTE: There were 955355512 observations read from the data set CCAE14.CCAEO142.
+NOTE: The data set KS.CCPJ_C14_O has 6445947 observations and 9 variables.
+NOTE: There were 599918568 observations read from the data set CCAE15.CCAEO151.
+NOTE: The data set KS.CCPJ_C15_O has 4112020 observations and 9 variables.
+NOTE: There were 174964014 observations read from the data set MDCR09.MDCRO093.
+NOTE: The data set KS.CCPJ_M09_O has 2041641 observations and 9 variables.
+NOTE: There were 189534811 observations read from the data set MDCR10.MDCRO103.
+NOTE: The data set KS.CCPJ_M10_O has 2283313 observations and 9 variables.
+NOTE: There were 234255047 observations read from the data set MDCR11.MDCRO113.
+NOTE: The data set KS.CCPJ_M11_O has 2955197 observations and 9 variables.
+NOTE: There were 229768218 observations read from the data set MDCR12.MDCRO122.
+NOTE: The data set KS.CCPJ_M12_O has 2981802 observations and 9 variables.
+NOTE: There were 208095580 observations read from the data set MDCR13.MDCRO131.
+NOTE: The data set KS.CCPJ_M13_O has 2882145 observations and 9 variables.
+NOTE: There were 193215362 observations read from the data set MDCR14.MDCRO142.
+NOTE: The data set KS.CCPJ_M14_O has 3001152 observations and 9 variables.
+NOTE: There were 121473554 observations read from the data set MDCR15.MDCRO151.
+NOTE: The data set KS.CCPJ_M15_O has 1821626 observations and 9 variables.
+*/
+/*
+NOTE: There were 2940665 observations read from the data set CCAE09.CCAEI093.
+NOTE: The data set KS.CCPJ_C09_I has 226077 observations and 34 variables.
+NOTE: There were 2750371 observations read from the data set CCAE10.CCAEI103.
+NOTE: The data set KS.CCPJ_C10_I has 216731 observations and 34 variables.
+NOTE: There were 2906041 observations read from the data set CCAE11.CCAEI113.
+NOTE: The data set KS.CCPJ_C11_I has 233105 observations and 34 variables.
+NOTE: There were 2826477 observations read from the data set CCAE12.CCAEI122.
+NOTE: The data set KS.CCPJ_C12_I has 228891 observations and 34 variables.
+NOTE: There were 2118842 observations read from the data set CCAE13.CCAEI131.
+NOTE: The data set KS.CCPJ_C13_I has 182059 observations and 34 variables.
+NOTE: There were 2208544 observations read from the data set CCAE14.CCAEI142.
+NOTE: The data set KS.CCPJ_C14_I has 200353 observations and 34 variables.
+NOTE: There were 1389315 observations read from the data set CCAE15.CCAEI151.
+NOTE: The data set KS.CCPJ_C15_I has 123668 observations and 34 variables.
+NOTE: There were 837224 observations read from the data set MDCR09.MDCRI093.
+NOTE: The data set KS.CCPJ_M09_I has 129527 observations and 34 variables.
+NOTE: There were 891845 observations read from the data set MDCR10.MDCRI103.
+NOTE: The data set KS.CCPJ_M10_I has 139765 observations and 34 variables.
+NOTE: There were 1017617 observations read from the data set MDCR11.MDCRI113.
+NOTE: The data set KS.CCPJ_M11_I has 162416 observations and 34 variables.
+NOTE: There were 920301 observations read from the data set MDCR12.MDCRI122.
+NOTE: The data set KS.CCPJ_M12_I has 151962 observations and 34 variables.
+NOTE: There were 773544 observations read from the data set MDCR13.MDCRI131.
+NOTE: The data set KS.CCPJ_M13_I has 135881 observations and 34 variables.
+NOTE: There were 676896 observations read from the data set MDCR14.MDCRI142.
+NOTE: The data set KS.CCPJ_M14_I has 123866 observations and 34 variables.
+NOTE: There were 436641 observations read from the data set MDCR15.MDCRI151.
+NOTE: The data set KS.CCPJ_M15_I has 77446 observations and 34 variables.
+*/
+/*combination codes: 
+(a) 424.3+782.5
+(b) 039.95+745.0 -- 747.6
+(c) 088.50-088.59 + 745.0 -- 747.6
+(d) 424.3 + absence of 03961
+*/
+/*first, stack all years of CC/PJ claims
+then, edit rows where cc = 1 due to 424.3 ; 039.95; 088.50; if they don't have the companion code, then make cc=0 
+next, cartesian join with enrolid+visit_dt from keys_step6 
+then, select max(cc) max(pj) and group by enrolid,visit_dt*/
+data all_ccpj; 
+set KS.CCPJ_C15_I KS.CCPJ_M15_I KS.CCPJ_C15_O KS.CCPJ_M15_O
+KS.CCPJ_C14_I KS.CCPJ_M14_I KS.CCPJ_C14_O KS.CCPJ_M14_O
+KS.CCPJ_C13_I KS.CCPJ_M13_I KS.CCPJ_C13_O KS.CCPJ_M13_O
+KS.CCPJ_C12_I KS.CCPJ_M12_I KS.CCPJ_C12_O KS.CCPJ_M12_O
+KS.CCPJ_C11_I KS.CCPJ_M11_I KS.CCPJ_C11_O KS.CCPJ_M11_O
+KS.CCPJ_C10_I KS.CCPJ_M10_I KS.CCPJ_C10_O KS.CCPJ_M10_O
+KS.CCPJ_C09_I KS.CCPJ_M09_I KS.CCPJ_C09_O KS.CCPJ_M09_O; 
+run; 
+/*NOTE: There were 123668 observations read from the data set KS.CCPJ_C15_I.
+NOTE: There were 77446 observations read from the data set KS.CCPJ_M15_I.
+NOTE: There were 4112020 observations read from the data set KS.CCPJ_C15_O.
+NOTE: There were 1821626 observations read from the data set KS.CCPJ_M15_O.
+NOTE: There were 200353 observations read from the data set KS.CCPJ_C14_I.
+NOTE: There were 123866 observations read from the data set KS.CCPJ_M14_I.
+NOTE: There were 6445947 observations read from the data set KS.CCPJ_C14_O.
+NOTE: There were 3001152 observations read from the data set KS.CCPJ_M14_O.
+NOTE: There were 182059 observations read from the data set KS.CCPJ_C13_I.
+NOTE: There were 135881 observations read from the data set KS.CCPJ_M13_I.
+NOTE: There were 5244800 observations read from the data set KS.CCPJ_C13_O.
+NOTE: There were 2882145 observations read from the data set KS.CCPJ_M13_O.
+NOTE: There were 228891 observations read from the data set KS.CCPJ_C12_I.
+NOTE: There were 151962 observations read from the data set KS.CCPJ_M12_I.
+NOTE: There were 6762869 observations read from the data set KS.CCPJ_C12_O.
+NOTE: There were 2981802 observations read from the data set KS.CCPJ_M12_O.
+NOTE: There were 233105 observations read from the data set KS.CCPJ_C11_I.
+NOTE: There were 162416 observations read from the data set KS.CCPJ_M11_I.
+NOTE: There were 6588025 observations read from the data set KS.CCPJ_C11_O.
+NOTE: There were 2955197 observations read from the data set KS.CCPJ_M11_O.
+NOTE: There were 216731 observations read from the data set KS.CCPJ_C10_I.
+NOTE: There were 139765 observations read from the data set KS.CCPJ_M10_I.
+NOTE: There were 5818087 observations read from the data set KS.CCPJ_C10_O.
+NOTE: There were 2283313 observations read from the data set KS.CCPJ_M10_O.
+NOTE: There were 226077 observations read from the data set KS.CCPJ_C09_I.
+NOTE: There were 129527 observations read from the data set KS.CCPJ_M09_I.
+NOTE: There were 5908840 observations read from the data set KS.CCPJ_C09_O.
+NOTE: There were 2041641 observations read from the data set KS.CCPJ_M09_O.
+NOTE: The data set WORK.ALL_CCPJ has 61179211 observations and 35 variables.
+NOTE: Compressing data set WORK.ALL_CCPJ decreased size by 74.05 percent.
+      Compressed is 58365 pages; un-compressed would require 224924 pages.
+NOTE: DATA statement used (Total process time):
+      real time           47.94 seconds
+      cpu time            38.23 seconds
+*/
+data all_ccpj; 
+set  all_ccpj; 
+if enrolid = . then delete; 
+encounter_dt = . ; 
+if ADMDATE ne . then do; 
+	encounter_dt = ADMDATE; 
+end; 
+if SVCDATE ne . then do; 
+	encounter_dt = SVCDATE; 
+end; 
+format encounter_dt mmddyy10.; 
+run; 
+/*NOTE: There were 61179211 observations read from the data set WORK.ALL_CCPJ.
+NOTE: The data set WORK.ALL_CCPJ has 61160023 observations and 36 variables.
+*/
+proc sort data = all_ccpj; by enrolid encounter_dt; run; 
+/*/*combination codes: 
+(a) 424.3+782.5
+(b) 039.95+745.0 -- 747.6
+(c) 088.50-088.59 + 745.0 -- 747.6
+(d) 424.3 + absence of 03961
+*/
+
+data cc_03995 cc_0885 cc_4243; 
+set  all_ccpj; 
+array dx{*} dx1--dx15; 
+do i = 1 to dim(dx); 
+	if dx{i} = '4243' then output cc_4243; /*in this dataset make sure there is no 03961*/
+	/*you need not work on 4243+782.5 because just 4243 is also a definition so even if it didn't have a 7825 they would be cc=1*/
+	if dx{i} = '03995' then output cc_03995; /*in this dataset make sure 745-747.6 is present in every record*/
+	/*	/*'745','746','7470','7471','7472','7473','7474','7475','7476'*/
+	if dx{i} in: ('0885') then output cc_0885; /*in this dataset make sure 745-747.6 is present in every record*/
+end; 
+run; 
+/*NOTE: There were 61160023 observations read from the data set WORK.ALL_CCPJ.
+NOTE: The data set WORK.CC_03995 has 0 observations and 37 variables.
+NOTE: The data set WORK.CC_0885 has 0 observations and 37 variables.
+NOTE: The data set WORK.CC_4243 has 672727 observations and 37 variables.
+*/
+data cc_4243_3961;
+set cc_4243;
+array dx{*} dx1--dx15; 
+do i = 1 to dim(dx); 
+	if dx{i} = '03961' then output cc_4243_3961;
+end; 
+run; 
+/*NOTE: There were 672727 observations read from the data set WORK.CC_4243.
+NOTE: The data set WORK.CC_4243_3961 has 0 observations and 37 variables.
+*/
+/*okay so i don't have to do anything about the combination codes
+i can proceed to next steps*/
+
+
+
+
