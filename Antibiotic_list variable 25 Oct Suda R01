@@ -1,0 +1,101 @@
+LIBNAME myfile "F:\User Folders\jzhou86\Suda R01\RawData";
+
+DATA id_list;
+	SET myfile.abx_analytical_18oct;
+DATA op_id_list;
+	SET myfile.op_analytical_15sep;
+RUN;
+
+*Assessment of different pre-index enrollment periods;
+DATA temp;
+	SET id_list;
+	IF visit_dt-dental_start>=365 AND visit_dt-medical_start>=730;
+RUN;
+
+PROC sql;
+	CREATE table temp_list as
+	SELECT min(enrolid) as enrolid
+	FROM temp
+	GROUP BY enrolid;
+QUIT; 
+
+*Assessment of prevention and diagnosis only use;
+
+DATA sub_id_list;
+	SET id_list;
+	IF PREVENTIVE=1 AND max(DIAGNOSTIC,RESTORATIV,ORAL,PERIODONTI,ADJUNCTIVE,ENDODONTIC,IMPLANT,PROSTHODON,ORTHODONTI,MAXILLOFAC)^=1;
+RUN;
+
+PROC FREQ DATA=sub_id_list;
+	TABLE inappropriate_abx;
+RUN;
+
+*Assessment geographic variables;
+DATA all_abx;
+	SET myfile.all_abx_opt myfile.all_abx_ipt;
+DATA all_op;
+	SET myfile.all_op_opt myfile.all_op_ipt;
+RUN;
+
+PROC sql;
+	CREATE table abx_egeoloc_list as
+	SELECT min(enrolid) as enrolid,
+			min(egeoloc) as egeoloc
+	FROM all_abx
+	GROUP BY enrolid;
+QUIT; 
+
+PROC sql;
+	CREATE table op_egeoloc_list as
+	SELECT min(enrolid) as enrolid,
+			min(egeoloc) as egeoloc
+	FROM all_op
+	GROUP BY enrolid;
+QUIT; 
+
+*Merge back the geographic location variables;
+PROC sql;
+	CREATE table abx_geo_id_list as
+	SELECT a.*,
+			b.egeoloc
+	FROM id_list a
+	LEFT JOIN abx_egeoloc_list b
+	ON a.enrolid=b.enrolid;
+QUIT; 
+
+PROC sql;
+	CREATE table op_geo_id_list as
+	SELECT a.*,
+			b.egeoloc
+	FROM op_id_list a
+	LEFT JOIN op_egeoloc_list b
+	ON a.enrolid=b.enrolid;
+QUIT; 
+DATA op_geo_id_list;
+	SET op_geo_id_list;
+		day2_op=0;
+	day3_op=0;
+	day7_op=0;
+	IF total_ome>80 THEN day2_op=1;
+	IF total_ome>120 THEN day3_op=1;
+	IF total_ome>280 THEN day7_op=1;
+RUN;
+PROC FREQ DATA=op_geo_id_list;
+TABLE egeoloc*day7_op/nocol norow nopercent;
+RUN;
+
+DATA op_list;
+	SET op_geo_id_list;
+	IF CDI_cat=. THEN DELETE;
+	EESTATU_cat=0;
+	IF EESTATU=1 THEN EESTATU_cat=1;
+	IF index_year=2015;
+RUN;
+
+proc logistic data=op_list;
+      class sex region EESTATU_cat;
+      model CDI_cat= age_cat sex region EESTATU_cat
+				PREVENTIVE DIAGNOSTIC RESTORATIV ORAL PERIODONTI ADJUNCTIVE ENDODONTIC IMPLANT PROSTHODON ORTHODONTI MAXILLOFAC
+				number_pcp number_adm number_er number_special 
+				prior_immuno_compromise prior_diabetes prior_sud/ expb;
+   run;
