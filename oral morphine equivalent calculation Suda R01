@@ -1,0 +1,37 @@
+*Calculation of oral morphine equivalent;
+DATA opioid_list;
+	SET codlist.opioid_list;
+	IF flag= 'CODEINE' THEN ratio=0.13;
+	ELSE IF flag= 'DIHYDRO' THEN ratio=0.13;
+	ELSE IF flag= 'FENTANY' THEN ratio=3;
+	ELSE IF flag= 'HYDROCO' THEN ratio=1;
+	ELSE IF flag= 'HYDROMO' THEN ratio=5;
+	ELSE IF flag= 'MEPERID' THEN ratio=0.1;
+	ELSE IF flag= 'METHADO' THEN ratio=4.7;
+	ELSE IF flag= 'MORPHIN' THEN ratio=1;
+	ELSE IF flag= 'OXYCODO' THEN ratio=1.5;
+	ELSE IF flag= 'OXYMORP' THEN ratio=3;
+	ELSE IF flag= 'TAPENTA' THEN ratio=0.4;
+	ELSE IF flag= 'TRAMADO' THEN ratio=0.2;
+	ELSE IF flag= 'LEVORPH' THEN ratio=11;
+	ELSE IF flag= 'APOMORP' THEN ratio=1;
+RUN;
+
+* add strngth to medication by molecules 'Buprenorphine';
+DATA drug_Buprenorphine;
+SET drug_all_addratio;
+IF flag = 'Buprenorphine';
+IF STRNGTH = '2 MG-0.5 MG' THEN str=2;
+ELSE IF STRNGTH = '5 MCG/HR' THEN str=0.84;/* to confirm*/
+ELSE IF STRNGTH = '8 MG-2 MG' THEN str=8;
+RUN;
+
+
+
+
+
+
+
+PROC FREQ DATA=opioid_list ORDER=freq;
+TABLE ratio /nocol norow nopercent;
+RUN;
