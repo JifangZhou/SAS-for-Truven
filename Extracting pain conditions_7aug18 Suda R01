@@ -1,0 +1,75 @@
+
+************************************************;
+/*outpatient and inpatient services*/
+%macro opclms (in = , out = ); 
+options compress = on reuse = yes; 
+data &out. (keep = enrolid SVCDATE dx1 dx2 dx3 dx4 proc1 STDPROV);
+set &in.;
+/*diagnoses*/
+array dx{*} dx1 dx2 dx3 dx4;
+do i = 1 to dim(dx); 
+if dx{i} in (&paindxcodes) then pain = 1;
+end; 
+/*procedures*/
+if proc1 in ('D9610','M20552','M20605','M21089','E0486','J0585') then pain = 1; 
+
+if pain = 1 ; 
+run;
+%mend; 
+%opclms   (in = ccae15.Ccaeo151, out = ks.pain_c15_o);
+%opclms   (in = mdcr15.Mdcro151, out = ks.pain_m15_o);
+%opclms  (in = ccae15.Ccaes151, out = ks.pain_c15_s);
+%opclms  (in = mdcr15.Mdcrs151, out = ks.pain_m15_s);
+/*NOTE: There were 599918568 observations read from the data set CCAE15.CCAEO151.
+NOTE: The data set KS.PAIN_C15_O has 16830288 observations and 8 variables.
+NOTE: There were 121473554 observations read from the data set MDCR15.MDCRO151.
+NOTE: The data set KS.PAIN_M15_O has 3533800 observations and 8 variables.
+NOTE: There were 43216824 observations read from the data set CCAE15.CCAES151.
+NOTE: The data set KS.PAIN_C15_S has 681724 observations and 8 variables.
+NOTE: There were 16705568 observations read from the data set MDCR15.MDCRS151.
+NOTE: The data set KS.PAIN_M15_S has 277002 observations and 8 variables.
+*/
+
+data all_pain; 
+set KS.pain_C15_S KS.pain_M15_S KS.pain_C15_O KS.pain_M15_O; 
+run; 
+/*NOTE: There were 681724 observations read from the data set KS.PAIN_C15_S.
+NOTE: There were 277002 observations read from the data set KS.PAIN_M15_S.
+NOTE: There were 16830288 observations read from the data set KS.PAIN_C15_O.
+NOTE: There were 3533800 observations read from the data set KS.PAIN_M15_O.
+NOTE: The data set WORK.ALL_PAIN has 21322814 observations and 8 variables.
+*/
+data all_pain; 
+set  all_pain; 
+if enrolid = . then delete; 
+rename SVCDATE = pain_dt;
+run;
+/*NOTE: There were 21322814 observations read from the data set WORK.ALL_PAIN.
+NOTE: The data set WORK.ALL_PAIN has 21314094 observations and 8 variables.
+*/
+/*pain claim made by dentist or dental tech*/
+data all_pain; 
+set  all_pain; 
+if STDPROV in (100,105,805); 
+run;
+/*OTE: There were 21314094 observations read from the data set WORK.ALL_PAIN.
+NOTE: The data set WORK.ALL_PAIN has 64738 observations and 8 variables.
+*/
+/*ok now take this to dental visits*/
+/*done, coded as binary variable pain_medical*/
+/*now identify pain in dental claims*/
+data dental_pain (keep = enrolid SVCDATE dx1 dx2 proc1);
+set dental_claims; 
+array dx{*} dx1 dx2;
+do i = 1 to dim(dx); 
+if dx{i} in (&paindxcodes) then pain = 1;
+end; 
+/*procedures*/
+if proc1 in ('D9610','M20552','M20605','M21089','E0486','J0585') then pain = 1; 
+
+if pain = 1 ; 
+run; 
+/*NOTE: There were 41125326 observations read from the data set WORK.DENTAL_CLAIMS.
+NOTE: The data set WORK.DENTAL_PAIN has 21396 observations and 5 variables.
+*/
+/*okay now take this back to dental visits*/
