@@ -1,0 +1,76 @@
+LIBNAME workingD "C:\Users\jzhou86\Documents\Katie Suda R01";
+
+DATA all_visit_list;
+	SET workingD.analytical_cohort_abx_25sep;
+DATA visit_id;
+	SET workingD.analytical_cohort_abx_25sep;
+	KEEP visit_id visit_dt enrolid;
+RUN;	
+
+PROC sql;
+	CREATE table matched_visit as
+	SELECT a.*,
+		b.visit_id as matched_visit_id,
+		b.visit_dt as matched_dt
+	FROM visit_id a
+	LEFT JOIN visit_id b
+	ON a.enrolid = b.enrolid AND b.visit_dt-7 <= a.visit_dt <= b.visit_dt;
+QUIT;
+PROC SORT DATA=matched_visit;
+	BY visit_id matched_dt;
+RUN;
+DATA matched_visit_order;
+	SET matched_visit;
+	count+1;
+	by visit_id;
+	IF first.visit_id THEN count=1;
+RUN;
+	
+*Grouping of the dental visits;
+PROC sql;
+	CREATE table matched_visit_num as
+	SELECT min(visit_id) as visit_id,
+		count(matched_dt) as matched_number
+	FROM matched_visit_order
+	GROUP BY visit_id;
+QUIT;
+
+PROC FREQ DATA=matched_visit_num;
+TABLE matched_number;RUN;
+
+DATA multiple_list;
+	SET matched_visit_num;
+	IF matched_number>=2;
+RUN;
+
+PROC sql;
+	CREATE table multiple_visit_record as
+	SELECT a.*
+	FROM Matched_visit_order a
+	INNER JOIN multiple_list b
+	ON a.visit_id = b.visit_id;
+QUIT;
+
+PROC sql;
+	CREATE table multiple_visit_record2 as
+	SELECT a.*,
+			b.*
+	FROM multiple_visit_record a
+	INNER JOIN all_visit_list b
+	ON a.matched_visit_id = b.visit_id;
+QUIT;
+
+DATA multiple_visit_record3;
+	SET multiple_visit_record2;
+	IF count=2;
+	diff=matched_dt-visit_dt;
+RUN;
+
+PROC FREQ DATA=multiple_visit_record3;
+TABLE DIAGNOSTIC PREVENTIVE RESTORATIV ORAL PERIODONTI ADJUNCTIVE ENDODONTIC IMPLANT PROSTHODON ORTHODONTI MAXILLOFAC missing;
+RUN;
+
+
+PROC FREQ DATA=multiple_visit_record3;
+TABLE diff;
+RUN;
