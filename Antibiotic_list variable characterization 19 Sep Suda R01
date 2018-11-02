@@ -1,0 +1,86 @@
+*Infective endocarditis;
+DATA all_svc_list;
+	SET all_svc_list;
+	array icd {*} dx1-dx2;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('4210','4229','4211','4219','4249','V1259') then Infective_endocarditis=1;
+		end;
+RUN;
+*Congenital heart condition;
+DATA all_svc_list;
+	SET all_svc_list;
+	array icd {*} dx1-dx2;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('7450','7451','7452','7453','7454','7455','7476','7478','7479','4240','4243') then def_1_1=1;
+		END;
+	array icd1 {*} dx1-dx2;
+		do i = 1 to dim(icd1);
+		if icd1{i} in: ('7825') then def_1_2=1;
+		END;
+	IF def_1_1=1 AND def_1_2=1 THEN Congenital_heart_condition=1;
+	array icd2 {*} dx1-dx2;
+		do i = 1 to dim(icd2);
+		if icd2{i} in: ('035','0390','03921','03835','03845','03885','03995') then def_2_1=1;
+		END;
+	array icd3 {*} dx1-dx2;
+		do i = 1 to dim(icd3);
+		if icd3{i} in: ('7450','7451','7452','7453','7454','7455','7476','7478','7479','4240','4243') then def_2_2=1;
+		END;
+	IF def_2_1=1 AND def_2_2=1 THEN Congenital_heart_condition=1;	
+	array icd4 {*} dx1-dx2;
+		do i = 1 to dim(icd4);
+		if icd4{i} in: ('03721','03722','03723','08842','08843','08844','0885') then def_3_1=1;
+		END;
+	array icd5 {*} dx1-dx2;
+		do i = 1 to dim(icd5);
+		if icd5{i} in: ('7450','7451','7452','7453','7454','7455','7476','7478','7479','4240','4243') then def_3_2=1;
+		END;
+	IF def_3_1=1 AND def_3_2=1 THEN Congenital_heart_condition=1;
+	array icd6 {*} dx1-dx2;
+		do i = 1 to dim(icd6);
+		if icd6{i} in: ('V1365') then Congenital_heart_condition=1;
+		END;			
+	array proc {*} proc1-proc2;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('33608','33675','33676','33677','33786','33622','33611','33612','33619',
+'33730','33944','33924','62220','62223','33615','33471','33404','92993',
+'92992','0408T','0409T','0410T','0411T','33210','62190','33933','33722',
+'92982','92984','92921','92990','92995','92996','33788','33332','33321',
+'33330','33320','33755','33762','33335','33750','33766','33767','36825',
+'33970','33990','33545','33542','33852','33684','33681','33688','33641',
+'33851','33647','93580','34900','0078T','34805','34800','33610','34804',
+'33771','33770','33774','33775','33776','33777','33814','33813','0281T',
+'93582','93581','92934','92925','92943','92944','92941','92997','92998',
+'33505','33506','33502','33503','33504','35081','35091','35102','35082',
+'35092','35103','0256T','0318T','0257T','0262T','0051T','33645','0048T',
+'33976','33975','33979','0050T') then Congenital_heart_condition=1;
+		end;
+RUN;
+*cardiac valve;
+DATA all_svc_list;
+	SET all_svc_list;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('V433','0352X' ) then cardiac_valve=1;
+		end;
+	array proc {*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('33361','33362','33363','33364','33365','33367','33368','33369','33430','33406','33413','33405','33410',
+'33411','33412','33920','33425','33426','33427','33418','33419','0343T','33420','33778','33853','33400',
+'33465','33460','33463','33464','33468','33475','33697','33692','33694','33470','33472','33474','33660',
+'33665','33670','33422','92987','33414','33417','92986','33476','33478','33782','33783','33863','33860',
+'33864','33780','33781','33779') then cardiac_valve=1;
+		end;
+RUN;
+*Cardiac transplant recipients ;
+DATA all_svc_list;
+	SET all_svc_list;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('03751','V421','99683','41406','41407') then Cardiac_transplant=1;
+		end;
+	array proc {*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('33945','02YA0Z0','02YA0Z1','02YA0Z2') then Cardiac_transplant=1;
+		end;
+RUN;
