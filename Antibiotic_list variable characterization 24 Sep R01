@@ -1,0 +1,766 @@
+LIBNAME myfile "F:\User Folders\jzhou86\Suda R01\RawData";
+LIBNAME codlist "F:\User Folders\jzhou86\Suda R01\RawData\Code list";
+LIBNAME workingD "F:\User Folders\jzhou86\Suda R01\RawData\Working Directory";
+libname ccae09 "E:\Truven Data\CCAE\2009";
+libname ccae10 "E:\Truven Data\CCAE\2010";
+
+libname mdcr09 "E:\Truven Data\MDCR\2009";
+libname mdcr10 "E:\Truven Data\MDCR\2010";
+DATA id_list;
+	SET myfile.abx_analytical_16sep;RUN;
+DATA abx_rx;
+	SET myfile.rx_abx_list;
+DATA svc_all;
+	SET myfile.all_abx_ipt myfile.all_abx_opt ccae09.ccaei093 ccae10.ccaei103 mdcr09.mdcri093 mdcr10.mdcri103;RUN;
+DATA abx_list;
+	SET codlist.abx_list;
+DATA warfarin_list;
+	SET codlist.warfarin_ndc;RUN;
+DATA Infective_endocarditis;
+	SET myfile.Infective_endocarditis;
+	Infective_endocarditis=1;
+	event_dt=min(DISDATE,SVCDATE);
+DATA Congenital_heart_condition;
+	SET myfile.Congenital_heart_condition;
+	Congenital_heart_condition=1;
+	event_dt=min(DISDATE,SVCDATE);
+DATA cardiac_valve;
+	SET myfile.cardiac_valve;
+	cardiac_valve=1;
+	event_dt=min(DISDATE,SVCDATE);
+DATA Cardiac_transplant;
+	SET myfile.Cardiac_transplant;
+	Cardiac_transplant=1;
+	event_dt=min(DISDATE,SVCDATE);
+RUN;
+
+*Assessment of cardiac conditions;
+*Infective endocarditis;
+DATA all_svc_list;
+	SET svc_all;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('4210','4229','4211','4219','4249','V1259') then Infective_endocarditis=1;
+		end;
+	IF Infective_endocarditis=1;
+RUN;
+PROC sql;
+	CREATE table Infective_endocarditis as
+	SELECT 	min(enrolid) as enrolid,
+			min(DISDATE) as DISDATE,
+			min(SVCDATE) as SVCDATE
+	FROM all_svc_list
+	GROUP BY enrolid;
+QUIT;
+
+*Congenital heart condition;
+DATA all_svc_list;
+	SET svc_all;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('7450','7451','7452','7453','7454','7455','7476','7478','7479','4240','4243') then def_1_1=1;
+		END;
+	array icd1 {*} dx1-dx15;
+		do i = 1 to dim(icd1);
+		if icd1{i} in: ('7825') then def_1_2=1;
+		END;
+	IF def_1_1=1 AND def_1_2=1 THEN Congenital_heart_condition=1;
+	array icd2 {*} dx1-dx2;
+		do i = 1 to dim(icd2);
+		if icd2{i} in: ('035','0390','03921','03835','03845','03885','03995') then def_2_1=1;
+		END;
+	array icd3 {*} dx1-dx15;
+		do i = 1 to dim(icd3);
+		if icd3{i} in: ('7450','7451','7452','7453','7454','7455','7476','7478','7479','4240','4243') then def_2_2=1;
+		END;
+	IF def_2_1=1 AND def_2_2=1 THEN Congenital_heart_condition=1;	
+	array icd4 {*} dx1-dx15;
+		do i = 1 to dim(icd4);
+		if icd4{i} in: ('03721','03722','03723','08842','08843','08844','0885') then def_3_1=1;
+		END;
+	array icd5 {*} dx1-dx2;
+		do i = 1 to dim(icd5);
+		if icd5{i} in: ('7450','7451','7452','7453','7454','7455','7476','7478','7479','4240','4243') then def_3_2=1;
+		END;
+	IF def_3_1=1 AND def_3_2=1 THEN Congenital_heart_condition=1;
+	array icd6 {*} dx1-dx15;
+		do i = 1 to dim(icd6);
+		if icd6{i} in: ('V1365') then Congenital_heart_condition=1;
+		END;			
+	array proc {*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('33608','33675','33676','33677','33786','33622','33611','33612','33619',
+'33730','33944','33924','62220','62223','33615','33471','33404','92993',
+'92992','0408T','0409T','0410T','0411T','33210','62190','33933','33722',
+'92982','92984','92921','92990','92995','92996','33788','33332','33321',
+'33330','33320','33755','33762','33335','33750','33766','33767','36825',
+'33970','33990','33545','33542','33852','33684','33681','33688','33641',
+'33851','33647','93580','34900','0078T','34805','34800','33610','34804',
+'33771','33770','33774','33775','33776','33777','33814','33813','0281T',
+'93582','93581','92934','92925','92943','92944','92941','92997','92998',
+'33505','33506','33502','33503','33504','35081','35091','35102','35082',
+'35092','35103','0256T','0318T','0257T','0262T','0051T','33645','0048T',
+'33976','33975','33979','0050T') then Congenital_heart_condition=1;
+		end;
+IF Congenital_heart_condition=1;
+RUN;
+
+PROC sql;
+	CREATE table Congenital_heart_condition as
+	SELECT 	min(enrolid) as enrolid,
+			min(DISDATE) as DISDATE,
+			min(SVCDATE) as SVCDATE
+	FROM all_svc_list
+	GROUP BY enrolid;
+QUIT;
+*cardiac valve;
+DATA all_svc_list;
+	SET svc_all;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('V433','0352X' ) then cardiac_valve=1;
+		end;
+	array proc {*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('33361','33362','33363','33364','33365','33367','33368','33369','33430','33406','33413','33405','33410',
+'33411','33412','33920','33425','33426','33427','33418','33419','0343T','33420','33778','33853','33400',
+'33465','33460','33463','33464','33468','33475','33697','33692','33694','33470','33472','33474','33660',
+'33665','33670','33422','92987','33414','33417','92986','33476','33478','33782','33783','33863','33860',
+'33864','33780','33781','33779') then cardiac_valve=1;
+		end;
+	IF cardiac_valve=1;
+RUN;
+PROC sql;
+	CREATE table cardiac_valve as
+	SELECT 	min(enrolid) as enrolid,
+			min(DISDATE) as DISDATE,
+			min(SVCDATE) as SVCDATE
+	FROM all_svc_list
+	GROUP BY enrolid;
+QUIT;
+*Cardiac transplant recipients ;
+DATA all_svc_list;
+	SET svc_all;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('03751','V421','99683','41406','41407') then Cardiac_transplant=1;
+		end;
+	array proc {*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('33945','02YA0Z0','02YA0Z1','02YA0Z2') then Cardiac_transplant=1;
+		end;
+	IF Cardiac_transplant=1;
+RUN;
+PROC sql;
+	CREATE table Cardiac_transplant as
+	SELECT 	min(enrolid) as enrolid,
+			min(DISDATE) as DISDATE,
+			min(SVCDATE) as SVCDATE
+	FROM all_svc_list
+	GROUP BY enrolid;
+QUIT;
+
+DATA myfile.Infective_endocarditis;
+	SET Infective_endocarditis;
+	Infective_endocarditis=1;
+	event_dt=min(DISDATE,SVCDATE);
+DATA myfile.Congenital_heart_condition;
+	SET Congenital_heart_condition;
+	Congenital_heart_condition=1;
+	event_dt=min(DISDATE,SVCDATE);
+DATA myfile.cardiac_valve;
+	SET cardiac_valve;
+	cardiac_valve=1;
+	event_dt=min(DISDATE,SVCDATE);
+DATA myfile.Cardiac_transplant;
+	SET Cardiac_transplant;
+	Cardiac_transplant=1;
+	event_dt=min(DISDATE,SVCDATE);
+RUN;
+
+*Assessment of prescriptions over the -7~0 day period but with only 1 or 2 days' supply;
+PROC sql;
+	CREATE table abx_list_flag as
+	SELECT 	a.*,
+			b.flag
+	FROM Abx_rx a
+	INNER JOIN Abx_list b
+	ON a.NDCNUM = b.NDCNUM;
+QUIT;
+
+DATA abx_list_flag;
+	SET abx_list_flag;
+	IF DAYSUPP<3;
+RUN;
+*There were 24785043 observations read from the data set WORK.ABX_LIST_FLAG.
+NOTE: The data set WORK.ABX_LIST_FLAG has 651579 observations and 60 variables.;
+
+*Merge with the visit id list;
+PROC sql;
+	CREATE table visit_list_abx as
+	SELECT 	a.*,
+			b.DAYSUPP,
+			b.flag,
+			b.SVCDATE
+	FROM id_list a
+	INNER JOIN abx_list_flag b
+	ON a.enrolid = b.enrolid AND a.visit_dt-7<=b.SVCDATE<=a.visit_dt;
+QUIT;
+*unique dental prescriptions over the -7~0 day window;
+*NOTE: Table WORK.VISIT_LIST_ABX created, with 200216 rows and 74 columns.;
+
+PROC sql;
+	CREATE table id_list as
+	SELECT 	min(visit_id) as visit_id,
+			min(enrolid) as enrolid,
+			min(visit_dt) as visit_dt,
+			min(age) as age,
+			min(sex) as sex,
+			min(region) as region,
+			min(domain) as domain,
+			min(index_year) as index_year,
+			max(inappropriate_abx) as inappropriate_abx,
+			max(DIAGNOSTIC) as DIAGNOSTIC,
+			max(PREVENTIVE) as PREVENTIVE,
+			max(RESTORATIV) as RESTORATIV,
+			max(ORAL) as ORAL,
+			max(PERIODONTI) as PERIODONTI,
+			max(ADJUNCTIVE) as ADJUNCTIVE,
+			max(ENDODONTIC) as ENDODONTIC,
+			max(IMPLANT) as IMPLANT,
+			max(PROSTHODON) as PROSTHODON,
+			max(ORTHODONTI) as ORTHODONTI,
+			max(MAXILLOFAC) as MAXILLOFAC,
+			max(missing) as missing,
+			max(missing) as missing,
+			min(EECLASS) as EECLASS,
+			min(EESTATU) as EESTATU,
+			min(INDSTRY) as INDSTRY,
+			min(AMOXICILLIN) as AMOXICILLIN,
+			min(CLINDAMYCIN) as CLINDAMYCIN,
+			min(CEPHALEXIN) as CEPHALEXIN,
+			min(AZITHROMYCI) as AZITHROMYCI,
+			min(PENICILLIN) as PENICILLIN,
+			min(DOXYCYCLINE) as DOXYCYCLINE,
+			min(abx_other) as abx_other,
+			min(dental_start) as dental_start,
+			min(dental_end) as dental_end,
+			min(medical_start) as medical_start,
+			min(medical_end) as medical_end,
+			min(number_pcp) as number_pcp, 
+			min(number_special) as number_special,
+			min(number_er) as number_er,
+			min(number_adm) as number_adm,
+			min(gingival_manip) as gingival_manip,
+			min(rural) as rural,
+			min(cc_prior) as cc_prior,
+			min(cc_encounter_dt) as cc_encounter_dt,
+			min(pj_prior) as pj_prior,
+			min(pj_encounter_dt) as pj_encounter_dt,
+			max(pro_joint_2years) as pro_joint_2years,
+			max(MSA) as MSA,
+			min(immuno_compromise) as immuno_compromise,
+			min(diabetes_list) as diabetes_list,
+			min(allergy_14) as allergy_14,
+			min(allergy_30) as allergy_30,
+			min(anaphylaxis_14) as anaphylaxis_14,
+			min(anaphylaxis_30) as anaphylaxis_30,
+			min(cdi_30) as cdi_30,
+			min(cdi_90) as cdi_90,
+			min(cdi_6m) as cdi_6m,
+			min(cdi_12m) as cdi_12m,
+			min(er_7) as er_7,
+			min(er_14) as er_14,
+			min(adm_7) as adm_7,
+			min(adm_14) as adm_14,
+			min(death_30) as death_30,
+			min(death_90) as death_90,
+			min(death_6m) as death_6m,
+			min(death_12m) as death_12m
+	FROM visit_list_abx
+	GROUP BY visit_id;
+QUIT;
+*NOTE: There were 194570 observations read from the data set WORK.ID_LIST for unique visits;
+* a total of 99218 patients with any eligible dental visits;
+
+
+
+DATA id_list;
+	SET id_list;
+	IF er_7=1 OR adm_7=1 THEN urgent_7=1;
+	IF er_14=1 OR adm_14=1 THEN urgent_14=1;
+RUN;
+
+*addition of other variables for antibiotic cohort;
+DATA codlist.pji_cpt;
+	SET pji_cpt;
+	KEEP CPT2014;
+DATA codlist.pji_dx9;
+	SET pji_dx9;
+	KEEP ICD9Code;
+DATA codlist.pji_dx10;
+	SET pji_dx10;
+	KEEP ICD10Code;
+DATA codlist.pji_proc9;
+	SET pji_proc9;
+	KEEP ICD9Code;
+DATA codlist.pji_proc10;
+	SET pji_proc10;
+	KEEP ICD10;
+RUN;
+*Add the cardiac conditions to the visit id list, eligible visits will be flaged with different cardiac conditions;
+PROC sql;
+	CREATE table id_list1 as
+	SELECT 	a.*,
+			b.Infective_endocarditis,
+			b.event_dt as Infective_endocarditis_dt
+	FROM id_list a
+	LEFT JOIN Infective_endocarditis b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table id_list2 as
+	SELECT 	a.*,
+			b.Congenital_heart_condition,
+			b.event_dt as Congenital_heart_dt
+	FROM id_list1 a
+	LEFT JOIN Congenital_heart_condition b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table id_list3 as
+	SELECT 	a.*,
+			b.cardiac_valve,
+			b.event_dt as cardiac_valve_dt
+	FROM id_list2 a
+	LEFT JOIN Cardiac_valve b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table id_list4 as
+	SELECT 	a.*,
+			b.Cardiac_transplant,
+			b.event_dt as Cardiac_transplant_dt
+	FROM id_list3 a
+	LEFT JOIN Cardiac_transplant b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*assign cardiac condition value to the visits;
+DATA id_list5;
+	SET id_list4;
+	cardiac_condition=0;
+	IF Infective_endocarditis_dt ^=. AND Infective_endocarditis_dt=cc_encounter_dt 	AND Infective_endocarditis_dt<= visit_dt THEN cardiac_condition=1;
+	IF Congenital_heart_dt ^=. AND Congenital_heart_dt=cc_encounter_dt 				AND Congenital_heart_dt<= visit_dt THEN cardiac_condition=2;
+	IF cardiac_valve_dt ^=. AND cardiac_valve_dt=cc_encounter_dt 					AND cardiac_valve_dt<= visit_dt THEN cardiac_condition=3;
+	IF Cardiac_transplant_dt ^=. AND Cardiac_transplant_dt=cc_encounter_dt 			AND Cardiac_transplant_dt<= visit_dt THEN cardiac_condition=4;
+	IF Infective_endocarditis_dt =. AND Congenital_heart_dt =. AND cardiac_valve_dt =. AND Cardiac_transplant_dt =. AND cc_encounter_dt^=. AND cc_encounter_dt<= visit_dt
+		THEN cardiac_condition=5;
+RUN;
+
+PROC FREQ DATA=id_list5;
+TABLE cardiac_condition;RUN;
+
+*add history of prosthetic joint infection to the id list;
+DATA codlist.pji_cpt;
+	SET pji_cpt;
+	KEEP CPT2014;
+DATA codlist.pji_dx9;
+	SET pji_dx9;
+	KEEP ICD9Code;
+DATA codlist.pji_dx10;
+	SET pji_dx10;
+	KEEP ICD10Code;
+DATA codlist.pji_proc9;
+	SET pji_proc9;
+	KEEP ICD9Code;
+DATA codlist.pji_proc10;
+	SET pji_proc10;
+	KEEP ICD10;
+RUN;
+proc sql noprint; 
+select quote(CPT2014)
+into :Pji_cpt separated by ", "
+from codlist.Pji_cpt; 
+quit;
+
+proc sql noprint; 
+select quote(ICD9Code)
+into :pji_dx9 separated by ", "
+from codlist.pji_dx9; 
+quit;
+
+proc sql noprint; 
+select quote(ICD10Code)
+into :pji_dx10 separated by ", "
+from codlist.pji_dx10; 
+quit;
+
+proc sql noprint; 
+select quote(ICD9Code)
+into :pji_proc9 separated by ", "
+from codlist.pji_proc9; 
+quit;
+
+proc sql noprint; 
+select quote(ICD10)
+into :pji_proc10 separated by ", "
+from codlist.pji_proc10; 
+quit;
+
+DATA all_svc_list;
+	SET svc_all;
+	array icd1 {*} dx1-dx15;
+		do i = 1 to dim(icd1);
+		if icd1{i} in (&pji_dx9) then case=1;
+		end;
+	array icd2 {*} dx1-dx15;
+		do i = 1 to dim(icd2);
+		if icd2{i} in (&pji_dx10) then case=1;
+		end;
+	array proca {*} proc1-proc15;
+		do i = 1 to dim(proca);
+		if proca{i} in (&Pji_cpt) then case=1;
+		end;
+	array procb {*} proc1-proc15;
+		do i = 1 to dim(procb);
+		if procb{i} in (&pji_proc9) then case=1;
+		end;
+	array procc {*} proc1-proc15;
+		do i = 1 to dim(procc);
+		if procc{i} in (&pji_proc10) then case=1;
+		end;
+	IF case=1;
+RUN;
+PROC sql;
+	CREATE table myfile.pji_list as
+	SELECT 	min(enrolid) as enrolid,
+			min(DISDATE) as DISDATE,
+			min(SVCDATE) as SVCDATE,
+			1 as pji
+	FROM all_svc_list
+	GROUP BY enrolid;
+QUIT;
+DATA pji_list;
+	SET myfile.pji_list;
+	event_dt=min(DISDATE,SVCDATE);
+RUN;
+
+PROC sql;
+	CREATE table id_list6 as
+	SELECT 	a.*,
+			b.pji,
+			b.event_dt as pji_dt
+	FROM id_list5 a
+	LEFT JOIN pji_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA id_list6;
+	SET id_list6;
+	pro_joint_inf=0;
+	IF pji^=. AND pji_dt<=visit_dt THEN pro_joint_inf=1;
+RUN;
+
+*VTE;
+DATA all_svc_list;
+	SET svc_all;
+		array icd1 {*} dx1-dx15;
+		do i = 1 to dim(icd1);
+		if icd1{i} in ('6732',
+				'41511','41519',
+				'4532','4538','45389','45111','45119','45181',
+				'4534','45341','45342',
+				'67133','67144',
+				'45183','45189',
+				'45382','48383','45384','45385','45386','45387',
+				'I26','O882',
+				'I80','I81',
+				'I820','I821','I822','I823','I828','I829',
+				'O082','O223','O229','O871','O882') then case=1;
+		end;
+	IF case=1;
+RUN;
+PROC sql;
+	CREATE table myfile.vte_list as
+	SELECT 	min(enrolid) as enrolid,
+			min(DISDATE) as DISDATE,
+			min(SVCDATE) as SVCDATE,
+			1 as vte
+	FROM all_svc_list
+	GROUP BY enrolid;
+QUIT;
+
+DATA vte_list;
+	SET myfile.vte_list;
+	event_dt=min(DISDATE,SVCDATE);
+RUN;
+
+PROC sql;
+	CREATE table id_list7 as
+	SELECT 	a.*,
+			b.vte,
+			b.event_dt as vte_dt
+	FROM id_list6 a
+	LEFT JOIN vte_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+
+
+*AF;
+DATA all_svc_list;
+	SET svc_all;
+		array icd1 {*} dx1-dx15;
+		do i = 1 to dim(icd1);
+		if icd1{i} in ('42731') then case=1;
+		end;
+	IF case=1;
+RUN;
+PROC sql;
+	CREATE table myfile.af_list as
+	SELECT 	min(enrolid) as enrolid,
+			min(DISDATE) as DISDATE,
+			min(SVCDATE) as SVCDATE,
+			1 as af
+	FROM all_svc_list
+	GROUP BY enrolid;
+QUIT;
+
+DATA af_list;
+	SET myfile.af_list;
+	event_dt=min(DISDATE,SVCDATE);
+RUN;
+
+PROC sql;
+	CREATE table myfile.id_list8 as
+	SELECT 	a.*,
+			b.af,
+			b.event_dt as af_dt
+	FROM id_list7 a
+	LEFT JOIN af_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+DATA id_list9;
+	SET id_list8;
+	Surr_valve=0;
+	IF cardiac_valve=1 THEN Surr_valve=1;
+	IF vte=1 AND vte_dt<=cardiac_valve_dt THEN Surr_valve=0;
+	IF af=1 AND af_dt<=cardiac_valve_dt THEN Surr_valve=0;
+RUN;
+
+
+*Valvopathy;
+DATA all_svc_list;
+	SET svc_all;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('V433','0352X' ) then cardiac_valve=1;
+		end;
+	array proc {*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('33361','33362','33363','33364','33365','33367','33368','33369','33430','33406','33413','33405','33410',
+'33411','33412','33920','33425','33426','33427','33418','33419','0343T','33420','33778','33853','33400',
+'33465','33460','33463','33464','33468','33475','33697','33692','33694','33470','33472','33474','33660',
+'33665','33670','33422','92987','33414','33417','92986','33476','33478','33782','33783','33863','33860',
+'33864','33780','33781','33779') then cardiac_valve=1;
+		end;
+	IF cardiac_valve=1;
+RUN;
+PROC sql;
+	CREATE table myfile.cardiac_valve as
+	SELECT 	min(enrolid) as enrolid,
+			min(DISDATE) as DISDATE,
+			min(SVCDATE) as SVCDATE,
+			1 as cardiac_valve
+	FROM all_svc_list
+	GROUP BY enrolid;
+QUIT;
+*Surr_CardSurgery;
+DATA all_svc_list;
+	SET svc_all;
+	array proc {*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('3301','3302','3303','3304','3305','3306','3307','3308','3309') then cardiac_valve=1;
+		end;
+	IF cardiac_valve=1;
+RUN;
+PROC sql;
+	CREATE table myfile.Surr_CardSurgery as
+	SELECT 	min(enrolid) as enrolid,
+			min(DISDATE) as DISDATE,
+			min(SVCDATE) as SVCDATE,
+			1 as Surr_CardSurgery
+	FROM all_svc_list
+	GROUP BY enrolid;
+QUIT;
+*interventional ;
+DATA all_svc_list;
+	SET svc_all;
+	array proc {*} proc1-proc15;
+		do i = 1 to dim(proc);
+		if proc{i} in: ('92982','92984','92995','92996','92980',
+						'92981','92982','92984','93501','93508',
+						'93510','93511','93514','93524','93526',
+						'93527','93528','93529','93530','93531',
+						'93532','93533') then cardiac_valve=1;
+		end;
+	IF cardiac_valve=1;
+RUN;
+PROC sql;
+	CREATE table myfile.interventional_CardSurgery as
+	SELECT 	min(enrolid) as enrolid,
+			min(DISDATE) as DISDATE,
+			min(SVCDATE) as SVCDATE,
+			1 as interventional_CardSurgery
+	FROM all_svc_list
+	GROUP BY enrolid;
+QUIT;
+
+*Extract all warfarin prescriptions;
+libname ccae11 'E:\Truven Data\CCAE\2011';
+libname mdcr11 'E:\Truven Data\MDCR\2011';
+libname ccae12 'E:\Truven Data\CCAE\2012';
+libname mdcr12 'E:\Truven Data\MDCR\2012';
+libname ccae13 'E:\Truven Data\CCAE\2013';
+libname mdcr13 'E:\Truven Data\MDCR\2013';
+libname ccae14 'E:\Truven Data\CCAE\2014';
+libname mdcr14 'E:\Truven Data\MDCR\2014';
+libname ccae15 'E:\Truven Data\CCAE\2015';
+libname mdcr15 'E:\Truven Data\MDCR\2015';
+
+%macro RA (input = , output = );
+options compress = yes reuse = yes;
+PROC sql;
+		CREATE TABLE &output. as
+		SELECT a.enrolid,
+				a.SVCDATE
+ 		FROM &input. a
+		INNER JOIN warfarin_list b
+		ON a.NDCNUM = b.NDCNUM;
+	QUIT;
+%mend RA;
+
+*drug files;
+
+%RA (input = ccae11.ccaed113, output = myfile.all_ccaed_11);
+%RA (input = ccae12.ccaed122, output = myfile.all_ccaed_12);
+%RA (input = ccae13.ccaed131, output = myfile.all_ccaed_13);
+%RA (input = ccae14.ccaed142, output = myfile.all_ccaed_142);
+%RA (input = ccae15.ccaed151, output = myfile.all_ccaed_151);
+%RA (input = mdcr11.mdcrd113, output = myfile.all_mdcrd_11);
+%RA (input = mdcr12.mdcrd122, output = myfile.all_mdcrd_12);
+%RA (input = mdcr13.mdcrd131, output = myfile.all_mdcrd_13);
+%RA (input = mdcr14.mdcrd142, output = myfile.all_mdcrd_142);
+%RA (input = mdcr15.mdcrd151, output = myfile.all_mdcrd_151);
+
+DATA warfarin_file;
+	SET myfile.all_ccaed_11 myfile.all_ccaed_12 myfile.all_ccaed_13 myfile.all_ccaed_142 myfile.all_ccaed_151 
+		myfile.all_mdcrd_11 myfile.all_mdcrd_12 myfile.all_mdcrd_13 myfile.all_mdcrd_142 myfile.all_mdcrd_151;
+RUN;
+
+PROC sql;
+	CREATE table warfarin_list as
+	SELECT 	a.*
+	FROM warfarin_file a
+	INNER JOIN id_list9 b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+*klist of visits assocaited with a 90 day pre-index window warfarin dispensing;
+PROC sql;
+	CREATE table visit_list_warfarin as
+	SELECT 	a.*,
+			1 as pre_90_warfarin
+	FROM id_list9 a
+	INNER JOIN warfarin_list b
+	ON a.enrolid = b.enrolid AND a.visit_dt-90<=b.SVCDATE<=a.visit_dt;
+QUIT;
+
+PROC sql;
+	CREATE table id_list1 as
+	SELECT 	min(visit_id) as visit_id,
+			1 as pre_90_warfarin
+	FROM visit_list_warfarin
+	GROUP BY visit_id;
+QUIT;
+
+
+PROC sql;
+	CREATE table id_list2 as
+	SELECT 	a.*,
+			b.pre_90_warfarin
+	FROM id_list9 a
+	LEFT JOIN id_list1 b
+	ON a.visit_id = b.visit_id;
+QUIT;
+
+DATA Surr_CardSurgery_list;
+	SET myfile.Surr_CardSurgery;
+	event_dt=min(DISDATE,SVCDATE);
+RUN;
+
+PROC sql;
+	CREATE table id_list3 as
+	SELECT 	a.*,
+			b.Surr_CardSurgery,
+			b.event_dt as Surr_CardSurgery_dt
+	FROM id_list2 a
+	LEFT JOIN Surr_CardSurgery_list b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+DATA interventional_CardSurgery;
+	SET myfile.interventional_CardSurgery;
+	event_dt=min(DISDATE,SVCDATE);
+RUN;
+
+PROC sql;
+	CREATE table id_list4 as
+	SELECT 	a.*,
+			b.interventional_CardSurgery,
+			b.event_dt as interventional_CardSurgery_dt
+	FROM id_list3 a
+	LEFT JOIN interventional_CardSurgery b
+	ON a.enrolid = b.enrolid;
+QUIT;
+
+
+
+
+DATA myfile.analytical_cohort25Sep;
+	SET id_list4;
+	Surr_valve=0;
+	IF cardiac_valve=1 AND pre_90_warfarin=1  THEN Surr_valve=1;
+	IF vte=1 AND vte_dt<=cardiac_valve_dt THEN Surr_valve=0;
+	IF af=1 AND af_dt<=cardiac_valve_dt THEN Surr_valve=0;
+	Specific_CardTx_valvulopathy=0;
+	IF Cardiac_transplant=1 AND pre_90_warfarin=1 THEN Specific_CardTx_valvulopathy=1;
+	IF vte=1 AND vte_dt<=Cardiac_transplant_dt THEN Specific_CardTx_valvulopathy=0;
+	IF af=1 AND af_dt<=Cardiac_transplant_dt THEN Specific_CardTx_valvulopathy=0;
+	IF Surr_CardSurgery=. THEN Surr_CardSurgery=0;
+RUN;
+
+
+PROC sql;
+	CREATE table temp as
+	SELECT 	min(enrolid) as enrolid
+	FROM myfile.analytical_cohort25Sep
+	GROUP BY enrolid;
+QUIT;
+
+
+PROC sql;
+	CREATE table temp as
+	SELECT 	min(visit_id) as visit_id
+	FROM visit_list_abx
+	GROUP BY enrolid;
+QUIT;
+
+PROC FREQ DATA=myfile.analytical_cohort25Sep;
+	TABLE 	Surr_valve Surr_CardSurgery Specific_CardTx_valvulopathy
+/nocol norow nopercent;
+RUN;
