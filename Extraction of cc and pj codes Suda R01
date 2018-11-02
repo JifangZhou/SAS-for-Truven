@@ -1,0 +1,238 @@
+*Extraction of cc and pj conditions and event dates;
+*Assessment of time interval from the index visits;
+LIBNAME myfile "F:\User Folders\jzhou86\Suda R01\RawData";
+LIBNAME codlist "F:\User Folders\jzhou86\Suda R01\RawData\Code list";
+LIBNAME workingD "F:\User Folders\jzhou86\Suda R01\RawData\Working Directory";
+*antibiotics;
+DATA eligible_visit;
+	SET myfile.eligible_visit_list_0806;
+	visit_id = catx('_', enrolid, visit_dt);
+RUN;
+
+proc sql noprint; 
+select quote(dx)
+into :ccdxcodes separated by ", "
+from codlist.ccdxcodes; 
+quit; 
+
+proc sql noprint; 
+select quote(dx)
+into :pjdxcodes separated by ", "
+from codlist.Pjddxcodes; 
+quit;
+
+proc sql noprint; 
+select quote(pjp)
+into :pjpcodes separated by ", "
+from codlist.pjp_list; 
+quit;
+
+*extract from opt data;
+%macro opclms (in = , out = ); 
+options compress = on reuse = yes; 
+data &out. (keep = enrolid SVCDATE dx1 dx2 dx3 dx4 proc1 cc pj);
+set &in.;
+/*diagnoses*/
+array dx{*} dx1 dx2 dx3 dx4;
+do i = 1 to dim(dx); 
+if dx{i} in (&ccdxcodes) then cc = 1;
+if dx{i} in (&pjdxcodes) then pj = 1; 
+end; 
+/*procedures*/
+if proc1 in ('33608', '33675', '33676', '33677', '33786', '33622', '33611', '33612', '33619', '33730', '33944', '33924', '62220', '62223', '33615', '33471', '33404', '92993', '92992', '0408T', 
+'0409T', '0410T', '0411T', '33210', '62190', '33933', '33722', '92982', '92984', '92921', '92990', '92995', '92996', '33788', '33332', '33321', '33330', '33320', '33755', '33762', 
+'33335', '33750', '33766', '33767', '36825', '33970', '33990', '33545', '33542', '33852', '33684', '33681', '33688', '33641', '33851', '33647', '93580', '34900', '0078T', '34805',
+'34800', '33610', '34804', '33771', '33770', '33774', '33775', '33776', '33777', '33814', '33813', '0281T', '93582', '93581', '92934', '92925', '92943', '92944', '92941', '92997',
+'92998', '33505', '33506', '33502', '33503', '33504', '35081', '35091', '35102', '35082', '35092', '35103', '0256T', '0318T', '0257T', '0262T', '0051T', '33645', '0048T', '33976',
+'33975', '33979', '0050T', '33361', '33362', '33363', '33364', '33365', '33367', '33368', '33369', '33430', '33406', '33413', '33405', '33410', '33411', '33412', '33920', '33425',
+'33426', '33427', '33418', '33419', '0343T', '33420', '33778', '33853', '33400', '33465', '33460', '33463', '33464', '33468', '33475', '33697', '33692', '33694', '33470', '33472',
+'33474', '33660', '33665', '33670', '33422', '92987', '33414', '33417', '92986', '33476', '33478', '33782', '33783', '33863', '33860', '33864',  '33780', '33781', '33779', 
+'33945', '02YA0Z0', '02YA0Z1', '02YA0Z2') then cc = 1; 
+if proc1 in (&pjpcodes) then pj = 1; 
+if proc1 in ('01402', '27438', '27441', '27443', '27445', '27446', '27447', '27440', '27442', '27125', '27130', '27132', '27236', '27187', '27134', '27137', '27138', '29862', '27091', 
+'27486', '27487', '29877', '29880', '29881', '27488', '29871', '27310', '27030', '27134', '27137', '27138', '29862', '27091', '27486', '27487', '29877', '29880', '29881', 
+'27488', '29871', '27310', '27030', '27447', '27132', '27746', '23470', '23472', '27700', '27702', '27703', '26530', '26531', '25442', '25447', '25445', '24365', '24366',
+'25446', '22857', '22862', '22865', '22856', '22858', '22861', '22864', '23334', '23335', '24360', '24361', '24362', '24363', '25441', '25443', '25444', '25449', '27130',
+'27440', '27441', '27442', '27443', '27445', '27446') then pj = 1; 
+if cc=1 | pj = 1; 
+run;
+%mend; 
+%opclms   (in = myfile.dental_ccaeo_09, out = c09_o);
+%opclms   (in = myfile.dental_ccaeo_10, out = c10_o);
+%opclms   (in = myfile.dental_ccaeo_11, out = c11_o);
+%opclms   (in = myfile.dental_ccaeo_12, out = c12_o);
+%opclms   (in = myfile.dental_ccaeo_13, out = c13_o);
+%opclms   (in = myfile.dental_ccaeo_142, out = c14_o);
+%opclms   (in = myfile.dental_ccaeo_151, out = c15_o);
+
+%opclms  (in = myfile.dental_mdcro_09, out = m09_o);
+%opclms  (in = myfile.dental_mdcro_10, out = m10_o);
+%opclms  (in = myfile.dental_mdcro_11, out = m11_o);
+%opclms  (in = myfile.dental_mdcro_12, out = m12_o);
+%opclms  (in = myfile.dental_mdcro_13, out = m13_o);
+%opclms  (in = myfile.dental_mdcro_142, out = m14_o);
+%opclms  (in = myfile.dental_mdcro_151, out = m15_o);
+
+*extraction of ipt data;
+%macro ipclms (in = , out = ); 
+options compress = on reuse = yes; 
+data &out. (keep = enrolid ADMDATE dx1 dx2 dx3 dx4 dx5 dx6 dx7 dx8 dx9 dx10 dx11 dx12 dx13 dx14 dx15 proc1 proc2 proc3 proc4 proc5 proc6 proc7 proc8 proc9 proc10 proc11 proc12 proc13 proc14 proc15 cc pj);
+set &in.;
+/*diagnoses*/
+array dx{*} dx1 dx2 dx3 dx4 dx5 dx6 dx7 dx8 dx9 dx10 dx11 dx12 dx13 dx14 dx15;
+do i = 1 to dim(dx); 
+if dx{i} in (&ccdxcodes) then cc = 1;
+if dx{i} in (&pjdxcodes) then pj = 1; 
+end; 
+/*procedures*/
+array proc{*} proc1 proc2 proc3 proc4 proc5 proc6 proc7 porc8 proc9 proc10 proc11 proc12 proc13 proc14 proc15;
+do j = 1 to dim(proc); 
+
+if proc{j} in ('33608', '33675', '33676', '33677', '33786', '33622', '33611', '33612', '33619', '33730', '33944', '33924', '62220', '62223', '33615', '33471', '33404', '92993', '92992', '0408T', 
+'0409T', '0410T', '0411T', '33210', '62190', '33933', '33722', '92982', '92984', '92921', '92990', '92995', '92996', '33788', '33332', '33321', '33330', '33320', '33755', '33762', 
+'33335', '33750', '33766', '33767', '36825', '33970', '33990', '33545', '33542', '33852', '33684', '33681', '33688', '33641', '33851', '33647', '93580', '34900', '0078T', '34805',
+'34800', '33610', '34804', '33771', '33770', '33774', '33775', '33776', '33777', '33814', '33813', '0281T', '93582', '93581', '92934', '92925', '92943', '92944', '92941', '92997',
+'92998', '33505', '33506', '33502', '33503', '33504', '35081', '35091', '35102', '35082', '35092', '35103', '0256T', '0318T', '0257T', '0262T', '0051T', '33645', '0048T', '33976',
+'33975', '33979', '0050T', '33361', '33362', '33363', '33364', '33365', '33367', '33368', '33369', '33430', '33406', '33413', '33405', '33410', '33411', '33412', '33920', '33425',
+'33426', '33427', '33418', '33419', '0343T', '33420', '33778', '33853', '33400', '33465', '33460', '33463', '33464', '33468', '33475', '33697', '33692', '33694', '33470', '33472',
+'33474', '33660', '33665', '33670', '33422', '92987', '33414', '33417', '92986', '33476', '33478', '33782', '33783', '33863', '33860', '33864',  '33780', '33781', '33779', 
+'33945', '02YA0Z0', '02YA0Z1', '02YA0Z2') then cc = 1; 
+
+if proc{j} in (&pjpcodes) then pj = 1; 
+
+if proc{j} in ('01402', '27438', '27441', '27443', '27445', '27446', '27447', '27440', '27442', '27125', '27130', '27132', '27236', '27187', '27134', '27137', '27138', '29862', '27091', 
+'27486', '27487', '29877', '29880', '29881', '27488', '29871', '27310', '27030', '27134', '27137', '27138', '29862', '27091', '27486', '27487', '29877', '29880', '29881', 
+'27488', '29871', '27310', '27030', '27447', '27132', '27746', '23470', '23472', '27700', '27702', '27703', '26530', '26531', '25442', '25447', '25445', '24365', '24366',
+'25446', '22857', '22862', '22865', '22856', '22858', '22861', '22864', '23334', '23335', '24360', '24361', '24362', '24363', '25441', '25443', '25444', '25449', '27130',
+'27440', '27441', '27442', '27443', '27445', '27446') then pj = 1;
+end;
+
+if cc=1 | pj = 1; 
+run;
+%mend; 
+%ipclms   (in = myfile.dental_ccaei_09, out = c09_i);
+%ipclms   (in = myfile.dental_ccaei_10, out = c10_i);
+%ipclms   (in = myfile.dental_ccaei_11, out = c11_i);
+%ipclms   (in = myfile.dental_ccaei_12, out = c12_i);
+%ipclms   (in = myfile.dental_ccaei_13, out = c13_i);
+%ipclms   (in = myfile.dental_ccaei_142, out = c14_i);
+%ipclms   (in = myfile.dental_ccaei_151, out = c15_i);
+
+%ipclms  (in = myfile.dental_mdcri_09, out = m09_i);
+%ipclms  (in = myfile.dental_mdcri_10, out = m10_i);
+%ipclms  (in = myfile.dental_mdcri_11, out = m11_i);
+%ipclms  (in = myfile.dental_mdcri_12, out = m12_i);
+%ipclms  (in = myfile.dental_mdcri_13, out = m13_i);
+%ipclms  (in = myfile.dental_mdcri_142, out = m14_i);
+%ipclms  (in = myfile.dental_mdcri_151, out = m15_i);
+
+data myfile.all_ccpj; 
+set c09_i c10_i c11_i c12_i c13_i c14_i c15_i
+	m09_i m10_i m11_i m12_i m13_i m14_i m15_i 
+	c09_o c10_o c11_o c12_o c13_o c14_o c15_o
+	m09_o m10_o m11_o m12_o m13_o m14_o m15_o; 
+IF enrolid=. THEN DELETE;
+run; 
+*NOTE: There were 17579 observations read from the data set WORK.C09_I.
+NOTE: There were 21824 observations read from the data set WORK.C10_I.
+NOTE: There were 27525 observations read from the data set WORK.C11_I.
+NOTE: There were 28636 observations read from the data set WORK.C12_I.
+NOTE: There were 30420 observations read from the data set WORK.C13_I.
+NOTE: There were 31865 observations read from the data set WORK.C14_I.
+NOTE: There were 28544 observations read from the data set WORK.C15_I.
+NOTE: There were 13695 observations read from the data set WORK.M09_I.
+NOTE: There were 15262 observations read from the data set WORK.M10_I.
+NOTE: There were 18616 observations read from the data set WORK.M11_I.
+NOTE: There were 20331 observations read from the data set WORK.M12_I.
+NOTE: There were 23051 observations read from the data set WORK.M13_I.
+NOTE: There were 23103 observations read from the data set WORK.M14_I.
+NOTE: There were 18380 observations read from the data set WORK.M15_I.
+NOTE: There were 406727 observations read from the data set WORK.C09_O.
+NOTE: There were 521905 observations read from the data set WORK.C10_O.
+NOTE: There were 677568 observations read from the data set WORK.C11_O.
+NOTE: There were 747385 observations read from the data set WORK.C12_O.
+NOTE: There were 792743 observations read from the data set WORK.C13_O.
+NOTE: There were 977589 observations read from the data set WORK.C14_O.
+NOTE: There were 967138 observations read from the data set WORK.C15_O.
+NOTE: There were 209426 observations read from the data set WORK.M09_O.
+NOTE: There were 201456 observations read from the data set WORK.M10_O.
+NOTE: There were 284311 observations read from the data set WORK.M11_O.
+NOTE: There were 337268 observations read from the data set WORK.M12_O.
+NOTE: There were 476982 observations read from the data set WORK.M13_O.
+NOTE: There were 551307 observations read from the data set WORK.M14_O.
+NOTE: There were 461708 observations read from the data set WORK.M15_O.
+NOTE: The data set MYFILE.ALL_CCPJ has 7932344 observations and 35 variables.
+;
+data myfile.all_ccpj; 
+set  myfile.all_ccpj; 
+if enrolid = . then delete; 
+encounter_dt = . ; 
+if ADMDATE ne . then do; 
+	encounter_dt = ADMDATE; 
+end; 
+if SVCDATE ne . then do; 
+	encounter_dt = SVCDATE; 
+end; 
+format encounter_dt mmddyy10.; 
+run; 
+proc sort data = all_ccpj; by enrolid encounter_dt; run; 
+
+/*/*combination codes: 
+(a) 424.3+782.5
+(b) 039.95+745.0 -- 747.6
+(c) 088.50-088.59 + 745.0 -- 747.6
+(d) 424.3 + absence of 03961
+*/
+
+data cc_03995 cc_0885 cc_4243; 
+set  all_ccpj; 
+array dx{*} dx1--dx15; 
+do i = 1 to dim(dx); 
+	if dx{i} = '4243' then output cc_4243; /*in this dataset make sure there is no 03961*/
+	/*you need not work on 4243+782.5 because just 4243 is also a definition so even if it didn't have a 7825 they would be cc=1*/
+	if dx{i} = '03995' then output cc_03995; /*in this dataset make sure 745-747.6 is present in every record*/
+	/*	/*'745','746','7470','7471','7472','7473','7474','7475','7476'*/
+	if dx{i} in: ('0885') then output cc_0885; /*in this dataset make sure 745-747.6 is present in every record*/
+end; 
+run; 
+/*NOTE: There were 7932344 observations read from the data set WORK.ALL_CCPJ.
+NOTE: The data set WORK.CC_03995 has 0 observations and 37 variables.
+NOTE: The data set WORK.CC_0885 has 0 observations and 37 variables.
+NOTE: The data set WORK.CC_4243 has 60204 observations and 37 variables.
+
+*/
+data cc_4243_3961;
+set cc_4243;
+array dx{*} dx1--dx15; 
+do i = 1 to dim(dx); 
+	if dx{i} = '03961' then output cc_4243_3961;
+end; 
+run; 
+*NOTE: There were 60204 observations read from the data set WORK.CC_4243.
+NOTE: The data set WORK.CC_4243_3961 has 0 observations and 37 variables.;
+
+DATA cc;
+SET myfile.all_ccpj;
+IF cc=1;
+RUN;
+
+PROC sql;
+	CREATE table myfile.cc_id_list as
+	SELECT min(enrolid) as enrolid,
+		min(encounter_dt) as cc_encounter_dt
+	FROM cc a
+	GROUP BY enrolid;
+QUIT;
+
+DATA pj;
+SET myfile.all_ccpj;
+IF pj=1;
+RUN;
+
+PROC sql;
+	CREATE table myfile.pj_id_list as
+	SELECT min(enrolid) as enrolid,
+		min(encounter_dt) as pj_encounter_dt
+	FROM pj a
+	GROUP BY enrolid;
+QUIT;
