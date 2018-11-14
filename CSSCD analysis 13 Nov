@@ -1,0 +1,515 @@
+LIBNAME CSSCD1 "C:\Users\jzhou86\Documents\SCD Project\SCD and DVT\csscd\Phase1\sd2anon";
+LIBNAME CSSCD2 "C:\Users\jzhou86\Documents\SCD Project\SCD and DVT\csscd\Phase2A\SAS_Data";
+LIBNAME CSSCD2_3 "C:\Users\jzhou86\Documents\SCD Project\SCD and DVT\csscd\Phase2_3\pub_sd2s";
+*Age sex and enrollment date;
+DATA r09_age;
+	SET CSSCD1.r09;
+	KEEP ANONID CURRAGEY ENTRYAGE sex race;
+	RENAME ENTRYAGE=agep0;
+	RENAME CURRAGEY=agep1;
+DATA rost_age;
+	SET CSSCD2.rost;
+	KEEP ANONID age sex race DAYSP1 DTKNWALV;
+	RENAME DAYSP1=daysp2p1;
+	RENAME age=agep2;
+DATA rost2n3p_age;
+	SET CSSCD2_3.rost2n3p;
+	KEEP ANONID sex race daysp2p1 daysp3p1;
+RUN;
+
+DATA all_baseline;
+	SET r09_age rost_age rost2n3p_age;
+RUN;
+
+PROC sql;
+	CREATE table id_baseline as
+	SELECT 	min(ANONID) as ANONID,
+			min(agep0) as agep0,
+			min(agep1) as agep1,
+			min(agep2) as agep2,
+			min(sex) as sex,
+			min(race) as race,
+			min(daysp2p1) as daysp2p1,
+			min(daysp3p1) as daysp3p1,
+			max(DTKNWALV) as last_know_alive_2p
+	FROM all_baseline
+	GROUP BY ANONID;
+QUIT;
+*Assessment alive and death;
+DATA r14_birth;
+	SET CSSCD1.r14;
+	KEEP ANONID JF14BDAY;
+	RENAME JF14BDAY=BDAY;
+DATA r29_birth;
+	SET CSSCD1.r29;
+	KEEP ANONID JF29BDAY;
+	RENAME JF29BDAY=BDAY;
+DATA r67_birth;
+	SET CSSCD1.r67;
+	KEEP ANONID F67BDATE;
+	RENAME F67BDATE=BDATE;
+DATA r68_birth;
+	SET CSSCD1.r68;
+	KEEP ANONID F68BDATE;
+	RENAME F68BDATE=BDATE;
+DATA r69_birth;
+	SET CSSCD1.r69;
+	KEEP ANONID F69BDATE;
+	RENAME F69BDATE=BDATE;
+DATA r73_birth;
+	SET CSSCD1.r73;
+	KEEP ANONID F73BDATE;
+	RENAME F73BDATE=BDATE;
+DATA r74_birth;
+	SET CSSCD1.r74;
+	KEEP ANONID F74BDATE;
+	RENAME F74BDATE=BDATE;
+RUN;
+
+DATA all_birth;
+	SET r14_birth r29_birth r67_birth r68_birth r69_birth r73_birth r74_birth;
+RUN;
+
+PROC sql;
+	CREATE table id_birth as
+	SELECT 	min(ANONID) as ANONID,
+			min(BDATE) as BDATE,
+			min(BDAY) as BDAY
+	FROM all_birth
+	GROUP BY ANONID;
+QUIT;
+
+*Death data and last follow-up;
+DATA r91_death;
+	SET CSSCD1.r91;
+	KEEP ANONID JF91DATE;
+	RENAME JF91DATE=Death_DATE_p1;
+DATA r92_death;
+	SET CSSCD1.r92;
+	KEEP ANONID F92PALIV JF92DTH1 JF92DTH2 Death_DATE_p1;
+	RENAME F92PALIV=PALIV_DATE;
+	RENAME JF92DTH1=Death_DATE_p1;
+	RENAME JF92DTH2=Death_DATE2;
+	Death_DATE_p1=max(Death_DATE_p1,Death_DATE2);
+DATA dthadata;
+	SET CSSCD2.dthadata;
+	KEEP ANONID DTHDCN DTHDTE DTHDTE1;
+	RENAME DTHDCN=Death_NOTIFICATION_DATE;
+	RENAME DTHDTE=Death_DATE_p2;
+	RENAME DTHDTE1=Death_DATE_p1;
+DATA duadata;
+	SET CSSCD2.duadata;
+	KEEP ANONID DUADTHD;
+	RENAME DUADTHD=Death_DATE_p1;
+DATA dth_pubn;
+	SET CSSCD2_3.dth_pubn;
+	KEEP ANONID dth_dys1 dth_dys2;
+	RENAME dth_dys2=Death_DATE_p2;
+	RENAME dth_dys1=Death_DATE_p1;
+RUN;
+
+DATA all_death;
+	SET r91_death r92_death dthadata duadata dth_pubn;
+RUN;
+
+PROC sql;
+	CREATE table id_death as
+	SELECT 	min(ANONID) as ANONID,
+			max(PALIV_DATE) as PALIV_DATE,
+			max(Death_DATE_p1) as Death_DATE_p1,
+			max(Death_DATE_p2) as Death_DATE_p2
+	FROM all_death
+	GROUP BY ANONID;
+QUIT;
+
+*Assessment of all diagnosis and combine them;
+
+
+DATA r10;
+	SET CSSCD1.r10;
+	KEEP ANONID F10OPR3I JF10DATE ICDA;
+	RENAME JF10DATE=event_DATE;
+	IF F10OPR3I=. THEN DELETE;
+	ICDA=compress(F10OPR3I,"1234567890" , "kis");
+DATA r14;
+	SET CSSCD1.r14;
+	KEEP ANONID F14DICDA  JF14DATE ICDA;
+	RENAME JF14DATE=event_DATE;
+	ICDA=compress(F14DICDA ,"1234567890" , "kis");
+	IF F14DICDA =. THEN DELETE;
+	IF ICDA =. THEN DELETE;
+DATA r15;
+	SET CSSCD1.r15;
+	KEEP ANONID F15ICDA  JF15DATE ICDA;
+	RENAME JF15DATE=event_DATE;
+	ICDA=compress(F15ICDA ,"1234567890" , "kis");
+	IF F15ICDA =. THEN DELETE;
+	IF ICDA =. THEN DELETE;
+DATA r25;
+	SET CSSCD1.r25;
+	KEEP ANONID F25ICDA  JF25DATE ICDA;
+	RENAME JF25DATE=event_DATE;
+	ICDA=compress(F25ICDA ,"1234567890" , "kis");
+	IF F25ICDA =. THEN DELETE;
+	IF ICDA =. THEN DELETE;
+DATA r31;
+	SET CSSCD1.r31;
+	KEEP ANONID F31DIAG1 F31DIAG2 F31DIAG3 F31DIAG4 F31DIAG5 JF31DATE DIAG1 DIAG2 DIAG3 DIAG4 DIAG5;
+	RENAME JF31DATE=event_DATE;
+	DIAG1=compress(F31DIAG1 ,"1234567890" , "kis");
+	DIAG2=compress(F31DIAG2 ,"1234567890" , "kis");
+	DIAG3=compress(F31DIAG3 ,"1234567890" , "kis");
+	DIAG4=compress(F31DIAG4 ,"1234567890" , "kis");
+	DIAG5=compress(F31DIAG5 ,"1234567890" , "kis");
+DATA r33;
+	SET CSSCD1.r33;
+	KEEP ANONID F33DIAG1 F33DIAG2 F33DIAG3 F33DIAG4 JF33DATE DIAG1 DIAG2 DIAG3 DIAG4;
+	RENAME JF33DATE=event_DATE;
+	DIAG1=compress(F33DIAG1 ,"1234567890" , "kis");
+	DIAG2=compress(F33DIAG2 ,"1234567890" , "kis");
+	DIAG3=compress(F33DIAG3 ,"1234567890" , "kis");
+	DIAG4=compress(F33DIAG4 ,"1234567890" , "kis");
+DATA r40;
+	SET CSSCD1.r40;
+	KEEP ANONID F40DIAG1 F40DIAG2 F40DIAG3 JF40DATE DIAG1 DIAG2 DIAG3;
+	RENAME JF40DATE=event_DATE;
+	DIAG1=compress(F40DIAG1 ,"1234567890" , "kis");
+	DIAG2=compress(F40DIAG2 ,"1234567890" , "kis");
+	DIAG3=compress(F40DIAG3 ,"1234567890" , "kis");
+DATA r43;
+	SET CSSCD1.r43;
+	KEEP ANONID F43DIAG F43ICDA1 F43ICDA2 F43ICDA3 F43ICDA4 JF43DATE DIAG1 DIAG2 DIAG3 DIAG4 DIAG5;
+	RENAME JF43DATE=event_DATE;
+	DIAG1=compress(F43DIAG ,"1234567890" , "kis");
+	DIAG2=compress(F43ICDA1 ,"1234567890" , "kis");
+	DIAG3=compress(F43ICDA2 ,"1234567890" , "kis");
+	DIAG4=compress(F43ICDA3 ,"1234567890" , "kis");
+	DIAG5=compress(F43ICDA4 ,"1234567890" , "kis");
+DATA r48;
+	SET CSSCD1.r48;
+	KEEP ANONID F48ICDA JF48DATE DIAG1;
+	RENAME JF48DATE=event_DATE;
+	DIAG1=compress(F48ICDA ,"1234567890" , "kis");
+DATA r52;
+	SET CSSCD1.r52;
+	KEEP ANONID F52DIAG1 F52DIAG2 F52DIAG3 F52DIAG4 F52DIAG5 JF52DATE DIAG1 DIAG2 DIAG3 DIAG4 DIAG5;
+	RENAME JF52DATE=event_DATE;
+	DIAG1=compress(F52DIAG1 ,"1234567890" , "kis");
+	DIAG2=compress(F52DIAG2 ,"1234567890" , "kis");
+	DIAG3=compress(F52DIAG3 ,"1234567890" , "kis");
+	DIAG4=compress(F52DIAG4 ,"1234567890" , "kis");
+	DIAG5=compress(F52DIAG5 ,"1234567890" , "kis");
+DATA r66;
+	SET CSSCD1.r66;
+	KEEP ANONID F66FINAL JF66DATE DIAG1;
+	RENAME JF66DATE=event_DATE;
+	DIAG1=compress(F66FINAL ,"1234567890" , "kis");
+DATA r83;
+	SET CSSCD1.r83;
+	KEEP ANONID F83ICDA F83PICDA  F83PRE1 F83PRE2 F83PRE3 JF83DATE DIAG1 DIAG2 DIAG3 DIAG4 DIAG5;
+	RENAME JF83DATE=event_DATE;
+	DIAG1=compress(F83ICDA ,"1234567890" , "kis");
+	DIAG2=compress(F83PICDA ,"1234567890" , "kis");
+	DIAG3=compress(F83PRE1 ,"1234567890" , "kis");
+	DIAG4=compress(F83PRE2 ,"1234567890" , "kis");
+	DIAG5=compress(F83PRE3 ,"1234567890" , "kis");
+DATA r90;
+	SET CSSCD1.r90;
+	KEEP ANONID F90ICDA1 F90ICDA2 F90ICDA3 F90ICDA4 JF90DATE DIAG1 DIAG2 DIAG3 DIAG4;
+	RENAME JF90DATE=event_DATE;
+	DIAG1=compress(F90ICDA1 ,"1234567890" , "kis");
+	DIAG2=compress(F90ICDA2 ,"1234567890" , "kis");
+	DIAG3=compress(F90ICDA3 ,"1234567890" , "kis");
+	DIAG4=compress(F90ICDA4 ,"1234567890" , "kis");
+DATA dthadata;
+	SET CSSCD2.dthadata;
+	KEEP ANONID DTHDTE1 DTHDX1C DTHDX2C DTHDX3C DTHDX4C DIAG1 DIAG2 DIAG3 DIAG4;
+	RENAME DTHDTE1=event_DATE;
+	DIAG1=compress(DTHDX1C ,"1234567890" , "kis");
+	DIAG2=compress(DTHDX2C ,"1234567890" , "kis");
+	DIAG3=compress(DTHDX3C ,"1234567890" , "kis");
+	DIAG4=compress(DTHDX4C ,"1234567890" , "kis");
+RUN;
+
+DATA all_diag;
+	SET r10  r14  r15  r25 r31  r33  r40  r43  r48  r52  r66  r83  r90 dthadata;
+	KEEP ANONID event_DATE DIAG1 DIAG2 DIAG3 DIAG4 DIAG5 ICDA;
+	RENAME ICDA=DIAG6;
+RUN;
+
+*Assessment of cancer and iron overload history;
+DATA iron_cancer_hx;
+	SET CSSCD2.hxadata;
+	KEEP ANONID DTHDTE1 HXCANCC HXCANCER HXCANCT HXCANCYT HXIRNOV HXIRON HXIRONDT;
+IF HXCANCT ^="-7" OR HXIRNOV=2 OR HXIRON=2;
+RUN;
+	
+*Osteomyelitis;;
+DATA r10;
+	SET CSSCD1.r10;
+	KEEP ANONID F10OSTE JF10DATE;
+	IF F10OSTE=11 OR F10OSTE=30 OR F15OSTE=32 OR F10OSTE=33 OR F15OSTE=40 OR F15OSTE=41 OR F10OSTE=42 OR F15OSTE=43;
+	RENAME JF10DATE =event_DATE;
+DATA r15;
+	SET CSSCD1.r15;
+	KEEP ANONID F15OSTE JF15DATE;
+	IF F15OSTE=11 OR F15OSTE=30 OR F15OSTE=32 OR F15OSTE=33 OR F15OSTE=40 OR F15OSTE=41 OR F15OSTE=42 OR F15OSTE=43;
+	RENAME JF15DATE =event_DATE;
+DATA r53;
+	SET CSSCD1.r53;
+	KEEP ANONID F53DXOST F53OSTE J53OSTED ;
+	RENAME J53OSTED =event_DATE;
+	IF F53DXOST=2 OR F53OSTE=2;
+DATA all_osteo;
+	SET r10  r15  r53;
+RUN;
+
+PROC sql;
+	CREATE table Osteomyelitis_hx as
+	SELECT 	min(ANONID) as ANONID,
+			1 as Osteomyelitis_hx
+	FROM all_osteo
+	GROUP BY ANONID;
+QUIT;
+
+*Pulmonary hypertension;
+DATA r20;
+	SET CSSCD1.r20;
+	KEEP ANONID F20PHYP;
+	IF F20PHYP=2;
+DATA echodata;
+	SET CSSCD2.echodata;
+	KEEP ANONID DOTRPV;
+	IF DOTRPV>=2.5;
+RUN;
+DATA all_PAH;
+	SET r20 echodata;
+RUN;
+
+PROC sql;
+	CREATE table PAH_list as
+	SELECT 	min(ANONID) as ANONID,
+			1 as PAH
+	FROM all_PAH
+	GROUP BY ANONID;
+QUIT;
+
+*Outcomes assessment;
+DATA r29;
+	SET CSSCD1.r29;
+	KEEP ANONID F29PLEM1 F29PLEM2 F29PLEM3 F29PLEM4 F29PLEM5 F29PLEM6 F29PLEM7 F29PLEM8 JF29DATE;
+	RENAME JF29DATE=event_DATE;
+	IF F29PLEM1=2 OR F29PLEM2=2 OR  F29PLEM3=2 OR  F29PLEM4=2 OR 
+		F29PLEM5=2 OR  F29PLEM6=2 OR  F29PLEM7=2 OR  F29PLEM8=2;
+DATA r53;
+	SET CSSCD1.r53;
+	KEEP ANONID F53DXEMB JF53DATE ;
+	RENAME JF53DATE =event_DATE;
+	IF F53DXEMB=2;
+DATA r82;
+	SET CSSCD1.r82;
+	KEEP ANONID F82PLEM  JF82DATE ;
+	RENAME JF82DATE =event_DATE;
+	IF F82PLEM=2;
+RUN;
+
+DATA all_PE;
+	SET r29 r53 r82;
+	KEEP ANONID event_DATE;
+RUN;
+
+*DVT from files;
+DATA r10;
+	SET CSSCD1.r10;
+	KEEP ANONID F10BLCL event_DATE JF10DATE;
+	RENAME JF10DATE=event_DATE;
+	IF F10BLCL=3;
+DATA r29;
+	SET CSSCD1.r29;
+	KEEP ANONID F29THRC1 F29THRC2 F29THRC3 F29THRC4 F29THRC5 F29THRC6 F29THRC7 F29THRC8 JF29DATE;
+	RENAME JF29DATE=event_DATE;
+	IF F29THRC1=2 OR F29THRC2=2 OR  F29THRC3=2 OR  F29THRC4=2 OR 
+		F29THRC5=2 OR  F29THRC6=2 OR  F29THRC7=2 OR  F29THRC8=2;
+DATA r82;
+	SET CSSCD1.r82;
+	KEEP ANONID F82THRC JF82DATE;
+	RENAME JF82DATE=event_DATE;
+	IF F82THRC=2;
+RUN;
+
+DATA all_DVT;
+	SET r29 r10 r82;
+	KEEP ANONID event_DATE;
+RUN;
+
+*Store all analytical files;
+LIBNAME myfile "C:\Users\jzhou86\Documents\ASH Award Application\Preliminary analysis\CSSCD files";
+DATA myfile.all_DVT;
+	SET all_DVT;
+DATA myfile.all_PE;
+	SET all_PE;
+DATA myfile.PAH_list;
+	SET PAH_list;
+DATA myfile.Osteomyelitis_hx;
+	SET Osteomyelitis_hx;
+DATA myfile.iron_cancer_hx;
+	SET iron_cancer_hx;
+DATA myfile.all_diag;
+	SET all_diag;
+DATA myfile.id_death;
+	SET id_death;
+DATA myfile.id_birth;
+	SET id_birth;
+DATA myfile.id_baseline;
+	SET id_baseline;
+RUN;
+
+*Merge variables to the baseline files;
+*join birth and death data;
+PROC sql;
+	CREATE table id_list1 as
+	SELECT 	a.*,
+			b.BDAY
+	FROM id_baseline a
+	LEFT JOIN id_birth b
+	ON a.ANONID=b.ANONID;
+QUIT;
+PROC sql;
+	CREATE table id_list2 as
+	SELECT 	a.*,
+			b.PALIV_DATE,
+			b.Death_DATE_p1
+	FROM id_list1 a
+	LEFT JOIN id_death b
+	ON a.ANONID=b.ANONID;
+QUIT;
+*add iron and cancer;
+DATA iron_id;
+	SET iron_cancer_hx;
+	IF HXCANCER ^=2;
+	iron_hx=1;
+DATA cancer_id;
+	SET iron_cancer_hx;
+	IF HXCANCER =2;
+	cancer_hx=1;
+RUN;
+PROC sql;
+	CREATE table id_list3 as
+	SELECT 	a.*,
+			b.iron_hx
+	FROM id_list2 a
+	LEFT JOIN iron_id b
+	ON a.ANONID=b.ANONID;
+QUIT;
+PROC sql;
+	CREATE table id_list4 as
+	SELECT 	a.*,
+			b.cancer_hx
+	FROM id_list3 a
+	LEFT JOIN cancer_id b
+	ON a.ANONID=b.ANONID;
+QUIT;
+*Osteomyelilitis,PAH and VTE_hx;
+PROC sql;
+	CREATE table id_list5 as
+	SELECT 	a.*,
+			b.*
+	FROM id_list4 a
+	LEFT JOIN Osteomyelitis_hx b
+	ON a.ANONID=b.ANONID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list6 as
+	SELECT 	a.*,
+			b.*
+	FROM id_list5 a
+	LEFT JOIN PAH_list b
+	ON a.ANONID=b.ANONID;
+QUIT;
+
+*Add VTE history;
+DATA all_VTE_hx;
+	SET all_DVT all_PE;
+	IF event_DATE<=0;
+RUN;
+
+PROC sql;
+	CREATE table VTE_hx_list as
+	SELECT 	min(ANONID) as ANONID,
+			1 as VTE_hx
+	FROM all_VTE_hx
+	GROUP BY ANONID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list7 as
+	SELECT 	a.*,
+			b.*
+	FROM id_list6 a
+	LEFT JOIN VTE_hx_list b
+	ON a.ANONID=b.ANONID;
+QUIT;
+
+*Assessment of all VTE events using diagnosis codes;
+DATA VTE_hx_record;
+	SET all_diag;
+	diag_num1 = input(diag1, 12.);
+	diag_num2 = input(diag2, 12.);
+	diag_num3 = input(diag3, 12.);
+	diag_num4 = input(diag4, 12.);
+	diag_num5 = input(diag5, 12.);
+	diag_num6 = input(diag6, 12.);
+	array icd {*} diag_num1-diag_num6;
+	do i = 1 to dim(icd);
+		if icd{i} in: ('4511','45111','45119','4512','4518','45181','45183','45184','45189','4519',
+					'452','4530','4532','4533','4534','45340','45341','45342',
+					'4538','45382','45383','45384','45385','45386','453877','45389',
+					'4539','4151','41511','41513','41519') then VTE=1;
+		end;
+	IF VTE=1;
+RUN;
+
+
+PROC sql;
+	CREATE table vte_list_all as
+	SELECT min(ANONID) as ANONID,
+			min(event_date) as vte_date
+	FROM VTE_hx_record
+	GROUP BY ANONID;
+QUIT;
+PROC sql;
+	CREATE table id_list8 as
+	SELECT 	a.*,
+			b.*
+	FROM id_list7 a
+	LEFT JOIN vte_list_all b
+	ON a.ANONID=b.ANONID;
+QUIT;
+
+DATA analytical_cohort_1113;
+	SET id_list8;
+	IF iron_hx=. THEN iron_hx=0;
+	IF cancer_hx=. THEN cancer_hx=0;
+	IF Osteomyelitis_hx=. THEN Osteomyelitis_hx=0;
+	IF PAH=. THEN PAH=0;
+	IF VTE_hx=. THEN VTE_hx=0;
+	ftime=min(PALIV_DATE,Death_DATE_p1,vte_date,3650);
+	fstat=0;
+	IF vte_date=ftime THEN fstat=1;
+	pred_score=	-0.000247+agep1*0.000306 +cancer_hx*0.018865+VTE_hx*0.360521 +Iron_hx*0.012928 +Osteomyelitis_hx*-0.027241 +PAH*0.026069;
+	VTE_risk_cat=0;
+	IF pred_score>0.009239 THEN VTE_risk_cat=2;
+	ELSE IF pred_score>0.005873 THEN VTE_risk_cat=1;
+	IF ftime<90 THEN DELETE; 
+RUN;
+
+proc MEANS data=analytical_cohort_1113 P50 P75;
+var pred_score;
+run;
+
+ods graphics on;
+ods select survivalplot(persist) failureplot(persist);
+PROC LIFETEST DATA=analytical_cohort_1113 plots=survival(failure test atrisk(maxlen=13));
+TIME ftime*fstat(0); 
+STRATA VTE_risk_cat;RUN;
