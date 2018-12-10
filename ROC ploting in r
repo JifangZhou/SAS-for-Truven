@@ -1,0 +1,19 @@
+install.packages("pROC")
+library(pROC)
+
+model_data<--read.csv("C:/Users/jzhou86/Documents/ASH Award Application/Preliminary analysis/model comparison 10Dec.csv", header = TRUE, sep = ",", stringsAsFactors = FALSE)
+
+
+
+
+rocobj1 <- plot.roc(model_data$VTE_180, model_data$VTE_pred,
+                    
+                    main="Statistical comparison", percent=TRUE, col="#67001f")
+
+rocobj2 <- lines.roc(model_data$PE_180, model_data$VTE_pred, percent=TRUE, col="#4393c3")
+
+rocobj3 <- lines.roc(model_data$VTE_3y, model_data$VTE_pred, percent=TRUE, col="#b2182b")
+
+rocobj4 <- lines.roc(model_data$VTE_5y, model_data$VTE_pred, percent=TRUE, col="#f4a582")
+
+legend("bottomright", legend=c("VTE 180-day AUC-ROC=0.846", "PE 180_day AUC-ROC=0.818","VTE 3-year AUC-ROC=0.765","VTE 5-year AUC-ROC=0.761"), col=c("#67001f", "#4393c3","#b2182b","#f4a582"), lwd=2)
