@@ -1,0 +1,68 @@
+LIBNAME  myfile "C:\Users\jzhou86\Documents\Katie Suda R01\Rawdata";
+
+DATA id_list;
+	SET myfile.abx_id_4dec;
+	IF INDSTRY = "A" THEN INDSTRY =1;
+	IF INDSTRY = "C" THEN INDSTRY =1;
+	IF INDSTRY = "W" THEN INDSTRY =4;
+	IF INDSTRY in ("1","2","3") THEN INDSTRY_cat="goods_prod";
+	IF INDSTRY in ("4","5","6","7") THEN INDSTRY_cat=" serv_prod";
+	IF INDSTRY=. THEN INDSTRY_cat=" MISSSING";
+	IF EESTATU = 1 THEN EESTATU_cat= "employed";
+	IF EESTATU = 2 THEN EESTATU_cat= "employed";
+	IF EESTATU = 3 THEN EESTATU_cat= "retired";
+	IF EESTATU = 4 THEN EESTATU_cat= "retired";
+	IF EESTATU = 5 THEN EESTATU_cat= "retired";
+	IF EESTATU = 6 THEN EESTATU_cat= "other";
+	IF EESTATU = 7 THEN EESTATU_cat= "other";
+	IF EESTATU = 8 THEN EESTATU_cat= "spouse_dep";
+	IF EESTATU = 9 THEN EESTATU_cat= "other";
+	if eeclass = '1' then salary_cat = 'salary';
+if eeclass = '2' then salary_cat = 'salary';
+if eeclass = '3' then salary_cat = 'salary';
+if eeclass = '4' then salary_cat = 'hourly';
+if eeclass = '5' then salary_cat = 'hourly';
+if eeclass = '6' then salary_cat = 'hourly';
+if eeclass = '7' then salary_cat = 'other';
+if eeclass = '8' then salary_cat = 'other';
+if eeclass = '9' then salary_cat = 'other';
+if eeclass = '1' then union_status = 'nonunion';
+if eeclass = '2' then union_status = 'union';
+if eeclass = '3' then union_status = 'other';
+if eeclass = '4' then union_status = 'nonunion';
+if eeclass = '5' then union_status = 'union';
+if eeclass = '6' then union_status = 'other';
+if eeclass = '7' then union_status = 'nonunion';
+if eeclass = '8' then union_status = 'union';
+if eeclass = '9' then union_status = 'other';
+abx_cat=3;
+IF AMOXICILLIN=1 THEN abx_cat=1;
+IF CLINDAMYCIN=1 THEN abx_cat=2;
+pcp_cat=0;
+IF number_pcp>0 THEN pcp_cat=1;
+special_cat=0;
+IF number_special>0 THEN special_cat=1;
+er_cat=0;
+IF number_er>0 THEN er_cat=1;
+adm_cat=0;
+IF number_adm>0 THEN adm_cat=1;
+   array change _numeric_;
+        do over change;
+            if change=. then change=0;
+        end;
+cohort_cat=0;
+IF index_year>2013 THEN cohort_cat=1;
+IF pj_prior=1;
+RUN;
+
+proc logistic data=id_list;
+      class sex (ref= "1") region (ref= "2")  
+			union_status salary_cat EESTATU_cat (ref="employed") INDSTRY_cat 
+			abx_cat (ref= "1");
+      model inappropriate_abx (ref= "0")= age sex region cohort_cat
+				PREVENTIVE DIAGNOSTIC RESTORATIV ORAL PERIODONTI ADJUNCTIVE 
+				ENDODONTIC IMPLANT PROSTHODON ORTHODONTI MAXILLOFAC missing 
+				union_status salary_cat EESTATU_cat INDSTRY_cat abx_cat rural 
+				immuno_compromise diabetes_list
+				pcp_cat special_cat er_cat adm_cat/ expb;
+   run;
