@@ -1,0 +1,52 @@
+*Assessment of cumulative dosage of bisphosphonate;
+ DATA id_list;
+ SET myfile.mm_id_list_seer_2;
+ RUN;
+
+  
+
+PROC sql;
+	CREATE table bis_records as
+	SELECT a.*
+	FROM  all_seer_bis_records a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID ;
+QUIT;
+
+*cumulative dose of bisphosphonate;
+PROC sql;
+	CREATE table bis_dose_tot as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			sum(dose) as total_dose
+	FROM bis_records
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table Mm_id_list_seer_3 as
+	SELECT a.*,
+			b.*
+	FROM id_list a 
+	LEFT JOIN bis_dose_tot b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA temp;
+	SET Mm_id_list_seer_3;
+	IF total_dose=. THEN total_dose=0;
+	IF bis_event=1;
+RUN;
+
+PROC MEANS DATA=temp MEAN STD MEDIAN P25 P75 min max;
+CLASS rac_recb_cat;
+VAR total_dose;
+RUN;
+
+
+
+
+
+
+
+
+AND a.bis_date>=b.MM_dx_date
