@@ -1,0 +1,109 @@
+*Assessment of Truven database;
+LIBNAME Myfile 'C:\Users\jzhou86\Documents\MM and VTE\Rawdata';
+
+DATA inpt_sum;
+SET Myfile.MM_ccaei_09 Myfile.MM_ccaei_10 Myfile.MM_ccaei_11 Myfile.MM_ccaei_12 Myfile.MM_ccaei_13
+	Myfile.MM_mdcri_09 Myfile.MM_mdcri_10 Myfile.MM_mdcri_11 Myfile.MM_mdcri_12 Myfile.MM_mdcri_13
+	Myfile.MM_ccaei_142 Myfile.MM_ccaei_151 
+	Myfile.MM_mdcri_142 Myfile.MM_mdcri_151;
+DATA outpt_svc;
+SET	Myfile.MM_ccaeo_09 Myfile.MM_ccaeo_10 Myfile.MM_ccaeo_11 Myfile.MM_ccaeo_12 Myfile.MM_ccaeo_13
+	Myfile.MM_mdcro_09 Myfile.MM_mdcro_10 Myfile.MM_mdcro_11 Myfile.MM_mdcro_12 Myfile.MM_mdcro_13
+	Myfile.MM_ccaeo_142 Myfile.MM_ccaeo_151 
+	Myfile.MM_mdcro_142 Myfile.MM_mdcro_151;
+DATA drug_pres;
+SET	Myfile.MM_ccaed_09 Myfile.MM_ccaed_10 Myfile.MM_ccaed_11 Myfile.MM_ccaed_12 Myfile.MM_ccaed_13
+	Myfile.MM_mdcrd_09 Myfile.MM_mdcrd_10 Myfile.MM_mdcrd_11 Myfile.MM_mdcrd_12 Myfile.MM_mdcrd_13
+	Myfile.MM_ccaed_142 Myfile.MM_ccaed_151  
+	Myfile.MM_mdcrd_142 Myfile.MM_mdcrd_151;
+DATA inpt_svc;
+SET	Myfile.MM_ccaes_09 Myfile.MM_ccaes_10 Myfile.MM_ccaes_11 Myfile.MM_ccaes_12 Myfile.MM_ccaes_13
+	Myfile.MM_mdcrs_09 Myfile.MM_mdcrs_10 Myfile.MM_mdcrs_11 Myfile.MM_mdcrs_12 Myfile.MM_mdcrs_13
+	Myfile.MM_ccaes_142 Myfile.MM_ccaes_151 
+	Myfile.MM_mdcrs_142 Myfile.MM_mdcrs_151;
+DATA Myfileance_all;
+SET	Myfile.MM_ccaet_09 Myfile.MM_ccaet_10 Myfile.MM_ccaet_11 Myfile.MM_ccaet_12 Myfile.MM_ccaet_13
+	Myfile.MM_mdcrt_09 Myfile.MM_mdcrt_10 Myfile.MM_mdcrt_11 Myfile.MM_mdcrt_12 Myfile.MM_mdcrt_13
+	Myfile.MM_ccaet_142 Myfile.MM_ccaet_151 
+	Myfile.MM_mdcrt_142 Myfile.MM_mdcrt_151;
+RUN;
+
+DATA id_list;
+	SET Myfile.id_list_adherence_add;
+RUN;
+
+DATA ipt_mm_biphos;
+	SET inpt_svc;
+	flag="None_000";
+	IF proc1="J2430" THEN flag="PAM_30";
+	IF proc1="J3487" THEN flag="ZOL_1";
+	IF proc1="C9115" THEN flag="ZOL_2";
+	IF proc1="J2430" THEN dose=30/90;
+	IF proc1="J3487" THEN dose=1/4;
+	IF proc1="C9115" THEN dose=2/4;
+	IF flag="None_000" THEN DELETE;
+	bis_date=svcdate;
+DATA opt_mm_biphos;
+	SET outpt_svc;
+	flag="None_000";
+	IF proc1="J2430" THEN flag="PAM_30";
+	IF proc1="J3487" THEN flag="ZOL_1";
+	IF proc1="C9115" THEN flag="ZOL_2";
+	IF proc1="J2430" THEN dose=30/90;
+	IF proc1="J3487" THEN dose=1/4;
+	IF proc1="C9115" THEN dose=2/4;
+	IF flag="None_000" THEN DELETE;
+	bis_date=svcdate;
+RUN;
+
+DATA all_dose;
+	SET ipt_mm_biphos  opt_mm_biphos;
+RUN;
+
+*Merge the index_MM diagnosis date;
+PROC sql;
+	CREATE table id_list_dx as
+	SELECT a.enrolid,
+			a.bis_date,
+			b.index_date
+	FROM all_dose a
+	INNER JOIN id_list b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA id_list_dx;
+	SET id_list_dx;
+	IF bis_date>=index_date;
+RUN;
+
+PROC sql;
+	CREATE table all_bis_date as
+	SELECT min(enrolid) as enrolid,
+			min(bis_date) as initiation_date
+	FROM id_list_dx
+	GROUP BY enrolid;
+QUIT;
+
+PROC sql;
+	CREATE table MM_id_list_truven as
+	SELECT a.*,
+			b.initiation_date
+	FROM id_list a 
+	LEFT JOIN all_bis_date b
+	ON a.enrolid=b.enrolid;
+QUIT;
+
+DATA MM_id_list_truven_1;
+	SET MM_id_list_truven;
+	bis_event=0;
+	IF initiation_date^=. THEN bis_event=1;
+	IF bis_event=0 THEN lag_time=DTEND-index_date;
+	IF bis_event=1 THEN lag_time=initiation_date-index_date;
+	IF lag_time>365 THEN bis_event=0;
+	IF lag_time>365 THEN lag_time=365;
+	IF age<=64 THEN age_cat=1;
+	IF 74>=age>=64 THEN age_cat=2;
+	IF age>=75 THEN age_cat=3;
+RUN;
+
+%CIF(DATA=MM_id_list_truven_1,TIME=lag_time,STATUS=bis_event,EVENT=1,CENSORED=0,GROUP=age_cat,OPTIONS=NOTEST);
