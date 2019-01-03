@@ -1,0 +1,1290 @@
+*Event assessment and association with IV BP doses;
+LIBNAME myfile "C:\Users\jzhou86\Documents\Greg SEER Project\Greg SEER Data\unzipped PEDSF";
+
+DATA myfile.id_analytical_28Dec;
+	SET id_list_final;
+	Day_90_censor_date=Day_90_censor+MM_dx_date;
+	year_5_cens=1827+MM_dx_date;
+	LOS_ini=min(DTEND, Day_90_censor_date,Medicare_death_date,initiation_date,year_5_cens)-MM_dx_date;
+	ini_event=0;
+	IF LOS_ini=initiation_date-MM_dx_date THEN ini_event=1;
+	IF initiation_date=. AND LOS_ini=Medicare_death_date-MM_dx_date THEN ini_event=2;
+	Gap_45_dis_date=Gap_45_discontinue+initiation_date;
+	LOS_dis=min(DTEND, Day_90_censor_date,Medicare_death_date, Gap_45_dis_date,year_5_cens)-initiation_date;
+	dis_event=0;
+	IF LOS_dis=Gap_45_dis_date-initiation_date THEN dis_event=1;
+	IF Gap_45_dis_date+45>=Medicare_death_date AND LOS_dis=Medicare_death_date-initiation_date THEN dis_event=2;
+	LOS_ini=LOS_ini/365.25;
+	LOS_dis=LOS_dis/365.25;
+RUN;
+
+DATA id_list;
+	SET myfile.id_analytical_28Dec;
+RUN;
+
+LIBNAME myfile "C:\Users\jzhou86\Documents\Greg SEER Project\Work directory";
+DATA medpar_mm;
+	SET myfile.medpar_mm;
+	date=catx(DIS_M, DIS_D,DIS_Y);
+	claim_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+	date=catx(ADM_M, ADM_D,ADM_Y);
+	adm_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+RUN;
+
+DATA nch_mm;
+	SET myfile.nch_mm;
+	date=catx(FREXPENM, FREXPEND,FREXPENY);
+	claim_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+DATA outsaf_mm;
+	SET myfile.outsaf_mm;
+	date=catx(FROM_DTM, FROM_DTD,FROM_DTY);
+	claim_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+DATA dme_mm;
+	SET myfile.dme_mm;
+	date=catx(FREXPENM, FREXPEND,FREXPENY);
+	claim_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.
+),5,4)),anydtdte.);
+RUN;
+*extract all admission at baseline 6 months before cancer diagnosis;
+
+PROC sql;
+	CREATE table medpar_baseline as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  medpar_mm a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date-180<=a.adm_date<b.MM_dx_date;
+QUIT;
+
+PROC sql;
+	CREATE table adm_num_baseline as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			count(adm_date) as adm_num
+	FROM  medpar_baseline
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC FREQ DATA=adm_num_baseline;
+	TABLE adm_num;
+RUN;
+
+PROC sql;
+	CREATE table id_list_1 as
+	SELECT a.*,
+			b.adm_num as adm_num_baseline
+	FROM  id_list a
+	LEFT JOIN adm_num_baseline b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA id_list_1;
+	SET id_list_1;
+	IF adm_num_baseline=. THEN adm_num_baseline=0;
+	adm_baseline=0;
+	IF adm_num_baseline>0 THEN adm_baseline=1;
+RUN;
+
+PROC FREQ DATA=id_list_1;
+	TABLE 	adm_baseline*bis_event
+			/nocol norow nopercent chisq;
+RUN;
+	
+PROC TTEST DATA=id_list_1;
+	CLASS bis_event;
+	VAR adm_num_baseline;
+RUN;
+
+*Bone density test;
+
+DATA test_claims;
+	SET nch_mm outsaf_mm dme_mm;
+	IF HCPCS in: ("77078","77080","77081","77082") THEN Bone_density_test=1;
+	IF Bone_density_test=1;
+RUN;
+
+PROC sql;
+	CREATE table test_claims as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  test_claims a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date-180<=a.claim_date<b.MM_dx_date;
+QUIT;
+
+PROC sql;
+	CREATE table test_num_baseline as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as test_num
+	FROM  test_claims
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_2 as
+	SELECT a.*,
+			b.*
+	FROM  id_list_1 a
+	LEFT JOIN test_num_baseline b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA id_list_2;
+	SET id_list_2;
+	bone_test_baseline=0;
+	IF test_num>0 THEN bone_test_baseline=1;
+RUN;
+
+PROC FREQ DATA=id_list_2;
+	TABLE 	bone_test_baseline*bis_event
+			/nocol norow nopercent chisq;
+RUN;
+
+*flue vaccin test;
+
+DATA test_claims;
+	SET nch_mm outsaf_mm dme_mm;
+	IF HCPCS in: ("90630","90653","90656","90658","90661",
+"90662","90672","90674","90686","90688","90682","90685",
+"90686","90687","90688","90756","Q2035","Q2037","Q2038","G0008") THEN flu=1;
+	IF flu=1;
+RUN;
+
+PROC sql;
+	CREATE table test_claims as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  test_claims a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date-180<=a.claim_date<b.MM_dx_date;
+QUIT;
+
+PROC sql;
+	CREATE table test_num_baseline as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as flu_baseline
+	FROM  test_claims
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_3 as
+	SELECT a.*,
+			b.*
+	FROM  id_list_2 a
+	LEFT JOIN test_num_baseline b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA id_list_3;
+	SET id_list_3;
+	IF flu_baseline=. THEN flu_baseline=0;
+RUN;
+
+PROC FREQ DATA=id_list_3;
+	TABLE 	flu_baseline*bis_event
+			/nocol norow nopercent chisq;
+RUN;
+
+*Baseline conditions assessment
+Falls;
+DATA case_medpar;
+	SET medpar_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ("E880","E881","E882","E883","E884","E885","E886","E887","E888") then case=1;
+		end;
+	IF case=1;
+RUN;
+DATA case_NCH;
+	SET nch_mm;
+	IF DGN_CD1 in: ("E880","E881","E882","E883","E884","E885","E886","E887","E888") then case=1;
+	IF DGN_CD2 in: ("E880","E881","E882","E883","E884","E885","E886","E887","E888") then case=1;
+	IF LINEDIAG in: ("E880","E881","E882","E883","E884","E885","E886","E887","E888") then case=1;
+	IF PDGNS_CD in: ("E880","E881","E882","E883","E884","E885","E886","E887","E888") then case=1;
+	IF case=1;
+RUN;
+
+DATA case_OUTSAF;
+	SET outsaf_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in ("E880","E881","E882","E883","E884","E885","E886","E887","E888") then case=1;
+		end;
+	IF case=1;
+RUN;
+
+DATA test_claims;
+	SET case_medpar case_NCH case_OUTSAF;
+RUN;
+
+PROC sql;
+	CREATE table test_claims as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  test_claims a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date-180<=a.claim_date<b.MM_dx_date;
+QUIT;
+
+PROC sql;
+	CREATE table event_list as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as case
+	FROM  test_claims
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_4 as
+	SELECT a.*,
+			b.case as fall_baseline
+	FROM  id_list_3 a
+	LEFT JOIN  event_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA id_list_4;
+	SET id_list_4;
+	IF fall_baseline=. THEN fall_baseline=0;
+RUN;
+
+PROC FREQ DATA=id_list_4;
+	TABLE 	fall_baseline*bis_event
+			/nocol norow nopercent chisq;
+RUN;
+*Gait abnormalities;
+DATA case_medpar;
+	SET medpar_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ("7812") then case=1;
+		end;
+	IF case=1;
+RUN;
+DATA case_NCH;
+	SET nch_mm;
+	IF DGN_CD1 in: ("7812") then case=1;
+	IF DGN_CD2 in: ("7812") then case=1;
+	IF LINEDIAG in: ("7812") then case=1;
+	IF PDGNS_CD in: ("7812") then case=1;
+	IF case=1;
+RUN;
+
+DATA case_OUTSAF;
+	SET outsaf_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in ("7812") then case=1;
+		end;
+	IF case=1;
+RUN;
+
+DATA test_claims;
+	SET case_medpar case_NCH case_OUTSAF;
+RUN;
+
+PROC sql;
+	CREATE table test_claims as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  test_claims a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date-180<=a.claim_date<b.MM_dx_date;
+QUIT;
+
+PROC sql;
+	CREATE table event_list as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as case
+	FROM  test_claims
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_5 as
+	SELECT a.*,
+			b.case as Gait_baseline
+	FROM  id_list_4 a
+	LEFT JOIN  event_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA id_list_5;
+	SET id_list_5;
+	IF Gait_baseline=. THEN Gait_baseline=0;
+RUN;
+
+PROC FREQ DATA=id_list_5;
+	TABLE 	Gait_baseline*bis_event
+			/nocol norow nopercent chisq;
+RUN;
+*Syncope;
+DATA case_medpar;
+	SET medpar_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ("7802") then case=1;
+		end;
+	IF case=1;
+RUN;
+DATA case_NCH;
+	SET nch_mm;
+	IF DGN_CD1 in: ("7802") then case=1;
+	IF DGN_CD2 in: ("7802") then case=1;
+	IF LINEDIAG in: ("7802") then case=1;
+	IF PDGNS_CD in: ("7802") then case=1;
+	IF case=1;
+RUN;
+
+DATA case_OUTSAF;
+	SET outsaf_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in ("7802") then case=1;
+		end;
+	IF case=1;
+RUN;
+
+DATA test_claims;
+	SET case_medpar case_NCH case_OUTSAF;
+RUN;
+
+PROC sql;
+	CREATE table test_claims as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  test_claims a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date-180<=a.claim_date<b.MM_dx_date;
+QUIT;
+
+PROC sql;
+	CREATE table event_list as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as case
+	FROM  test_claims
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_6 as
+	SELECT a.*,
+			b.case as Syncope_baseline
+	FROM  id_list_5 a
+	LEFT JOIN  event_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA id_list_6;
+	SET id_list_6;
+	IF Syncope_baseline=. THEN Syncope_baseline=0;
+RUN;
+
+PROC FREQ DATA=id_list_6;
+	TABLE 	Syncope_baseline*bis_event
+			/nocol norow nopercent chisq;
+RUN;
+
+*Alzheimer’s disease;
+DATA case_medpar;
+	SET medpar_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ("3310") then case=1;
+		end;
+	IF case=1;
+RUN;
+DATA case_NCH;
+	SET nch_mm;
+	IF DGN_CD1 in: ("3310") then case=1;
+	IF DGN_CD2 in: ("3310") then case=1;
+	IF LINEDIAG in: ("3310") then case=1;
+	IF PDGNS_CD in: ("3310") then case=1;
+	IF case=1;
+RUN;
+
+DATA case_OUTSAF;
+	SET outsaf_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in ("3310") then case=1;
+		end;
+	IF case=1;
+RUN;
+
+DATA test_claims;
+	SET case_medpar case_NCH case_OUTSAF;
+RUN;
+
+PROC sql;
+	CREATE table test_claims as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  test_claims a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date-180<=a.claim_date<b.MM_dx_date;
+QUIT;
+
+PROC sql;
+	CREATE table event_list as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as case
+	FROM  test_claims
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_7 as
+	SELECT a.*,
+			b.case as AD_baseline
+	FROM  id_list_6 a
+	LEFT JOIN  event_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA id_list_7;
+	SET id_list_7;
+	IF AD_baseline=. THEN AD_baseline=0;
+RUN;
+
+PROC FREQ DATA=id_list_7;
+	TABLE 	AD_baseline*bis_event
+			/nocol norow nopercent chisq;
+RUN;
+
+*Parkinson’s disease;
+DATA case_medpar;
+	SET medpar_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ("332") then case=1;
+		end;
+	IF case=1;
+RUN;
+DATA case_NCH;
+	SET nch_mm;
+	IF DGN_CD1 in: ("332") then case=1;
+	IF DGN_CD2 in: ("332") then case=1;
+	IF LINEDIAG in: ("332") then case=1;
+	IF PDGNS_CD in: ("332") then case=1;
+	IF case=1;
+RUN;
+
+DATA case_OUTSAF;
+	SET outsaf_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in ("332") then case=1;
+		end;
+	IF case=1;
+RUN;
+
+DATA test_claims;
+	SET case_medpar case_NCH case_OUTSAF;
+RUN;
+
+PROC sql;
+	CREATE table test_claims as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  test_claims a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date-180<=a.claim_date<b.MM_dx_date;
+QUIT;
+
+PROC sql;
+	CREATE table event_list as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as case
+	FROM  test_claims
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_8 as
+	SELECT a.*,
+			b.case as PD_baseline
+	FROM  id_list_7 a
+	LEFT JOIN  event_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA id_list_8;
+	SET id_list_8;
+	IF PD_baseline=. THEN PD_baseline=0;
+RUN;
+
+PROC FREQ DATA=id_list_8;
+	TABLE 	PD_baseline*bis_event
+			/nocol norow nopercent chisq;
+RUN;
+*Stroke or transient ischemic attack;
+DATA case_medpar;
+	SET medpar_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ("430", "431", "432", "43301", "43311", "43321", "43331", "43341", "43351", "43361", 
+					"43371", "43381", "43391", "434", "435", "436") then case=1;
+		end;
+	IF case=1;
+RUN;
+DATA case_NCH;
+	SET nch_mm;
+	IF DGN_CD1 in: ("430", "431", "432", "43301", "43311", "43321", "43331", "43341", "43351", "43361", 
+					"43371", "43381", "43391", "434", "435", "436") then case=1;
+	IF DGN_CD2 in: ("430", "431", "432", "43301", "43311", "43321", "43331", "43341", "43351", "43361", 
+					"43371", "43381", "43391", "434", "435", "436") then case=1;
+	IF LINEDIAG in: ("430", "431", "432", "43301", "43311", "43321", "43331", "43341", "43351", "43361", 
+					"43371", "43381", "43391", "434", "435", "436") then case=1;
+	IF PDGNS_CD in: ("430", "431", "432", "43301", "43311", "43321", "43331", "43341", "43351", "43361", 
+					"43371", "43381", "43391", "434", "435", "436") then case=1;
+	IF case=1;
+RUN;
+
+DATA case_OUTSAF;
+	SET outsaf_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in ("430", "431", "432", "43301", "43311", "43321", "43331", "43341", "43351", "43361", 
+					"43371", "43381", "43391", "434", "435", "436") then case=1;
+		end;
+	IF case=1;
+RUN;
+
+DATA test_claims;
+	SET case_medpar case_NCH case_OUTSAF;
+RUN;
+
+PROC sql;
+	CREATE table test_claims as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  test_claims a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date-180<=a.claim_date<b.MM_dx_date;
+QUIT;
+
+PROC sql;
+	CREATE table event_list as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as case
+	FROM  test_claims
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_9 as
+	SELECT a.*,
+			b.case as stroke_baseline
+	FROM  id_list_8 a
+	LEFT JOIN  event_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA id_list_9;
+	SET id_list_9;
+	IF stroke_baseline=. THEN stroke_baseline=0;
+RUN;
+
+PROC FREQ DATA=id_list_9;
+	TABLE 	stroke_baseline*bis_event
+			/nocol norow nopercent chisq;
+RUN;
+
+*Chronic Obstructive Pulmonary Disease And Allied Conditions including asthma;
+DATA case_medpar;
+	SET medpar_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ("490","491","492","493","494","495","496") then case=1;
+		end;
+	IF case=1;
+RUN;
+DATA case_NCH;
+	SET nch_mm;
+	IF DGN_CD1 in: ("490","491","492","493","494","495","496") then case=1;
+	IF DGN_CD2 in: ("490","491","492","493","494","495","496") then case=1;
+	IF LINEDIAG in: ("490","491","492","493","494","495","496") then case=1;
+	IF PDGNS_CD in: ("490","491","492","493","494","495","496") then case=1;
+	IF case=1;
+RUN;
+
+DATA case_OUTSAF;
+	SET outsaf_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in ("490","491","492","493","494","495","496") then case=1;
+		end;
+	IF case=1;
+RUN;
+
+DATA test_claims;
+	SET case_medpar case_NCH case_OUTSAF;
+RUN;
+
+PROC sql;
+	CREATE table test_claims as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  test_claims a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date-180<=a.claim_date<b.MM_dx_date;
+QUIT;
+
+PROC sql;
+	CREATE table event_list as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as case
+	FROM  test_claims
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_0 as
+	SELECT a.*,
+			b.case as copd_baseline
+	FROM  id_list_9 a
+	LEFT JOIN  event_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA id_list_0;
+	SET id_list_0;
+	IF copd_baseline=. THEN copd_baseline=0;
+RUN;
+
+PROC FREQ DATA=id_list_0;
+	TABLE 	copd_baseline*bis_event
+			/nocol norow nopercent chisq;
+RUN;
+
+*Heart failure;
+DATA case_medpar;
+	SET medpar_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ("4428", "4280","4281","4282","4283","4284","4289") then case=1;
+		end;
+	IF case=1;
+RUN;
+DATA case_NCH;
+	SET nch_mm;
+	IF DGN_CD1 in: ("4428", "4280","4281","4282","4283","4284","4289") then case=1;
+	IF DGN_CD2 in: ("4428", "4280","4281","4282","4283","4284","4289") then case=1;
+	IF LINEDIAG in: ("4428", "4280","4281","4282","4283","4284","4289") then case=1;
+	IF PDGNS_CD in: ("4428", "4280","4281","4282","4283","4284","4289") then case=1;
+	IF case=1;
+RUN;
+
+DATA case_OUTSAF;
+	SET outsaf_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in ("4428", "4280","4281","4282","4283","4284","4289") then case=1;
+		end;
+	IF case=1;
+RUN;
+
+DATA test_claims;
+	SET case_medpar case_NCH case_OUTSAF;
+RUN;
+
+PROC sql;
+	CREATE table test_claims as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  test_claims a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date-180<=a.claim_date<b.MM_dx_date;
+QUIT;
+
+PROC sql;
+	CREATE table event_list as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as case
+	FROM  test_claims
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_1 as
+	SELECT a.*,
+			b.case as HF_baseline
+	FROM  id_list_0 a
+	LEFT JOIN  event_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA id_list_1;
+	SET id_list_1;
+	IF HF_baseline=. THEN HF_baseline=0;
+RUN;
+
+PROC FREQ DATA=id_list_1;
+	TABLE 	HF_baseline*bis_event
+			/nocol norow nopercent chisq;
+RUN;
+
+*Major depressive disorder;
+DATA case_medpar;
+	SET medpar_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ("2962", "2963") then case=1;
+		end;
+	IF case=1;
+RUN;
+DATA case_NCH;
+	SET nch_mm;
+	IF DGN_CD1 in: ("2962", "2963") then case=1;
+	IF DGN_CD2 in: ("2962", "2963") then case=1;
+	IF LINEDIAG in: ("2962", "2963") then case=1;
+	IF PDGNS_CD in: ("2962", "2963") then case=1;
+	IF case=1;
+RUN;
+
+DATA case_OUTSAF;
+	SET outsaf_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in ("2962", "2963") then case=1;
+		end;
+	IF case=1;
+RUN;
+
+DATA test_claims;
+	SET case_medpar case_NCH case_OUTSAF;
+RUN;
+
+PROC sql;
+	CREATE table test_claims as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  test_claims a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date-180<=a.claim_date<b.MM_dx_date;
+QUIT;
+
+PROC sql;
+	CREATE table event_list as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as case
+	FROM  test_claims
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_2 as
+	SELECT a.*,
+			b.case as depression_baseline
+	FROM  id_list_1 a
+	LEFT JOIN  event_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA id_list_2;
+	SET id_list_2;
+	IF depression_baseline=. THEN depression_baseline=0;
+RUN;
+
+PROC FREQ DATA=id_list_2;
+	TABLE 	depression_baseline*bis_event
+			/nocol norow nopercent chisq;
+RUN;
+	
+*Hyperparathyroidism;
+DATA case_medpar;
+	SET medpar_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ("2520") then case=1;
+		end;
+	IF case=1;
+RUN;
+DATA case_NCH;
+	SET nch_mm;
+	IF DGN_CD1 in: ("2520") then case=1;
+	IF DGN_CD2 in: ("2520") then case=1;
+	IF LINEDIAG in: ("2520") then case=1;
+	IF PDGNS_CD in: ("2520") then case=1;
+	IF case=1;
+RUN;
+
+DATA case_OUTSAF;
+	SET outsaf_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in ("2520") then case=1;
+		end;
+	IF case=1;
+RUN;
+
+DATA test_claims;
+	SET case_medpar case_NCH case_OUTSAF;
+RUN;
+
+PROC sql;
+	CREATE table test_claims as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  test_claims a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date-180<=a.claim_date<b.MM_dx_date;
+QUIT;
+
+PROC sql;
+	CREATE table event_list as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as case
+	FROM  test_claims
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_3 as
+	SELECT a.*,
+			b.case as hyperthy_baseline
+	FROM  id_list_2 a
+	LEFT JOIN  event_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA id_list_3;
+	SET id_list_3;
+	IF hyperthy_baseline=. THEN hyperthy_baseline=0;
+RUN;
+
+PROC FREQ DATA=id_list_3;
+	TABLE 	hyperthy_baseline*bis_event
+			/nocol norow nopercent chisq;
+RUN;
+*
+Diabetes;
+DATA case_medpar;
+	SET medpar_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ("250") then case=1;
+		end;
+	IF case=1;
+RUN;
+DATA case_NCH;
+	SET nch_mm;
+	IF DGN_CD1 in: ("250") then case=1;
+	IF DGN_CD2 in: ("250") then case=1;
+	IF LINEDIAG in: ("250") then case=1;
+	IF PDGNS_CD in: ("250") then case=1;
+	IF case=1;
+RUN;
+
+DATA case_OUTSAF;
+	SET outsaf_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in ("250") then case=1;
+		end;
+	IF case=1;
+RUN;
+
+DATA test_claims;
+	SET case_medpar case_NCH case_OUTSAF;
+RUN;
+
+PROC sql;
+	CREATE table test_claims as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  test_claims a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date-180<=a.claim_date<b.MM_dx_date;
+QUIT;
+
+PROC sql;
+	CREATE table event_list as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as case
+	FROM  test_claims
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_4 as
+	SELECT a.*,
+			b.case as diabetes_baseline
+	FROM  id_list_3 a
+	LEFT JOIN  event_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA id_list_4;
+	SET id_list_4;
+	IF diabetes_baseline=. THEN diabetes_baseline=0;
+RUN;
+
+PROC FREQ DATA=id_list_4;
+	TABLE 	diabetes_baseline*bis_event
+			/nocol norow nopercent chisq;
+RUN;
+
+*Nephropathy;
+	
+DATA case_medpar;
+	SET medpar_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ("2504", "581", "583", "5851","5852","5853","5854","5855","5859") then case=1;
+		end;
+	IF case=1;
+RUN;
+DATA case_NCH;
+	SET nch_mm;
+	IF DGN_CD1 in: ("2504", "581", "583", "5851","5852","5853","5854","5855","5859") then case=1;
+	IF DGN_CD2 in: ("2504", "581", "583", "5851","5852","5853","5854","5855","5859") then case=1;
+	IF LINEDIAG in: ("2504", "581", "583", "5851","5852","5853","5854","5855","5859") then case=1;
+	IF PDGNS_CD in: ("2504", "581", "583", "5851","5852","5853","5854","5855","5859") then case=1;
+	IF case=1;
+RUN;
+
+DATA case_OUTSAF;
+	SET outsaf_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in ("2504", "581", "583", "5851","5852","5853","5854","5855","5859") then case=1;
+		end;
+	IF case=1;
+RUN;
+
+DATA test_claims;
+	SET case_medpar case_NCH case_OUTSAF;
+RUN;
+
+PROC sql;
+	CREATE table test_claims as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  test_claims a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date-180<=a.claim_date<b.MM_dx_date;
+QUIT;
+
+PROC sql;
+	CREATE table event_list as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as case
+	FROM  test_claims
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_5 as
+	SELECT a.*,
+			b.case as Nephropathy_baseline
+	FROM  id_list_4 a
+	LEFT JOIN  event_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA id_list_5;
+	SET id_list_5;
+	IF Nephropathy_baseline=. THEN Nephropathy_baseline=0;
+RUN;
+
+PROC FREQ DATA=id_list_5;
+	TABLE 	Nephropathy_baseline*bis_event
+			/nocol norow nopercent chisq;
+RUN;
+
+*ESRD;
+	
+DATA case_medpar;
+	SET medpar_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ("5856") then case=1;
+		end;
+	IF case=1;
+RUN;
+DATA case_NCH;
+	SET nch_mm;
+	IF DGN_CD1 in: ("5856") then case=1;
+	IF DGN_CD2 in: ("5856") then case=1;
+	IF LINEDIAG in: ("5856") then case=1;
+	IF PDGNS_CD in: ("5856") then case=1;
+	IF case=1;
+RUN;
+
+DATA case_OUTSAF;
+	SET outsaf_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in ("5856") then case=1;
+		end;
+	IF case=1;
+RUN;
+
+DATA test_claims;
+	SET case_medpar case_NCH case_OUTSAF;
+RUN;
+
+PROC sql;
+	CREATE table test_claims as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  test_claims a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date-180<=a.claim_date<b.MM_dx_date;
+QUIT;
+
+PROC sql;
+	CREATE table event_list as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as case
+	FROM  test_claims
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_6 as
+	SELECT a.*,
+			b.case as ESRD_baseline
+	FROM  id_list_5 a
+	LEFT JOIN  event_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA id_list_6;
+	SET id_list_6;
+	IF ESRD_baseline=. THEN ESRD_baseline=0;
+RUN;
+
+PROC FREQ DATA=id_list_6;
+	TABLE 	ESRD_baseline*bis_event
+			/nocol norow nopercent chisq;
+RUN;
+
+* Assessment of baseline and follow-up opioids and steroid use;
+*Opioids;
+
+DATA Opioids_NCH;
+	SET nch_mm;
+IF HCPCS in: ("J0592","J0745","J1170","S0092","J2175","J2180","J2270","J2271","J2300","J3010") THEN Opioids=1;
+	date=catx(FREXPENM, FREXPEND,FREXPENY);
+	Opioids_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.
+),5,4)),anydtdte.);
+	IF Opioids=1;
+RUN;
+
+DATA Opioids_OUTSAF;
+	SET outsaf_mm;
+	IF HCPCS in: ("J0592","J0745","J1170","S0092","J2175","J2180","J2270","J2271","J2300","J3010") THEN Opioids=1;
+	date=catx(FROM_DTM, FROM_DTD,FROM_DTY);
+	Opioids_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+	IF Opioids=1;
+RUN;
+
+DATA Opioids_claims;
+	SET Opioids_NCH Opioids_OUTSAF;
+RUN;
+
+PROC sql;
+	CREATE table case_claims_baseline as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  Opioids_claims a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date-180<=a.claim_date<b.MM_dx_date;
+QUIT;
+
+PROC sql;
+	CREATE table event_list_baseline as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as case_baseline
+	FROM  case_claims_baseline
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table case_claims_folup as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  Opioids_claims a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date<=a.claim_date<b.initiation_date;
+QUIT;
+
+PROC sql;
+	CREATE table event_list_folup as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as case_folup
+	FROM  case_claims_folup
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_7 as
+	SELECT a.*,
+			b.case_baseline as opioid_baseline
+	FROM  id_list_6 a
+	LEFT JOIN  event_list_baseline b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_8 as
+	SELECT a.*,
+			b.case_folup as opioid_folup
+	FROM  id_list_7 a
+	LEFT JOIN  event_list_folup b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA id_list_8;
+	SET id_list_8;
+	IF opioid_baseline=. THEN opioid_baseline=0;
+	IF opioid_folup=. THEN opioid_folup=0;
+RUN;
+
+PROC FREQ DATA=id_list_8;
+	TABLE 	opioid_baseline*bis_event
+			opioid_folup*bis_event
+			/nocol norow nopercent chisq;
+RUN;
+
+*Steroids;
+
+DATA Steroids_NCH;
+	SET nch_mm;
+IF HCPCS in: ("J8540","J7509","J7510","J7512") THEN Steroids=1;
+	date=catx(FREXPENM, FREXPEND,FREXPENY);
+	Steroids_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.
+),5,4)),anydtdte.);
+	IF Steroids=1;
+RUN;
+
+DATA Steroids_OUTSAF;
+	SET outsaf_mm;
+	IF HCPCS in: ("J8540","J7509","J7510","J7512") THEN Steroids=1;
+	date=catx(FROM_DTM, FROM_DTD,FROM_DTY);
+	Steroids_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+	IF Steroids=1;
+RUN;
+
+DATA Steroids_claims;
+	SET Steroids_NCH Steroids_OUTSAF;
+RUN;
+
+PROC sql;
+	CREATE table case_claims_baseline as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  Steroids_claims a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date-180<=a.claim_date<b.MM_dx_date;
+QUIT;
+
+PROC sql;
+	CREATE table event_list_baseline as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as case_baseline
+	FROM  case_claims_baseline
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table case_claims_folup as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  Steroids_claims a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date<=a.claim_date<b.initiation_date;
+QUIT;
+
+PROC sql;
+	CREATE table event_list_folup as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as case_folup
+	FROM  case_claims_folup
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_9 as
+	SELECT a.*,
+			b.case_baseline as Steroids_baseline
+	FROM  id_list_8 a
+	LEFT JOIN  event_list_baseline b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_0 as
+	SELECT a.*,
+			b.case_folup as Steroids_folup
+	FROM  id_list_9 a
+	LEFT JOIN  event_list_folup b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA id_list_0;
+	SET id_list_0;
+	IF Steroids_baseline=. THEN Steroids_baseline=0;
+	IF Steroids_folup=. THEN Steroids_folup=0;
+RUN;
+
+PROC FREQ DATA=id_list_0;
+	TABLE 	Steroids_baseline*bis_event
+			Steroids_folup*bis_event
+			/nocol norow nopercent chisq;
+RUN;
+
+PROC sql;
+	CREATE table id_list_0 as
+	SELECT a.*,
+			b.*
+	FROM  id_list_0 a
+	LEFT JOIN  CCI_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA analytical_MM_BP_30Dec;
+	SET id_list_0;
+	IF PI_date_after_MM ^=. AND PI_date_after_MM>=MM_dx_date THEN PI_time=-MM_dx_date+PI_date_after_MM;
+	IF	old_drug_date_after_MM ^=. AND old_drug_date_after_MM>=MM_dx_date THEN old_drug_time=-MM_dx_date+old_drug_date_after_MM;
+	Day_90_censor_date=Day_90_censor+MM_dx_date;
+	year_5_cens=1826.25+MM_dx_date;
+	LOS_ini=min(DTEND, Day_90_censor_date,Medicare_death_date,initiation_date,year_5_cens)-MM_dx_date;
+	ini_event=0;
+	IF LOS_ini=initiation_date-MM_dx_date THEN ini_event=1;
+	IF initiation_date=. AND LOS_ini=Medicare_death_date-MM_dx_date THEN ini_event=2;
+	Gap_45_dis_date=Gap_45_discontinue+initiation_date;
+	LOS_dis=min(DTEND, Day_90_censor_date,Medicare_death_date, Gap_45_dis_date,year_5_cens)-initiation_date;
+	dis_event=0;
+	IF LOS_dis=Gap_45_dis_date-initiation_date THEN dis_event=1;
+	IF Gap_45_dis_date+45>=Medicare_death_date AND LOS_dis=Medicare_death_date-initiation_date THEN dis_event=2;
+	LOS_ini=LOS_ini/365.25;
+	LOS_dis=LOS_dis/365.25;
+	IF CCI=. THEN CCI=0;
+	CCI_cat=3;
+	IF CCI=0 THEN CCI_cat=0;
+	ELSE IF CCI=1 OR CCI=2 THEN CCI_cat=1;
+RUN;
+
+DATA analytical_dis_BP_30Dec;
+	SET analytical_MM_BP_30Dec;
+	IF bis_event=1;
+	PI_exposure=0;
+	IF PI_date_after_MM ^=. AND PI_date_after_MM>=initiation_date THEN PI_exposure=1;
+	old_drug_exposure=0;
+	IF	old_drug_date_after_MM ^=. AND old_drug_date_after_MM>=initiation_date THEN old_drug_exposure=1;
+	any_chemo_exposure=0;
+	IF PI_exposure=1 OR old_drug_exposure=1 THEN any_chemo_exposure=1;
+RUN;
+
+PROC FREQ DATA=analytical_MM_BP_30Dec;
+	TABLE CCI_cat*bis_event/nocol norow nopercent chisq;
+RUN;
+
+PROC TTEST DATA=analytical_MM_BP_30Dec;
+	CLASS bis_event;
+	VAR CCI;
+RUN;
