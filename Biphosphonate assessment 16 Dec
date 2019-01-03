@@ -1,0 +1,317 @@
+*Assessment of biphosphonate in MM patients;
+LIBNAME myfile "C:\Users\jzhou86\Documents\Greg SEER Project\Work directory";
+
+DATA medpar_mm;
+	SET myfile.medpar_mm;
+DATA nch_mm;
+	SET myfile.nch_mm;
+DATA outsaf_mm;
+	SET myfile.outsaf_mm;
+DATA dme_mm;
+	SET myfile.dme_mm;
+RUN;
+
+DATA nch_mm_biphos;
+	SET nch_mm;
+	flag="None_000";
+	IF HCPCS="J2430" THEN flag="PAM_30";
+	IF HCPCS="J3487" THEN flag="ZOL_1";
+	IF HCPCS="C9115" THEN flag="ZOL_2";
+	IF HCPCS="J2430" THEN dose=30/90;
+	IF HCPCS="J3487" THEN dose=1/4;
+	IF HCPCS="C9115" THEN dose=2/4;
+	IF flag="None_000" THEN DELETE;
+	date=catx(FREXPENM, FREXPEND,FREXPENY);
+	bis_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.
+),5,4)),anydtdte.);
+DATA outsaf_mm_biphos;
+	SET outsaf_mm;
+	flag="None_000";
+	IF HCPCS="J2430" THEN flag="PAM_30";
+	IF HCPCS="J3487" THEN flag="ZOL_1";
+	IF HCPCS="C9115" THEN flag="ZOL_2";
+	IF HCPCS="J2430" THEN dose=30/90;
+	IF HCPCS="J3487" THEN dose=1/4;
+	IF HCPCS="C9115" THEN dose=2/4;
+	IF flag="None_000" THEN DELETE;
+	date=catx(FROM_DTM, FROM_DTD,FROM_DTY);
+	bis_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+RUN;
+
+PROC sql;
+	CREATE table mm_nch_id as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as phosph,
+			sum(dose) as dose
+	FROM nch_mm_biphos
+	GROUP BY PATIENT_ID;
+QUIT;
+PROC sql;
+	CREATE table mm_outsaf_id as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as phosph,
+			sum(dose) as dose
+	FROM outsaf_mm_biphos
+	GROUP BY PATIENT_ID;
+QUIT;
+
+DATA all_dose;
+	SET nch_mm_biphos  outsaf_mm_biphos;
+RUN;
+
+*Merge the index_MM diagnosis date;
+PROC sql;
+	CREATE table id_list_dx as
+	SELECT a.PATIENT_ID,
+			a.bis_date,
+			b.index_date
+	FROM all_dose a
+	INNER JOIN MM_id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA id_list_dx;
+	SET id_list_dx;
+	IF bis_date>=index_date;
+RUN;
+
+PROC sql;
+	CREATE table all_bis_date as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			min(bis_date) as initiation_date
+	FROM id_list_dx
+	GROUP BY PATIENT_ID;
+QUIT;
+PROC FREQ DATA=mm_nch_id;
+TABLE dose;RUN;
+PROC FREQ DATA=all_dose;
+TABLE dose;RUN;
+PROC MEANS DATA=all_dose;
+VAR dose;RUN;
+
+LIBNAME idlist "C:\Users\jzhou86\Documents\Greg SEER Project\Greg SEER Data\unzipped PEDSF";
+DATA MM_id_list;
+	SET idlist.analytical_mm_vte_4nov;
+RUN;
+
+PROC sql;
+	CREATE table MM_id_list_seer as
+	SELECT a.*,
+			b.initiation_date
+	FROM MM_id_list a 
+	LEFT JOIN all_bis_date b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA MM_id_list_seer;
+	SET MM_id_list_seer;
+	bis_event=0;
+	IF initiation_date^=. THEN bis_event=1;
+	IF bis_event=0 THEN lag_time=EOF-index_date;
+	IF bis_event=1 THEN lag_time=initiation_date-index_date;
+	IF lag_time>365 THEN bis_event=0;
+	IF lag_time>365 THEN lag_time=365;
+	urban_rural=0;
+	IF URBRUR=5 THEN urban_rural=1;
+	RAC_RECB_cat=3;
+	IF RAC_RECB=01 THEN RAC_RECB_cat=1;
+	IF RAC_RECB=02 THEN RAC_RECB_cat=2;
+	IF RAC_RECB=11 THEN RAC_RECB_cat=4;
+RUN;
+
+%CIF(DATA=MM_id_list_seer,TIME=lag_time,STATUS=bis_event,EVENT=1,CENSORED=0,GROUP=RAC_RECB_cat,OPTIONS=NOTEST);
+
+
+PROC FREQ DATA=MM_id_list_SEER;
+	TABLE RAC_RECB /chisq missing;
+RUN;
+
+*Assessment of end points of SEER data;
+*Vertebral fracture Spine, 
+733.13; 805.03; 805.23; 805.43; 805.63; 805.83;  805
+733.13; 806.03; 806.23; 806.43; 806.63; 806.83;  806
+*Non-vertebral hip fracture 
+733.14; 820.03; 820.23; 820.83; 820
+*Nonvertebral, nonhip fracture 
+807.03; 824.03; 824.23; 824.43; 824.63; 824.83; 824
+810.03; 810; 733.15; 821.03; 821.23; 821; 733.11; 812.03; 812.23; 812.43; 812;
+822.03; 822; 733.16; 823.03; 823.23; 823.83; 823; 733.12; 813.03; 813.23; 813.43;
+813.83; 813; 808.03; 808.23; 808.43; 808.83; 808; 733.10; 733.19; 733.81; 733.82
+
+*CPT codes;
+hip fracture
+27230–27248, 27254 
+vertebral fracture
+22305–22328, 22520–22522 
+Others
+23500–23515, 23665–23680, 23600–23630,
+24500–24587, 24620–24635, 24650–24685,
+25500–25575, 25600–25652, 25680–25685,
+27193–27194, 27217, 27220–27228, 27500–27514, 
+27520–27524, 27530–27540, 27750–27792,
+27808–27828, 20690, 20692, 29240–29779
+
+*Vertebral fracture Spine, 
+"73313","80503","80523","80543","80563","80583","805",
+"73313","80603","80623","80643","80663","80683","806"
+*Non-vertebral hip fracture 
+"73314","82003","82023","82083","820"
+*Nonvertebral, nonhip fracture 
+"80703","82403","82423","82443","82463","82483","824",
+"81003","810","73315","82103","82123","821","73311","81203","81223","81243","812",
+"82203","822","73316","82303","82323","82383","823","73312","81303","81323","81343",
+"81383","813","80803","80823","80843","80883","808","73310","73319","73381","73382"
+
+*CPT codes;
+vertebral fracture
+"22305","22306","22307","22308","22309","22310","22311","22312","22313","22314",
+"22315","22316","22317","22318","22319","22320","22321","22322","22323","22324",
+"22325","22326","22327","22328","22520","22521","22522"
+
+hip fracture
+"27230","27231","27232","27233","27234","27235","27236","27237","27238","27239",
+"27240","27241","27242","27243","27244","27245","27246","27247","27248","27254" 
+
+Others
+"23500","23501","23502","23503","23504","23505","23506","23507","23508","23509",
+"23510","23511","23512","23513","23514","23515","23665","23666","23667","23668",
+"23669","23670","23671","23672","23673","23674","23675","23676","23677","23678",
+"23679","23680","23600","23601","23602","23603","23604","23605","23606","23607",
+"23608","23609","23610","23611","23612","23613","23614","23615","23616","23617",
+"23618","23619","23620","23621","23622","23623","23624","23625","23626","23627",
+"23628","23629","23630","2450","2451","2452","2453","2454","2455","2456","2457",
+"24580","24581","24582","24583","24584","24585","24586","24587","2462","24630",
+"24631","24632","24633","24634","24635","2465","2466","2467","24680","24681",
+"24682","24683","24684","24685","2550","2551","2552","2553","2554","2555","2556",
+"25570","25571","25572","25573","25574","25575","2560","2561","2562","2563","2564",
+"25650","25651","25652","25680","25681","25682","25683","25684","25685","27193",
+"27194","27217","27220","27221","27222","27223","27224","27225","27226","27227",
+"27228","2750","27510","27511", "27512", "27513", "27514","27520","27521","27522",
+"27523","27524","2753","27540", "2775","2776","2777","2778","27790","27791","27792",
+"27808","27809","2781","27820","27821","27822","27823","27824","27825","27826",
+"27827","27828","20690","20692", "2924","2925","2926","2927","2928","2929","293",
+"294","295","296","2970","2971","2972","2973","2974","2975","2976","2977"
+
+* Vertebral fracture;
+DATA Vertebral_medpar;
+	SET medpar_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ("73313","80503","80523","80543","80563","80583","805",
+"73313","80603","80623","80643","80663","80683","806") then Vertebral=1;
+		end;
+	date=catx(DIS_M, DIS_D,DIS_Y);
+		Vertebral_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+	IF Vertebral=1;
+RUN;
+
+DATA Vertebral_NCH;
+	SET nch_mm;
+	IF DGN_CD1 in: ("73313","80503","80523","80543","80563","80583","805",
+"73313","80603","80623","80643","80663","80683","806") then Vertebral=1;
+	IF DGN_CD2 in: ("73313","80503","80523","80543","80563","80583","805",
+"73313","80603","80623","80643","80663","80683","806") then Vertebral=1;
+	IF LINEDIAG in: ("73313","80503","80523","80543","80563","80583","805",
+"73313","80603","80623","80643","80663","80683","806") then Vertebral=1;
+	IF PDGNS_CD in: ("73313","80503","80523","80543","80563","80583","805",
+"73313","80603","80623","80643","80663","80683","806") then Vertebral=1;
+IF HCPCS in: ("22305","22306","22307","22308","22309","22310","22311","22312","22313","22314",
+"22315","22316","22317","22318","22319","22320","22321","22322","22323","22324",
+"22325","22326","22327","22328","22520","22521","22522") THEN Vertebral=1;
+	date=catx(FREXPENM, FREXPEND,FREXPENY);
+	Vertebral_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.
+),5,4)),anydtdte.);
+	IF Vertebral=1;
+RUN;
+
+DATA Vertebral_OUTSAF;
+	SET outsaf_mm;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in ("73313","80503","80523","80543","80563","80583","805",
+"73313","80603","80623","80643","80663","80683","806") then Vertebral=1;
+		end;
+	IF HCPCS in: ("22305","22306","22307","22308","22309","22310","22311","22312","22313","22314",
+"22315","22316","22317","22318","22319","22320","22321","22322","22323","22324",
+"22325","22326","22327","22328","22520","22521","22522") THEN Vertebral=1;
+	date=catx(FROM_DTM, FROM_DTD,FROM_DTY);
+	Vertebral_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+	IF Vertebral=1;
+RUN;
+
+DATA all_Vertebral_dates;
+	SET Vertebral_medpar Vertebral_NCH Vertebral_OUTSAF;
+	KEEP PATIENT_ID Vertebral_date;
+RUN;
+
+PROC sql;
+	CREATE table Vertebral_list_all as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			min(Vertebral_date) as Vertebral_date
+	FROM all_Vertebral_dates
+	GROUP BY PATIENT_ID,Vertebral_date;
+QUIT;
+
+PROC sql;
+	CREATE table Vertebral_list_all as
+	SELECT min(PATIENT_ID) as PATIENT_ID
+	FROM all_Vertebral_dates
+	GROUP BY PATIENT_ID;
+QUIT;
+* nuqie pt is 12203. total events in database is 69699;
+
+PROC sql;
+	CREATE table id_list_dx as
+	SELECT a.PATIENT_ID,
+			a.Vertebral_date,
+			b.index_date
+	FROM Vertebral_list_all a
+	INNER JOIN MM_id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+*40357 events in eligible patients;
+DATA id_list_dx;
+	SET id_list_dx;
+	IF Vertebral_date>=index_date;
+RUN;
+* 27206 after or on diagnosis dates;
+PROC sql;
+	CREATE table Vertebral_date as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			min(Vertebral_date) as Vertebral_date
+	FROM id_list_dx
+	GROUP BY PATIENT_ID;
+QUIT;
+*5305 events first;
+
+PROC sql;
+	CREATE table MM_id_list_Vertebral as
+	SELECT a.*,
+			b.Vertebral_date
+	FROM MM_id_list a 
+	LEFT JOIN Vertebral_date b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA MM_id_list_Vertebral;
+	SET MM_id_list_Vertebral;
+	event=0;
+	IF Vertebral_date^=. THEN event=1;
+	IF event=0 THEN lag_time=EOF-index_date;
+	IF event=1 THEN lag_time=Vertebral_date-index_date;
+	IF lag_time>365 THEN event=0;
+	IF lag_time>365 THEN lag_time=365;
+	urban_rural=0;
+	IF URBRUR=5 THEN urban_rural=1;
+	RAC_RECB_cat=3;
+	IF RAC_RECB=01 THEN RAC_RECB_cat=1;
+	IF RAC_RECB=02 THEN RAC_RECB_cat=2;
+	IF RAC_RECB=11 THEN RAC_RECB_cat=4;
+	age=YRDX1-YR_BRTH;
+	IF 74>=age>=65 THEN age_cat=1;
+	IF age>=75 THEN age_cat=2;
+RUN;
+
+%CIF(DATA=MM_id_list_Vertebral,TIME=lag_time,STATUS=event,EVENT=1,CENSORED=0,GROUP=age_cat,OPTIONS=NOTEST);
+
+
