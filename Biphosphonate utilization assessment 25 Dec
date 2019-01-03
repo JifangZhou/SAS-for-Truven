@@ -1,0 +1,347 @@
+*Event assessment and association with IV BP doses;
+LIBNAME myfile "C:\Users\jzhou86\Documents\Greg SEER Project\Greg SEER Data\unzipped PEDSF";
+
+DATA id_list;
+	SET myfile.mm_id_list_seer_2;
+	IF bis_event=1 AND MM_dx_date>initiation_date THEN DELETE;
+DATA vertebral_list_seer;
+	SET myfile.vertebral_list_seer;
+DATA hip_list_seer;
+	SET myfile.hip_list_seer;
+DATA other_sre_list_seer;
+	SET myfile.other_sre_list_seer;
+DATA all_seer_bis_records;
+	SET myfile.all_seer_bis_records;
+RUN;
+
+*Assessment of biphosphonate in MM patients;
+LIBNAME myfile "C:\Users\jzhou86\Documents\Greg SEER Project\Work directory";
+
+DATA medpar_mm;
+	SET myfile.medpar_mm;
+	date=catx(DIS_M, DIS_D,DIS_Y);
+	claim_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+	KEEP PATIENT_ID claim_date;
+DATA nch_mm;
+	SET myfile.nch_mm;
+	date=catx(FREXPENM, FREXPEND,FREXPENY);
+	claim_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+	KEEP PATIENT_ID claim_date;
+DATA outsaf_mm;
+	SET myfile.outsaf_mm;
+	date=catx(FROM_DTM, FROM_DTD,FROM_DTY);
+	claim_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+	KEEP PATIENT_ID claim_date;
+DATA dme_mm;
+	SET myfile.dme_mm;
+	date=catx(FREXPENM, FREXPEND,FREXPENY);
+	claim_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.
+),5,4)),anydtdte.);
+KEEP PATIENT_ID claim_date;
+RUN;
+
+DATA all_dates;
+	SET medpar_mm nch_mm outsaf_mm dme_mm;
+	IF claim_date=. THEN DELETE;
+RUN;
+
+PROC sql;
+	CREATE table eligible_claims as
+	SELECT a.*
+	FROM  all_dates a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date+30>=a.claim_date>=b.MM_dx_date-30;
+QUIT;
+
+proc sql;
+	create table eligible_id as
+	select distinct PATIENT_ID
+ 	from eligible_claims
+ 	group by PATIENT_ID;
+quit;
+
+PROC sql;
+	CREATE table id_list_final as
+	SELECT a.*
+	FROM  id_list a
+	INNER JOIN eligible_id b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+*assessment of end-of follow-up for 90-day gap in medical care;
+PROC sql;
+	CREATE table eligible_claims as
+	SELECT a.*,
+			b.MM_dx_date as index_date
+	FROM all_dates a
+	INNER JOIN id_list_final b
+	ON a.PATIENT_ID=b.PATIENT_ID AND a.claim_date>b.MM_dx_date;
+QUIT;
+
+DATA eligible_claims;
+	SET eligible_claims;
+	DAYSUPP=1;
+	KEEP PATIENT_ID claim_date DAYSUPP index_date;
+	IF claim_date=. THEN DELETE;
+	IF claim_date>=index_date;
+RUN;
+proc sort data=eligible_claims nodupkey;by PATIENT_ID claim_date;run;
+data pers;
+ set eligible_claims;
+ by PATIENT_ID claim_date;
+ lstsply=claim_date+DAYSUPP;
+ gap=claim_date-lag(lstsply);
+ if first.PATIENT_ID=1 then epsd=1;
+ else if gap>=90 then epsd+1;/*to change the gap days allowed*/
+ format lstsply mmddyy10.;
+run;
+proc sql;
+	create table gap as
+	select distinct PATIENT_ID, 
+		max(epsd) as epsd
+ 	from pers
+ 	group by PATIENT_ID;
+quit;
+proc freq data=gap;tables epsd;run;
+proc sql;
+ create table persis as
+ select distinct PATIENT_ID, 
+	max(lstsply) as lstsply format mmddyy10.,
+ 	max(lstsply)-index_date as days_therapy /*days to discountinuation*/
+ from pers  where epsd=1
+ group by PATIENT_ID;
+quit;
+proc freq data=persis;tables days_therapy;run; 
+*Merge 90-day gap time to the analytical file;
+PROC sql;
+	CREATE table id_list_26Dec as
+	SELECT a.*,
+			b.days_therapy as Day_90_censor
+	FROM id_list_final a 
+	LEFT JOIN persis b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+*Event assessment and association with IV BP doses;
+LIBNAME myfile "C:\Users\jzhou86\Documents\Greg SEER Project\Greg SEER Data\unzipped PEDSF";
+
+DATA id_list;
+	SET myfile.mm_id_list_seer_2;
+DATA vertebral_list_seer;
+	SET myfile.vertebral_list_seer;
+DATA hip_list_seer;
+	SET myfile.hip_list_seer;
+DATA other_sre_list_seer;
+	SET myfile.other_sre_list_seer;
+DATA all_seer_bis_records;
+	SET myfile.all_seer_bis_records;
+RUN;
+
+*Assessment of persistence;
+PROC sql;
+	CREATE table bis_records_index as
+	SELECT a.*,
+			b.MM_dx_date as index_date
+	FROM all_seer_bis_records a
+	INNER JOIN id_list_26Dec b
+	ON a.PATIENT_ID=b.PATIENT_ID AND a.bis_date>=b.MM_dx_date;
+QUIT;
+
+DATA Drug_persistence;
+	SET bis_records_index;
+	DAYSUPP=1;
+	KEEP PATIENT_ID bis_date DAYSUPP index_date;
+	IF bis_date=. THEN DELETE;
+RUN;
+
+*Assessment of drug persistence;
+proc sort data=Drug_persistence;by PATIENT_ID bis_date;run;
+data pers;
+ set Drug_persistence;
+ by PATIENT_ID bis_date;
+ lstsply=bis_date+DAYSUPP;
+ gap=bis_date-lag(lstsply);
+ if first.PATIENT_ID=1 then epsd=1;
+ else if gap>=90 then epsd+1;/*to change the gap days allowed*/
+ format lstsply mmddyy10.;
+run;
+proc sql;
+	create table gap as
+	select distinct PATIENT_ID, 
+		max(epsd) as epsd
+ 	from pers
+ 	group by PATIENT_ID;
+quit;
+proc freq data=gap;tables epsd;run;
+proc sql;
+ create table persis as
+ select distinct PATIENT_ID, 
+	max(lstsply) as lstsply format mmddyy10.,
+ 	max(lstsply)-index_date as days_therapy /*days to discountinuation*/
+ from pers  where epsd=1
+ group by PATIENT_ID;
+quit;
+proc freq data=persis;tables days_therapy;run;
+*Merge 90-day gap time to the analytical file;
+PROC sql;
+	CREATE table id_list_26Dec as
+	SELECT a.*,
+			b.days_therapy as Gap_90_discontinue
+	FROM id_list_26Dec a 
+	LEFT JOIN persis b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+
+
+PROC FREQ DATA=id_list_final;
+	TABLE 	RAC_RECB_cat*bis_event
+			s_sex*bis_event
+			age_cat*bis_event
+			YRDX1*bis_event/nocol norow nopercent chisq;
+RUN;
+PROC FREQ DATA=id_list_final;
+	TABLE 	PI_exposure*bis_event
+			old_drug_exposure*bis_event
+			auto_HSCT*bis_event
+			allo_HSCT*bis_event/nocol norow nopercent missing chisq;
+RUN;
+
+PROC FREQ DATA=id_list_final;
+	TABLE 	Vertebral_pre*bis_event
+Vertebral_post*bis_event
+Hip_pre*bis_event
+Hip_post*bis_event
+Other_SRE_pre*bis_event
+Other_SRE_post*bis_event
+any_SRE_baseline*bis_event
+any_SRE_follow_up*bis_event
+/nocol norow nopercent missing chisq;
+RUN;
+*Treatment discontinuation assessment;
+PROC FREQ DATA=bis_records_index;
+TABLE flag;
+RUN;
+
+DATA Zol;
+	SET bis_records_index;
+	IF flag ^="PAM_30";
+RUN;
+proc sql;
+	create table zol_dt as
+	select distinct PATIENT_ID, 
+		min(bis_date) as zol_initiation_dt
+ 	from Zol
+ 	group by PATIENT_ID;
+quit;
+
+DATA Pam;
+	SET bis_records_index;
+	IF flag ="PAM_30";
+RUN;
+proc sql;
+	create table Pam_dt as
+	select distinct PATIENT_ID, 
+		min(bis_date) as Pam_initiation_dt
+ 	from Pam
+ 	group by PATIENT_ID;
+quit;
+
+PROC sql;
+	CREATE table id_list_26Dec as
+	SELECT a.*,
+			b.*
+	FROM id_list_26Dec a 
+	LEFT JOIN pam_dt b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+*First type used;
+
+
+DATA id_list_final;
+	SET id_list_26Dec;
+	bis_event=0;
+	IF initiation_date^=. THEN bis_event=1;
+	urban_rural=0;
+	IF URBRUR=5 THEN urban_rural=1;
+	RAC_RECB_cat=3;
+	IF RAC_RECB=01 THEN RAC_RECB_cat=1;
+	IF RAC_RECB=02 THEN RAC_RECB_cat=2;
+	IF RAC_RECB=11 THEN RAC_RECB_cat=4;
+	IF age_at_dx<=45 THEN age_cat=1;
+	IF 45<age_at_dx<=55 THEN age_cat=2;
+	IF 55<age_at_dx<=65 THEN age_cat=3;
+	IF 65<age_at_dx<=75 THEN age_cat=4;
+	IF 75<age_at_dx<=85 THEN age_cat=5;
+	IF 85<age_at_dx THEN age_cat=6;
+	lag_time=min(death_date,initiation_date,DTEND)-MM_dx_date;
+	IF lag_time<=0 THEN lag_time=0;
+	IF Day_90_censor=. THEN Day_90_censor=0;
+	IF bis_event=1 AND min(zol_initiation_dt,Pam_initiation_dt)=zol_initiation_dt THEN ini_type="ZOL";
+	IF bis_event=1 AND min(zol_initiation_dt,Pam_initiation_dt)=Pam_initiation_dt THEN ini_type="PAM";
+	IF ini_type="ZOL" AND Pam_initiation_dt ^=. AND Pam_initiation_dt>=zol_initiation_dt THEN Switch_type="ZOL_PAM";
+	IF ini_type="PAM" AND zol_initiation_dt ^=. AND Pam_initiation_dt<=zol_initiation_dt THEN Switch_type="PAM_ZOL";
+	lag_ini=initiation_date-MM_dx_date;
+	IF bis_event=0 THEN ini_yr=0;
+	ELSE IF lag_ini<=365 THEN ini_yr=1;
+	ELSE IF 365<lag_ini<=730 THEN ini_yr=2;
+	ELSE IF 730<lag_ini THEN ini_yr=3;
+RUN;
+
+PROC FREQ DATA=id_list_final;
+	TABLE 	RAC_RECB_cat*ini_yr
+/nocol norow nopercent missing chisq;
+RUN;
+
+	
+ MEDIAN P25 P75
+PROC MEANS DATA=id_list_final;
+	CLASS RAC_RECB_cat;
+	VAR Gap_45_discontinue;
+RUN;
+
+
+%CIF(DATA=id_list_final,TIME=lag_time,STATUS=bis_event,EVENT=1,CENSORED=0,GROUP=RAC_RECB_cat);
+
+LIBNAME idlist "C:\Users\jzhou86\Documents\Greg SEER Project\Greg SEER Data\unzipped PEDSF";
+
+DATA mm_list;
+	SET idlist.pedsf_myeloma_cancer;
+	date=catx(MED_DODM, MED_DODD,MED_DODY);
+	death_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.
+),5,4)),anydtdte.);
+RUN;
+
+PROC sql;
+	CREATE table id_list_final as
+	SELECT a.*,
+			b.death_date as Medicare_death_date
+	FROM id_list_final a
+	INNER JOIN mm_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA id_list_final_r;
+	SET id_list_final;
+	Day_90_censor_date=Day_90_censor+MM_dx_date;
+	year_5_cens=1827+MM_dx_date;
+	LOS_ini=min(DTEND, Day_90_censor_date,Medicare_death_date,initiation_date,year_5_cens)-MM_dx_date;
+	ini_event=0;
+	IF LOS_ini=initiation_date-MM_dx_date THEN ini_event=1;
+	IF initiation_date=. AND LOS_ini=Medicare_death_date-MM_dx_date THEN ini_event=2;
+	Gap_45_dis_date=Gap_45_discontinue+initiation_date;
+	LOS_dis=min(DTEND, Day_90_censor_date,Medicare_death_date, Gap_45_dis_date,year_5_cens)-initiation_date;
+	dis_event=0;
+	IF LOS_dis=Gap_45_dis_date-initiation_date THEN dis_event=1;
+	IF Gap_45_dis_date+45>=Medicare_death_date AND LOS_dis=Medicare_death_date-initiation_date THEN dis_event=2;
+	LOS_ini=LOS_ini/365.25;
+	LOS_dis=LOS_dis/365.25;
+RUN;
+
+DATA temp;
+	SET id_list_final_r;
+	IF bis_event=1;
+RUN;
+PROC FREQ DATA=temp;
+	TABLE 	death_date
+/nocol norow nopercent missing chisq;
+RUN;
