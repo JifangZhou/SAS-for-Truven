@@ -1,0 +1,200 @@
+LIBNAME idlist "C:\Users\jzhou86\Documents\Greg SEER Project\Greg SEER Data\unzipped PEDSF";
+
+DATA original_list;
+	SET idlist.pedsf_myeloma_cancer;
+
+IF RSNCD1=2 OR RSNCD1=3 THEN DELETE;
+RUN;
+IF payer_dx1 in (60, 61, 62, 63,64);
+PROC FREQ DATA=original_list;
+	TABLE payer_dx1 rsncd1;
+RUN;	
+LIBNAME myfile "C:\Users\jzhou86\Documents\Greg SEER Project\Work directory";
+DATA id_list;
+	SET myfile.analytical_mm_bp_30dec;
+RUN;
+
+PROC sql;
+	CREATE table id_list as
+	SELECT a.*,
+			b.payer_dx1
+	FROM id_list a
+	INNER JOIN original_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+*N=8472 restricting to Medicare as primary payer;
+
+DATA id_list;
+	SET id_list;
+	IF ESRD_baseline=1 THEN DELETE;
+	IF age_at_dx>=65;
+	payer_type="Non_Medicare";
+	IF payer_dx1 in (60, 61, 62, 63,64) THEN payer_type="Medicare";
+RUN;
+*N=8233 removing ESRD at baseline;
+*N=14231 only 65 years above and non ESRD;
+
+PROC sql;
+	CREATE table id_list_1 as
+	SELECT a.*,
+			b.score,
+			b.CFI
+	FROM id_list a
+	LEFT JOIN data_frailty_score b
+	ON a.PATIENT_ID=b.patid;
+QUIT;
+
+DATA listfile.analytical_MM_BP_31Dec;
+	SET id_list_1;
+	IF score=. THEN score=0;
+	IF score=0 THEN CFI="robust";
+RUN;
+
+
+PROC FREQ DATA=id_list;
+	TABLE payer_type;
+RUN;	
+
+*Create baseline files;
+
+LIBNAME myfile "C:\Users\jzhou86\Documents\Greg SEER Project\Work directory";
+DATA medpar_mm;
+	SET myfile.medpar_mm;
+	date=catx(DIS_M, DIS_D,DIS_Y);
+	claim_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+	date=catx(ADM_M, ADM_D,ADM_Y);
+	adm_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+RUN;
+
+DATA nch_mm;
+	SET myfile.nch_mm;
+	date=catx(FREXPENM, FREXPEND,FREXPENY);
+	claim_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+DATA outsaf_mm;
+	SET myfile.outsaf_mm;
+	date=catx(FROM_DTM, FROM_DTD,FROM_DTY);
+	claim_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+DATA dme_mm;
+	SET myfile.dme_mm;
+	date=catx(FREXPENM, FREXPEND,FREXPENY);
+	claim_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.
+),5,4)),anydtdte.);
+RUN;
+*extract all admission at baseline 6 months before cancer diagnosis;
+
+PROC sql;
+	CREATE table medpar_baseline as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  medpar_mm a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date-180<=a.claim_date<b.MM_dx_date;
+QUIT; 
+
+PROC sql;
+	CREATE table nch_baseline as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  nch_mm a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date-180<=a.claim_date<b.MM_dx_date;
+QUIT; 
+
+PROC sql;
+	CREATE table outsaf_baseline as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  outsaf_mm a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date-180<=a.claim_date<b.MM_dx_date;
+QUIT; 
+
+PROC sql;
+	CREATE table dme_baseline as
+	SELECT a.*,
+			b.MM_dx_date
+	FROM  dme_mm a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.MM_dx_date-180<=a.claim_date<b.MM_dx_date;
+QUIT; 
+DATA all_record;
+	SET medpar_baseline nch_baseline outsaf_baseline dme_baseline;
+	KEEP PATIENT_ID DGN_CD1-DGN_CD25 HCPCS;
+RUN;
+PROC SORT data=all_record;
+   by PATIENT_ID;
+run;
+
+DATA dx_1;
+	SET all_record;
+	RENAME PATIENT_ID=patid;
+	RENAME DGN_CD1=dx;
+	KEEP DGN_CD1 PATIENT_ID;
+DATA dx_2;
+	SET all_record;
+	RENAME PATIENT_ID=patid;
+	RENAME DGN_CD2=dx;
+	KEEP DGN_CD2 PATIENT_ID;
+DATA dx_3;
+	SET all_record;
+	RENAME PATIENT_ID=patid;
+	RENAME DGN_CD3=dx;
+	KEEP DGN_CD3 PATIENT_ID;
+DATA dx_4;
+	SET all_record;
+	RENAME PATIENT_ID=patid;
+	RENAME DGN_CD4=dx;
+	KEEP DGN_CD4 PATIENT_ID;
+DATA dx_5;
+	SET all_record;
+	RENAME PATIENT_ID=patid;
+	RENAME DGN_CD5=dx;
+	KEEP DGN_CD5 PATIENT_ID;
+DATA dx_6;
+	SET all_record;
+	RENAME PATIENT_ID=patid;
+	RENAME DGN_CD6=dx;
+	KEEP DGN_CD6 PATIENT_ID;
+DATA dx_7;
+	SET all_record;
+	RENAME PATIENT_ID=patid;
+	RENAME DGN_CD7=dx;
+	KEEP DGN_CD7 PATIENT_ID;
+DATA dx_8;
+	SET all_record;
+	RENAME PATIENT_ID=patid;
+	RENAME DGN_CD8=dx;
+	KEEP DGN_CD8 PATIENT_ID;
+DATA dx_9;
+	SET all_record;
+	RENAME PATIENT_ID=patid;
+	RENAME DGN_CD9=dx;
+	KEEP DGN_CD9 PATIENT_ID;
+DATA dx_10;
+	SET all_record;
+	RENAME PATIENT_ID=patid;
+	RENAME DGN_CD10=dx;
+	KEEP DGN_CD10 PATIENT_ID;
+DATA dx_11;
+	SET all_record;
+	RENAME PATIENT_ID=patid;
+	RENAME DGN_CD11=dx;
+	KEEP DGN_CD11 PATIENT_ID;
+DATA Dxfile;
+	SET dx_1 dx_2 dx_3 dx_4 dx_5 dx_6 dx_7 dx_8 dx_9 dx_10 dx_11;
+	IF dx=. THEN delete;
+RUN;
+
+DATA Pxfile;
+	SET all_record;
+	RENAME PATIENT_ID=patid;
+	RENAME HCPCS=px;
+	KEEP HCPCS PATIENT_ID;
+	IF HCPCS=. THEN delete;
+RUN;
+
+DATA Ids;
+	SET id_list;
+	RENAME PATIENT_ID=patid;
+	KEEP PATIENT_ID;
+RUN;
