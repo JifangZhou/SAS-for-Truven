@@ -1,0 +1,16 @@
+install.packages("MatchIt")
+library(MatchIt)
+Data_id <- read.csv("C:/Users/jzhou86/Documents/SCD Project/SCD and ESRD/id_list.csv", header = TRUE, sep = ",", stringsAsFactors = FALSE)
+
+mod_match <- matchit(case_control ~ SEX + age_cat, data = Data_id, ratio=5,replace = FALSE, exact=c("SEX","age_cat"))
+summary(mod_match)
+
+dta_m<-match.data(mod_match)
+dim(dta_m)
+summary(dta_m)
+
+mm<-mod_match$match.matrix
+tx<-as.numeric(row.names(mm))
+m<-cbind(tx,as.numeric(mm))
+
+control_id<-Data_id[m[,2],]
