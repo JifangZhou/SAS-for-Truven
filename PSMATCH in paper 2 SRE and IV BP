@@ -1,0 +1,1123 @@
+* redefine the SRE conditions and types in the MM cohort;
+LIBNAME myfile "C:\Users\jzhou86\Documents\Greg SEER Project\Work directory";
+
+DATA medpar_mm;
+	SET myfile.medpar_mm;
+DATA nch_mm;
+	SET myfile.nch_mm;
+DATA outsaf_mm;
+	SET myfile.outsaf_mm;
+DATA dme_mm;
+	SET myfile.dme_mm;
+RUN;
+
+* SRE events;
+*SPINAL CORD COMPRESSION=1;
+*PATHOLOGIC FRACTURES=2;
+*BONE PALLIATIVE RADIOTHERAPY=3;
+*BONE SURGERY=4;
+
+DATA SRE_medpar;
+	SET medpar_mm;
+        SRE_1=0;SRE_2=0;SRE_3=0;SRE_4=0;
+		array icd1 {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd1);
+		if icd1{i} in: ("3369","7211","7214","72141","72142","72191","7227","72270","72271","72273") then SRE_1=1;
+		end;
+		array icd2 {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd2);
+		if icd2{i} in: ("7331","73311","73312","73313","73314","73315","73316","73319") then SRE_2=1;
+		end;
+		array icd3 {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd3);
+		if icd3{i} in: ("9223","9224","9229","9230","9231","9232","9239") then SRE_3=1;
+		end;
+		array icd4 {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd4);
+		if icd4{i} in: ("7815","7845","7855","7915","7925","7935","7995","7812","7842",
+						"7852","7911","7921","7931","7991","7813","7843","7853","7912",
+						"7922","7932","7992","7817","7847","7857","7916","7926","7936",
+						"7996","0353","8102","8103","8104","8105","8106","8107","8108",
+						"7810","7811","7816","7819","7840","7841","7846","7849","7850",
+						"7851","7856","7859","7910","7919","7920","7929","7930","7939",
+						"7990","7999") then SRE_4=1;
+		end;
+		array icd_v {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd_v);
+		if icd_v{i} in: ("73313","80503","80523","80543","80563","80583","805",
+"73313","80603","80623","80643","80663","80683","806") then Vertebral=1;
+		end;
+		array icd_h {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd_h);
+		if icd_h{i} in: ("73314","82003","82023","82083","820") then Hip=1;
+		end;
+	date=catx(DIS_M, DIS_D,DIS_Y);
+		SRE_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+	IF SRE_1=0 AND SRE_2=0 AND SRE_3=0 AND SRE_4=0 THEN DELETE;
+RUN;
+
+DATA SRE_NCH;
+	SET nch_mm;
+    SRE_1=0;SRE_2=0;SRE_3=0;SRE_4=0;
+	IF DGN_CD1 	in: ("3369","7211","7214","72141","72142","72191","7227","72270","72271","72273") then SRE_1=1;
+	IF DGN_CD2 	in: ("3369","7211","7214","72141","72142","72191","7227","72270","72271","72273") then SRE_1=1;
+	IF LINEDIAG in: ("3369","7211","7214","72141","72142","72191","7227","72270","72271","72273") then SRE_1=1;
+	IF PDGNS_CD in: ("3369","7211","7214","72141","72142","72191","7227","72270","72271","72273") then SRE_1=1;
+	IF HCPCS 	in: ("63050","63051","22551","22552","63064","63066","61343","S2348",
+					"630758","S2350","S2351","63195","63197","63199","63001","63003",
+					"63005","63011","63015","63016","63017","63170","63012","63045",
+					"63046","63047","63048","63040","63042","63043","63044","63020",
+					"63030","63035","22224","22222","22214","22212","22207","22206",
+					"0274t","0275t","C9729","0202T","22865","0164T","0094T","0097T",
+					"63057","63056","63055","63081","63082","63087","63088","63101",
+					"63102","63103","63090","63091","63086","63085") THEN SRE_1=1;
+
+	IF DGN_CD1 	in: ("7331","73311","73312","73313","73314","73315","73316","73319") then SRE_2=1;
+	IF DGN_CD2 	in: ("7331","73311","73312","73313","73314","73315","73316","73319") then SRE_2=1;
+	IF LINEDIAG in: ("7331","73311","73312","73313","73314","73315","73316","73319") then SRE_2=1;
+	IF PDGNS_CD in: ("7331","73311","73312","73313","73314","73315","73316","73319") then SRE_2=1;
+	IF HCPCS 	in: ("8202","8208","8210","8212","73311","8120","8122","8124","73312","8130",
+					"8132","8134","8138","73316","8230","8232","8238","73313","805","806","8200",
+					"7331","73310","73319","800","807","8080","8082","8084","8088","8100","8240",
+					"8242","80701","80702","80703","80704","80705","80706","80707","80708",
+					"80709","80841","80842","80843","80849") then SRE_2=1;
+
+	IF DGN_CD1 	in: ("9223","9224","9229","9230","9231","9232","9239") then SRE_3=1;
+	IF DGN_CD2 	in: ("9223","9224","9229","9230","9231","9232","9239") then SRE_3=1;
+	IF LINEDIAG in: ("9223","9224","9229","9230","9231","9232","9239") then SRE_3=1;
+	IF PDGNS_CD in: ("9223","9224","9229","9230","9231","9232","9239") then SRE_3=1;
+	IF HCPCS 	in: ("A9600","A9604","A9605","C9401","G0173","G0174","G0243","G0251",
+					"G0339","G0340","J3005","0073T","61793","61796","61797","61798",
+					"63620","63621,77371","77372","77373","77401","77402","77403",
+					"77404","77406","77407","77408","77409","77411","77412","77413",
+					"77414","77416","77418","79005","79101","79200","79300","79400",
+					"79403","79440","79445","79999") then SRE_3=1;
+
+	IF DGN_CD1 	in: ("7815","7845","7855","7915","7925","7935","7995","7812","7842",
+"7852","7911","7921","7931","7991","7813","7843","7853","7912",
+"7922","7932","7992","7817","7847","7857","7916","7926","7936",
+"7996","0353","8102","8103","8104","8105","8106","8107","8108",
+"7810","7811","7816","7819","7840","7841","7846","7849","7850",
+"7851","7856","7859","7910","7919","7920","7929","7930","7939",
+"7990","7999") then SRE_4=1;
+	IF DGN_CD2 	in: ("7815","7845","7855","7915","7925","7935","7995","7812","7842",
+"7852","7911","7921","7931","7991","7813","7843","7853","7912",
+"7922","7932","7992","7817","7847","7857","7916","7926","7936",
+"7996","0353","8102","8103","8104","8105","8106","8107","8108",
+"7810","7811","7816","7819","7840","7841","7846","7849","7850",
+"7851","7856","7859","7910","7919","7920","7929","7930","7939",
+"7990","7999") then SRE_4=1;
+	IF LINEDIAG in: ("7815","7845","7855","7915","7925","7935","7995","7812","7842",
+"7852","7911","7921","7931","7991","7813","7843","7853","7912",
+"7922","7932","7992","7817","7847","7857","7916","7926","7936",
+"7996","0353","8102","8103","8104","8105","8106","8107","8108",
+"7810","7811","7816","7819","7840","7841","7846","7849","7850",
+"7851","7856","7859","7910","7919","7920","7929","7930","7939",
+"7990","7999") then SRE_4=1;
+	IF PDGNS_CD in: ("7815","7845","7855","7915","7925","7935","7995","7812","7842",
+"7852","7911","7921","7931","7991","7813","7843","7853","7912",
+"7922","7932","7992","7817","7847","7857","7916","7926","7936",
+"7996","0353","8102","8103","8104","8105","8106","8107","8108",
+"7810","7811","7816","7819","7840","7841","7846","7849","7850",
+"7851","7856","7859","7910","7919","7920","7929","7930","7939",
+"7990","7999") then SRE_4=1;
+	IF HCPCS 	in: ("27187","27235","27236","27244","27245","27248","27269","27495",
+"27506","27507","27509","27511","27513","27514","23615","23616",
+"23630","24498","24515","24516","24538","24545","24546","24566",
+"24575","24579","24582","24586","24587","24635","24665","24666",
+"24685","25490","25491","25492","25515","25525","25526","25545",
+"25606","25607","25608","25609","27535","27536","27745","27756",
+"27758","27759","27766","27769","27784","27792","27826","27827",
+"22325","22326","22327","22328","22520","22521","22522","22532",
+"22533","22534","22548","22550","22554","22555","22556","22558",
+"22565","22585","22590","22595","22600","22610","22612","22614",
+"22615","22625","22630","22632","20982","23490","23515","23585",
+"27215","27216","27217","27218","27226","27227","27228","27524",
+"27540","22523","22524","22525","22526","22527","25574","25575") then SRE_4=1;
+
+	IF DGN_CD1 in: ("73313","80503","80523","80543","80563","80583","805",
+"73313","80603","80623","80643","80663","80683","806") then Vertebral=1;
+	IF DGN_CD2 in: ("73313","80503","80523","80543","80563","80583","805",
+"73313","80603","80623","80643","80663","80683","806") then Vertebral=1;
+	IF LINEDIAG in: ("73313","80503","80523","80543","80563","80583","805",
+"73313","80603","80623","80643","80663","80683","806") then Vertebral=1;
+	IF PDGNS_CD in: ("73313","80503","80523","80543","80563","80583","805",
+"73313","80603","80623","80643","80663","80683","806") then Vertebral=1;
+IF HCPCS in: ("22305","22306","22307","22308","22309","22310","22311","22312","22313","22314",
+"22315","22316","22317","22318","22319","22320","22321","22322","22323","22324",
+"22325","22326","22327","22328","22520","22521","22522") THEN Vertebral=1;
+
+	IF DGN_CD1 in: ("73314","82003","82023","82083","820") then Hip=1;
+	IF DGN_CD2 in: ("73314","82003","82023","82083","820") then Hip=1;
+	IF LINEDIAG in: ("73314","82003","82023","82083","820") then Hip=1;
+	IF PDGNS_CD in: ("73314","82003","82023","82083","820") then Hip=1;
+	IF HCPCS in: ("27230","27231","27232","27233","27234","27235","27236","27237","27238","27239",
+"27240","27241","27242","27243","27244","27245","27246","27247","27248","27254" ) THEN Hip=1;
+	date=catx(FREXPENM, FREXPEND,FREXPENY);
+	SRE_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.
+),5,4)),anydtdte.);
+	IF SRE_1=0 AND SRE_2=0 AND SRE_3=0 AND SRE_4=0 THEN DELETE;
+RUN;
+
+DATA SRE_OUTSAF;
+	SET outsaf_mm;
+        SRE_1=0;SRE_2=0;SRE_3=0;SRE_4=0;
+		array icd1 {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd1);
+		if icd1{i} in: ("3369","7211","7214","72141","72142","72191","7227","72270","72271","72273") then SRE_1=1;
+		end;
+		array icd2 {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd2);
+		if icd2{i} in: ("7331","73311","73312","73313","73314","73315","73316","73319") then SRE_2=1;
+		end;
+		array icd3 {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd3);
+		if icd3{i} in: ("9223","9224","9229","9230","9231","9232","9239") then SRE_3=1;
+		end;
+		array icd4 {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd4);
+		if icd4{i} in: ("7815","7845","7855","7915","7925","7935","7995","7812","7842",
+						"7852","7911","7921","7931","7991","7813","7843","7853","7912",
+						"7922","7932","7992","7817","7847","7857","7916","7926","7936",
+						"7996","0353","8102","8103","8104","8105","8106","8107","8108",
+						"7810","7811","7816","7819","7840","7841","7846","7849","7850",
+						"7851","7856","7859","7910","7919","7920","7929","7930","7939",
+						"7990","7999") then SRE_4=1;
+		end;
+
+	IF HCPCS 	in: ("63050","63051","22551","22552","63064","63066","61343","S2348",
+					"630758","S2350","S2351","63195","63197","63199","63001","63003",
+					"63005","63011","63015","63016","63017","63170","63012","63045",
+					"63046","63047","63048","63040","63042","63043","63044","63020",
+					"63030","63035","22224","22222","22214","22212","22207","22206",
+					"0274t","0275t","C9729","0202T","22865","0164T","0094T","0097T",
+					"63057","63056","63055","63081","63082","63087","63088","63101",
+					"63102","63103","63090","63091","63086","63085") then SRE_1=1;
+
+	IF HCPCS 	in: ("8202","8208","8210","8212","73311","8120","8122","8124","73312","8130",
+					"8132","8134","8138","73316","8230","8232","8238","73313","805","806","8200",
+					"7331","73310","73319","800","807","8080","8082","8084","8088","8100","8240",
+					"8242","80701","80702","80703","80704","80705","80706","80707","80708",
+					"80709","80841","80842","80843","80849") then SRE_2=1;
+
+	IF HCPCS 	in: ("A9600","A9604","A9605","C9401","G0173","G0174","G0243","G0251",
+					"G0339","G0340","J3005","0073T","61793","61796","61797","61798",
+					"63620","63621,77371","77372","77373","77401","77402","77403",
+					"77404","77406","77407","77408","77409","77411","77412","77413",
+					"77414","77416","77418","79005","79101","79200","79300","79400",
+					"79403","79440","79445","79999") then SRE_3=1;
+
+	IF HCPCS 	in: ("27187","27235","27236","27244","27245","27248","27269","27495",
+"27506","27507","27509","27511","27513","27514","23615","23616",
+"23630","24498","24515","24516","24538","24545","24546","24566",
+"24575","24579","24582","24586","24587","24635","24665","24666",
+"24685","25490","25491","25492","25515","25525","25526","25545",
+"25606","25607","25608","25609","27535","27536","27745","27756",
+"27758","27759","27766","27769","27784","27792","27826","27827",
+"22325","22326","22327","22328","22520","22521","22522","22532",
+"22533","22534","22548","22550","22554","22555","22556","22558",
+"22565","22585","22590","22595","22600","22610","22612","22614",
+"22615","22625","22630","22632","20982","23490","23515","23585",
+"27215","27216","27217","27218","27226","27227","27228","27524",
+"27540","22523","22524","22525","22526","22527","25574","25575") then SRE_4=1;
+
+	array icd_v {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd_v);
+		if icd_v{i} in ("73313","80503","80523","80543","80563","80583","805",
+"73313","80603","80623","80643","80663","80683","806") then Vertebral=1;
+	end;
+	IF HCPCS in: ("22305","22306","22307","22308","22309","22310","22311","22312","22313","22314",
+"22315","22316","22317","22318","22319","22320","22321","22322","22323","22324",
+"22325","22326","22327","22328","22520","22521","22522") THEN Vertebral=1;
+
+	array icd_h {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd_h);
+		if icd_h{i} in: ("73314","82003","82023","82083","820") then Hip=1;
+	end;
+	IF HCPCS in: ("27230","27231","27232","27233","27234","27235","27236","27237","27238","27239",
+"27240","27241","27242","27243","27244","27245","27246","27247","27248","27254" ) THEN Hip=1;
+
+	date=catx(FROM_DTM, FROM_DTD,FROM_DTY);
+	SRE_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+	IF SRE_1=0 AND SRE_2=0 AND SRE_3=0 AND SRE_4=0 THEN DELETE;
+RUN;
+
+DATA all_SRE_dates;
+	SET SRE_medpar SRE_NCH SRE_OUTSAF;
+	KEEP PATIENT_ID SRE_date SRE_1-SRE_4 Vertebral Hip;
+RUN;
+
+*NOTE: There were 33212 observations read from the data set WORK.SRE_MEDPAR.
+NOTE: There were 1600903 observations read from the data set WORK.SRE_NCH.
+NOTE: There were 1446973 observations read from the data set WORK.SRE_OUTSAF.;
+
+
+PROC FREQ DATA=all_SRE_dates;
+	TABLE SRE;
+RUN;
+*generate unique record on day and types;
+PROC sql;
+	CREATE table SRE_dates_unique as
+	SELECT 	min(PATIENT_ID) as PATIENT_ID,
+			min(SRE_date) as SRE_date,
+			max(SRE_1) as SRE_1,
+			max(SRE_2) as SRE_2,
+			max(SRE_3) as SRE_3,
+			max(SRE_4) as SRE_4,
+			max(Vertebral) as Vertebral,
+			max(Hip) as Hip
+	FROM all_SRE_dates
+	GROUP BY PATIENT_ID,SRE_date;
+QUIT;
+*unique  1707717 records for all SRE events;
+*number of unique patient id at dates;
+PROC sql;
+	CREATE table SRE_list_unique as
+	SELECT 	min(PATIENT_ID) as PATIENT_ID,
+			count(SRE_date) as SRE_number
+	FROM all_SRE_dates
+	GROUP BY PATIENT_ID;
+QUIT;
+* 35730 patient ID list;
+
+*Assessment of episode-based SRE events by grouping 21 day events into one;
+*evaluation of the adherence rates;
+DATA SRE_dates_unique;
+	SET SRE_dates_unique;
+	DAYSUPP=21;
+RUN;
+
+proc sort data=SRE_dates_unique;by PATIENT_ID SRE_date;run;
+
+data pers;
+ set SRE_dates_unique;
+ by PATIENT_ID SRE_date;
+ lstsply=SRE_date+DAYSUPP;
+ gap=SRE_date-lag(lstsply);
+ if first.PATIENT_ID=1 then epsd=1;
+ else if gap>60 then epsd+1;/*to change the gap days allowed*/
+ format lstsply mmddyy10.;
+run;
+
+proc sql;
+	create table gap as
+	select distinct PATIENT_ID, 
+		max(epsd) as epsd
+ 	from pers
+ 	group by PATIENT_ID;
+quit;
+proc freq data=gap;tables epsd;run;
+
+*Select unique event date for each episode;
+proc sql;
+	create table episode_unique as
+	select min(PATIENT_ID) as PATIENT_ID, 
+		min(epsd) as epsd,
+		min(SRE_date) as SRE_date,
+		max(SRE_1) as SRE_1,
+		max(SRE_2) as SRE_2,
+		max(SRE_3) as SRE_3,
+		max(SRE_4) as SRE_4,
+		max(Vertebral) as Vertebral,
+		max(Hip) as Hip
+ 	from pers
+ 	group by PATIENT_ID,epsd;
+quit;
+
+PROC FREQ DATA=episode_unique;
+	TABLE Hip*epsd/nocol norow nopercent;
+RUN;
+
+DATA myfile.episode_unique_27Jan;
+	SET episode_unique;
+RUN;
+
+*Assess temporal distribution of SRE by MM dx date and IV BP initiation date;
+*MM diagnosis date, 3 months;
+*Event assessment and association with IV BP doses;
+LIBNAME myfile "C:\Users\jzhou86\Documents\Greg SEER Project\Greg SEER Data\unzipped PEDSF";
+LIBNAME listfile "C:\Users\jzhou86\Documents\Greg SEER Project\Work directory";
+DATA id_list;
+	SET listfile.ini_id_list_6jan;
+RUN;
+DATA SRE_1_list_seer;
+	SET listfile.episode_unique_27jan;
+	IF SRE_1=1;
+RUN;
+DATA SRE_2_list_seer;
+	SET listfile.episode_unique_27jan;
+	IF SRE_2=1;
+DATA SRE_3_list_seer;
+	SET listfile.episode_unique_27jan;
+	IF SRE_3=1;
+DATA SRE_4_list_seer;
+	SET listfile.episode_unique_27jan;
+	IF SRE_4=1;
+DATA all_SRE_list;
+	SET listfile.episode_unique_27jan;
+RUN;
+
+*propensity score matching of SRE-free survival accounting for death as competing risk;
+*Match by baseline characteristics and outcoming is initiation of IV bisphosphonate within 180-day after initiation;
+DATA id_list_PS;
+	SET id_list;
+	case=0;
+	IF lag_ini<=180 AND lag_ini^=. THEN case=1;
+RUN;
+
+*assessment of SRE at baseline anytime 6 months prior to dx and 60 days after diagnosis;
+PROC sql;
+	CREATE table all_SRE_list_index as
+	SELECT a.*,
+			b.MM_dx_date,
+			b.initiation_date
+	FROM all_SRE_list a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA all_SRE_list_baseline;
+	SET all_SRE_list_index;
+	IF MM_dx_date-180<=SRE_date<MM_dx_date+60;
+RUN;
+
+PROC sql;
+	CREATE table SRE_base_list as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as baseline_SRE
+	FROM all_SRE_list_baseline
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_PS as
+	SELECT a.*,
+			b.baseline_SRE as baseline_SRE_new
+	FROM id_list_PS a
+	LEFT JOIN SRE_base_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA id_list_PS;
+	SET id_list_PS;
+	IF baseline_SRE_new=. THEN baseline_SRE_new=0;
+RUN;
+
+PROC FREQ DATA=id_list_PS;
+	TABLE case*baseline_SRE_new;
+RUN;
+
+DATA listfile.id_list_paper2_ps_before;
+ 	SET id_list_PS;
+RUN;
+
+proc psmatch data=id_list_PS region=cs;
+class age_cat s_sex RAC_RECB_cat YRDX1 case;
+psmodel case(Treated='1')= age_cat s_sex RAC_RECB_cat YRDX1 
+bone_test_baseline flu_baseline pneumo_baseline
+fall_baseline Anemia_baseline Hypercalcemia_baseline Osteoporosis_baseline RA_baseline Gait_baseline
+Syncope_baseline AD_baseline PD_baseline stroke_baseline copd_baseline HF_baseline depression_baseline
+diabetes_baseline Nephropathy_baseline CCI_cat baseline_SRE_new;
+match method=greedy(k=1) stat=lps caliper=0.2;
+output out(obs=match)=OutEx1 matchid=_MatchID;
+run;
+
+PROC FREQ DATA=OutEx1;
+TABLE _MatchID;RUN;
+
+*Assign the proxy IV initiation date to the matched control group;
+DATA case_list;
+	SET OutEx1;
+	IF case=1;
+RUN;
+
+PROC sql;
+	CREATE table OutEx2 as
+	SELECT a.*,
+			b.lag_ini as lag_ini_dx
+	FROM OutEx1 a
+	LEFT JOIN case_list b
+	ON a._MatchID=b._MatchID;
+QUIT;
+
+DATA OutEx3;
+	SET OutEx2;
+	index_date=MM_dx_date+lag_ini_dx;
+	IF min(Day_90_censor_date,Medicare_death_date,year_5_cens,initiation_date, DTEND)<index_date THEN DELETE;
+RUN;
+*Delete cases without control;
+
+PROC sql;
+	CREATE table temp as
+	SELECT min(_MatchID) as _MatchID,
+			count(_MatchID) as number
+	FROM OutEx3 a
+	GROUP BY _MatchID;
+QUIT;
+
+DATA temp;
+	SET temp;
+	IF number=2;
+RUN;
+
+PROC sql;
+	CREATE table OutEx4 as
+	SELECT a.*
+	FROM OutEx3 a
+	INNER JOIN temp b
+	ON a._MatchID=b._MatchID;
+QUIT;
+*N=9176;
+*add first SRE event into the cohort, by SRE type and all SRE;
+PROC sql;
+	CREATE table all_SRE_list_index as
+	SELECT a.*,
+			b.MM_dx_date,
+			b.index_date
+	FROM all_SRE_list a
+	INNER JOIN OutEx4 b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA SRE_list_all;
+	SET all_SRE_list_index;
+	IF SRE_date>=index_date+60;
+RUN;
+
+PROC sql;
+	CREATE table SRE_id_list as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			min(SRE_date) as SRE_date_final
+	FROM SRE_list_all
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table analytical_psmatch_27Jan as
+	SELECT a.*,
+			b.SRE_date_final
+	FROM OutEx4 a
+	LEFT JOIN SRE_id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA analytical_psmatch;
+	SET analytical_psmatch_27Jan;
+	fstat=0;
+	IF case=0 THEN ftime=min(Day_90_censor_date,Medicare_death_date,year_5_cens,initiation_date, SRE_date_final)-index_date;
+	IF case=1 THEN ftime=min(Day_90_censor_date,Medicare_death_date,year_5_cens, SRE_date_final)-index_date;
+	IF SRE_date_final ^=. AND SRE_date_final-index_date=ftime THEN fstat=1;
+	IF Medicare_death_date ^=. AND Medicare_death_date-index_date=ftime AND SRE_date_final =. THEN fstat=2;
+RUN;
+
+%CIF(DATA=analytical_psmatch,TIME=ftime,STATUS=fstat,EVENT=1,CENSORED=0,GROUP=case);
+%CIF(DATA=analytical_psmatch,TIME=ftime,STATUS=fstat,EVENT=1,CENSORED=0,GROUP=RAC_RECB_cat);
+
+*time-to-event analysis;
+proc phreg data=analytical_psmatch;
+class case / order=internal ref=first param=glm;
+model ftime*fstat(0) = case / eventcode=1;
+hazardratio 'Subdistribution Hazards' case / diff=pairwise;
+run;
+*adj baseline demographics;
+proc phreg data=analytical_psmatch;
+class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") case (ref="0") CCI_cat (ref="0") case / order=internal ref=first param=glm;
+model ftime*fstat(0) = case age_cat s_sex RAC_RECB_cat/ eventcode=1;
+hazardratio 'Subdistribution Hazards' case / diff=pairwise;
+run;
+*adjust all baseline characteriostics;
+proc phreg data=analytical_psmatch;
+class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") case (ref="0") CCI_cat (ref="0") case / order=internal ref=first param=glm;
+model ftime*fstat(0) = case age_cat s_sex RAC_RECB_cat
+		bone_test_baseline flu_baseline pneumo_baseline
+fall_baseline Anemia_baseline Hypercalcemia_baseline Osteoporosis_baseline RA_baseline Gait_baseline
+Syncope_baseline AD_baseline PD_baseline stroke_baseline copd_baseline HF_baseline depression_baseline
+diabetes_baseline Nephropathy_baseline CCI_cat baseline_SRE_new score/ eventcode=1;
+hazardratio 'Subdistribution Hazards' case / diff=pairwise;
+run;
+*Cox PH model;
+proc phreg data=analytical_psmatch;
+class case (ref="0");
+model ftime*fstat(0) = case;
+hazardratio  case / diff=pairwise;
+run;
+
+proc phreg data=analytical_psmatch;
+class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") case (ref="0") CCI_cat (ref="0") case (ref="0");
+model ftime*fstat(0) = case age_cat s_sex RAC_RECB_cat;
+hazardratio  case / diff=pairwise;
+run;
+
+proc phreg data=analytical_psmatch;
+class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") case (ref="0") CCI_cat (ref="0") case (ref="0");
+model ftime*fstat(0) = case age_cat s_sex RAC_RECB_cat
+		bone_test_baseline flu_baseline pneumo_baseline
+fall_baseline Anemia_baseline Hypercalcemia_baseline Osteoporosis_baseline RA_baseline Gait_baseline
+Syncope_baseline AD_baseline PD_baseline stroke_baseline copd_baseline HF_baseline depression_baseline
+diabetes_baseline Nephropathy_baseline CCI_cat baseline_SRE_new score;
+hazardratio  case / diff=pairwise;
+run;
+
+
+DATA analytical_psmatch1;
+	SET analytical_psmatch_27Jan;
+	fstat=0;
+	IF case=0 THEN ftime=min(Day_90_censor_date,Medicare_death_date,year_5_cens,initiation_date)-index_date;
+	IF case=1 THEN ftime=min(Day_90_censor_date,Medicare_death_date,year_5_cens)-index_date;
+	IF Medicare_death_date^=. AND Medicare_death_date-index_date=ftime THEN fstat=1;
+RUN;
+
+%CIF(DATA=analytical_psmatch1,TIME=ftime,STATUS=fstat,EVENT=1,CENSORED=0,GROUP=case);
+ods graphics on;
+PROC LIFETEST DATA=analytical_psmatch1 method=km notable plots=(survival(atrisk) logsurv lls) outsurv=out1;
+TIME ftime*fstat(0); 
+STRATA case;RUN;
+
+*Cox PH model on OS;
+proc phreg data=analytical_psmatch1;
+class case (ref="0");
+model ftime*fstat(0) = case;
+hazardratio  case / diff=pairwise;
+run;
+
+proc phreg data=analytical_psmatch1;
+class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") case (ref="0") CCI_cat (ref="0") case (ref="0");
+model ftime*fstat(0) = case age_cat s_sex RAC_RECB_cat;
+hazardratio  case / diff=pairwise;
+run;
+
+proc phreg data=analytical_psmatch1;
+class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") case (ref="0") CCI_cat (ref="0") case (ref="0");
+model ftime*fstat(0) = case age_cat s_sex RAC_RECB_cat
+		bone_test_baseline flu_baseline pneumo_baseline
+fall_baseline Anemia_baseline Hypercalcemia_baseline Osteoporosis_baseline RA_baseline Gait_baseline
+Syncope_baseline AD_baseline PD_baseline stroke_baseline copd_baseline HF_baseline depression_baseline
+diabetes_baseline Nephropathy_baseline CCI_cat baseline_SRE_new score;
+hazardratio  case / diff=pairwise;
+run;
+
+*assessment multiple events using Anderson-Gill analysis;
+
+DATA baseline_var_all;
+	SET analytical_psmatch_27Jan;
+	IF case=0 THEN ftime=min(Day_90_censor_date,Medicare_death_date,year_5_cens,initiation_date)-index_date;
+	IF case=1 THEN ftime=min(Day_90_censor_date,Medicare_death_date,year_5_cens)-index_date;
+RUN;
+
+PROC sql;
+	CREATE table all_SRE_list_index as
+	SELECT a.*,
+			b.MM_dx_date,
+			b.index_date,
+			b.ftime
+	FROM all_SRE_list a
+	INNER JOIN baseline_var_all b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA SRE_list_all;
+	SET all_SRE_list_index;
+	IF SRE_date>=index_date+60;
+	Gaptime_event=SRE_date-index_date;
+	IF Gaptime_event=0 THEN Gaptime_event=1e-10;
+	IF Gaptime_event<=ftime;
+RUN;
+
+PROC sql;
+	CREATE table SRE_event_list as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			min(Gaptime_event) as Gaptime_event
+	FROM SRE_list_all
+	GROUP BY PATIENT_ID,Gaptime_event;
+QUIT;
+
+PROC SORT DATA=SRE_event_list;
+BY PATIENT_ID Gaptime_event;
+RUN;
+
+DATA SRE_event_list;
+	SET SRE_event_list;
+	count + 1;
+  	by PATIENT_ID;
+  	if first.PATIENT_ID then count = 1;
+RUN;
+
+proc transpose data=SRE_event_list out=SRE_event_wide1 prefix=count;
+    by PATIENT_ID ;
+    id count;
+    var Gaptime_event;
+run;
+
+PROC sql;
+	CREATE table SRE_multi as
+	SELECT a.*,
+			b.*
+	FROM baseline_var_all a
+	LEFT JOIN SRE_event_wide1 b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA SRE_multi_simple;
+	SET SRE_multi;
+	KEEP PATIENT_ID age_cat s_sex RAC_RECB_cat case baseline_SRE_new ftime count1-count14;
+	IF ftime=0 THEN ftime=1e-9;
+RUN;
+
+
+  title 'Intensity Model and Proportional Means Model';
+   proc phreg data=Multi_event_analytical covm covs(aggregate);
+   	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1");
+      model (TStart, TStop) * SRE(0) = case age_cat s_sex RAC_RECB_cat baseline_SRE_new;
+      id PATIENT_ID;
+      where TStart < TStop;
+   run;
+
+    title2 'PWP Total Time Model with Common Effects';
+   proc phreg data=Multi_event_analytical;
+      	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1");
+      model (TStart, TStop) * SRE(0) = case age_cat s_sex RAC_RECB_cat baseline_SRE_new;
+      strata enum;
+   run;
+
+DATA Multi_event_analytical;
+   	SET Multi_event_analytical;
+	gaptime= TStop - TStart;
+RUN;
+
+   proc phreg data=Multi_event_analytical;
+      	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") case (ref="0");
+      model gaptime * SRE(0) = case age_cat s_sex RAC_RECB_cat baseline_SRE_new;
+      strata enum;
+   run;
+
+data IN2;
+case=1;
+output;
+case=0;
+output;
+run;
+proc phreg data=Multi_event_analytical covs(aggregate) covm;
+model (Tstart,Tstop)*SRE(0)=case;
+baseline covariates=IN2 out=OUT2 cmf=_all_ / nomean;
+id PATIENT_ID;
+run;
+
+*AG model;
+proc phreg data=Multi_event_analytical covsandwich(aggregate);
+  	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") case (ref="0");
+	model TStop*SRE(0)=case age_cat s_sex RAC_RECB_cat baseline_SRE_new/entry=TStart rl;
+	id PATIENT_ID;
+run;
+
+*Assessment of IV BP administration;
+*Add the initiation date, every 60 day updates on adherence and cumulative dose;
+
+DATA Analytical_part_28Jan;
+	SET Analytical_part;
+	KEEP PATIENT_ID seq all_BP_sum all_opioid_sum all_PI_sum all_old_drug_sum day_covered cum_pdc cum_pdc_cat;
+RUN;
+
+*Merge the ftime from the analytical file;
+PROC sql;
+	CREATE table BP_use_file as
+	SELECT a.*,
+			b.ftime
+	FROM Analytical_part_28Jan a
+	INNER JOIN Baseline_var_all b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA myfile.BP_use_file_28Jan;
+	SET BP_use_file;
+	time_change=(seq-1)*60;
+	IF seq*60<=ftime;
+
+	IF all_BP_sum>=10 THEN BP_sum_cat=4;
+	IF 10>all_BP_sum>=7 THEN BP_sum_cat=3;
+	IF 7>all_BP_sum>=4 THEN BP_sum_cat=2;
+	IF 4>all_BP_sum>=1 THEN BP_sum_cat=1;
+
+	freq_adm_bp=all_BP_sum/time_change;
+	IF freq_adm_bp>=1/28 THEN freq_cat=4;
+	IF 1/28>freq_adm_bp>=1/56 THEN freq_cat=3;
+	IF 1/56>freq_adm_bp>=1/84 THEN freq_cat=2;
+	IF 1/84>freq_adm_bp>0 THEN freq_cat=1; 
+
+	IF cum_pdc<0.2 THEN cum_pdc_cat=1;
+	ELSE IF 0.2<=cum_pdc<0.4 THEN cum_pdc_cat=2;
+	ELSE IF 0.4<=cum_pdc<0.6 THEN cum_pdc_cat=3;
+	ELSE IF 0.6<=cum_pdc<0.8 THEN cum_pdc_cat=4;
+	ELSE IF 0.8<=cum_pdc THEN cum_pdc_cat=5;
+	PI_cat=1;
+	IF all_PI_sum=. THEN PI_cat=0;
+	old_drug_cat=1;
+	IF all_old_drug_sum=. THEN old_drug_cat=0;
+RUN;
+
+PROC FREQ DATA=BP_use_file;
+	TABLE BP_sum_cat freq_cat cum_pdc_cat old_drug_cat PI_cat;
+RUN;
+
+DATA Multi_event_analytical_tdc2;
+	SET Multi_event_analytical_tdc1;
+	
+	new = input(PI_cat, 2.);
+   IF new=. THEN new=0;
+	drop PI_cat;
+   rename new=PI_cat;
+	
+   	new1 = input(old_drug_cat, 2.);
+   IF new1=. THEN new1=0;
+	drop old_drug_cat;
+   rename new1=old_drug_cat;
+
+	new2 = input(BP_sum_cat, 2.);
+   IF new2=. THEN new2=0;
+	drop BP_sum_cat;
+   rename new2=BP_sum_cat;
+
+   	new3 = input(freq_cat, 2.);
+   IF new3=. THEN new3=0;
+	drop freq_cat;
+   rename new3=freq_cat;
+
+   	new4 = input(cum_pdc_cat, 2.);
+   IF new4=. THEN new4=0;
+	drop cum_pdc_cat;
+   rename new4=cum_pdc_cat;
+RUN;
+
+PROC FREQ DATA=Multi_event_analytical_tdc2;
+	TABLE BP_sum_cat freq_cat cum_pdc_cat old_drug_cat
+		;
+RUN;
+
+DATA listfile.paper2_analytical_28Jan;
+	SET Multi_event_analytical_tdc2;
+RUN;
+
+*AG Approach;
+
+proc phreg data=Multi_event_analytical_tdc2 covsandwich(aggregate);
+  	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") case (ref="0");
+	model TStop*SRE(0)=case /entry=TStart rl;
+	id PATIENT_ID;
+	hazardratio  case / diff=pairwise;
+run;
+
+proc phreg data=Multi_event_analytical_tdc2 covsandwich(aggregate);
+	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") case (ref="0");
+  model (tstart, tstop)*sre(0) = case/ties=breslow;
+  title1 ‘Andersen-Gill model for recurrent time-to-event data’;
+  hazardratio  case / diff=pairwise;
+run;
+
+
+proc phreg data=Multi_event_analytical_tdc2 covsandwich(aggregate);
+  	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") case (ref="0");
+	model TStop*SRE(0)=case age_cat s_sex RAC_RECB_cat/entry=TStart rl;
+	id PATIENT_ID;
+	hazardratio  case / diff=pairwise;
+run;
+
+proc phreg data=Multi_event_analytical_tdc5 covsandwich(aggregate);
+  	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") case (ref="0") CCI_cat;
+	model TStop*SRE(0)=case age_cat s_sex RAC_RECB_cat
+						bone_test_baseline flu_baseline pneumo_baseline
+fall_baseline Anemia_baseline Hypercalcemia_baseline Osteoporosis_baseline RA_baseline Gait_baseline
+Syncope_baseline AD_baseline PD_baseline stroke_baseline copd_baseline HF_baseline depression_baseline
+diabetes_baseline Nephropathy_baseline CCI_cat baseline_SRE_new score/entry=TStart rl;
+	id PATIENT_ID;
+	hazardratio  case / diff=pairwise;
+run;
+
+proc phreg data=Multi_event_analytical_tdc5 covsandwich(aggregate);
+  	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") case (ref="0") CCI_cat;
+	model TStop*SRE(0)=case age_cat s_sex RAC_RECB_cat
+						bone_test_baseline flu_baseline pneumo_baseline
+fall_baseline Anemia_baseline Hypercalcemia_baseline Osteoporosis_baseline RA_baseline Gait_baseline
+Syncope_baseline AD_baseline PD_baseline stroke_baseline copd_baseline HF_baseline depression_baseline
+diabetes_baseline Nephropathy_baseline CCI_cat baseline_SRE_new score 
+old_drug_cat PI_cat/entry=TStart rl;
+	id PATIENT_ID;
+	hazardratio  case / diff=pairwise;
+run;
+*assessment of cumulative PDC level;
+proc phreg data=Multi_event_analytical_tdc5 covsandwich(aggregate);
+  	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") cum_pdc_cat (ref="1");
+	model (tstart, tstop)*sre(0)=cum_pdc_cat/ties=breslow;
+	hazardratio  cum_pdc_cat;
+run;
+
+proc phreg data=Multi_event_analytical_tdc5 covsandwich(aggregate);
+class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") cum_pdc_cat (ref="1") CCI_cat;
+	model (tstart, tstop)*sre(0)=cum_pdc_cat age_cat s_sex RAC_RECB_cat
+						bone_test_baseline flu_baseline pneumo_baseline
+fall_baseline Anemia_baseline Hypercalcemia_baseline Osteoporosis_baseline RA_baseline Gait_baseline
+Syncope_baseline AD_baseline PD_baseline stroke_baseline copd_baseline HF_baseline depression_baseline
+diabetes_baseline Nephropathy_baseline CCI_cat baseline_SRE_new score 
+old_drug_cat PI_cat/ties=breslow;
+	hazardratio  cum_pdc_cat;
+run;
+
+
+proc phreg data=Multi_event_analytical_tdc5 covsandwich(aggregate);
+  	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") BP_sum_cat (ref="1");
+	model TStop*SRE(0)=BP_sum_cat/entry=TStart rl;
+	id PATIENT_ID;
+run;
+
+proc phreg data=Multi_event_analytical_tdc5 covsandwich(aggregate);
+class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") BP_sum_cat (ref="1") CCI_cat;
+	model TStop*SRE(0)=BP_sum_cat age_cat s_sex RAC_RECB_cat
+						bone_test_baseline flu_baseline pneumo_baseline
+fall_baseline Anemia_baseline Hypercalcemia_baseline Osteoporosis_baseline RA_baseline Gait_baseline
+Syncope_baseline AD_baseline PD_baseline stroke_baseline copd_baseline HF_baseline depression_baseline
+diabetes_baseline Nephropathy_baseline CCI_cat baseline_SRE_new score 
+old_drug_cat PI_cat/entry=TStart rl;
+	id PATIENT_ID;
+run;
+
+
+proc phreg data=Multi_event_analytical_tdc5 covsandwich(aggregate);
+  	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") freq_cat (ref="1");
+	model TStop*SRE(0)=freq_cat age_cat s_sex RAC_RECB_cat baseline_SRE_new/entry=TStart rl;
+	id PATIENT_ID;
+run;
+
+proc phreg data=Multi_event_analytical_tdc5 covsandwich(aggregate);
+  	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") freq_cat (ref="1");
+	model TStop*SRE(0)=freq_cat/entry=TStart rl;
+	id PATIENT_ID;
+run;
+
+proc phreg data=Multi_event_analytical_tdc5 covsandwich(aggregate);
+class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") freq_cat (ref="1") CCI_cat;
+	model TStop*SRE(0)=freq_cat age_cat s_sex RAC_RECB_cat
+						bone_test_baseline flu_baseline pneumo_baseline
+fall_baseline Anemia_baseline Hypercalcemia_baseline Osteoporosis_baseline RA_baseline Gait_baseline
+Syncope_baseline AD_baseline PD_baseline stroke_baseline copd_baseline HF_baseline depression_baseline
+diabetes_baseline Nephropathy_baseline CCI_cat baseline_SRE_new score 
+old_drug_cat PI_cat/entry=TStart rl;
+	id PATIENT_ID;
+run;
+
+*PWP Total time model;
+    title2 'PWP Total Time Model with Common Effects';
+   proc phreg data=Multi_event_analytical_tdc5;
+      	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") case (ref="0");
+      model (TStart, TStop) * SRE(0) = case;
+      strata enum;
+	  	hazardratio  case / diff=pairwise;
+   run;
+
+      proc phreg data=Multi_event_analytical_tdc5;
+      	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") case (ref="0");
+      model (TStart, TStop) * SRE(0) = case age_cat s_sex RAC_RECB_cat;
+      strata enum;
+	  	hazardratio  case / diff=pairwise;
+   run;
+
+      proc phreg data=Multi_event_analytical_tdc5;
+      	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") case (ref="0") CCI_cat;
+	model (TStart, TStop)*SRE(0)=case age_cat s_sex RAC_RECB_cat
+						bone_test_baseline flu_baseline pneumo_baseline
+fall_baseline Anemia_baseline Hypercalcemia_baseline Osteoporosis_baseline RA_baseline Gait_baseline
+Syncope_baseline AD_baseline PD_baseline stroke_baseline copd_baseline HF_baseline depression_baseline
+diabetes_baseline Nephropathy_baseline CCI_cat baseline_SRE_new score;
+      strata enum;
+	  	hazardratio  case / diff=pairwise;
+   run;
+
+      proc phreg data=Multi_event_analytical_tdc5;
+      	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") case (ref="0") CCI_cat;
+	model (TStart, TStop)*SRE(0)=case age_cat s_sex RAC_RECB_cat
+						bone_test_baseline flu_baseline pneumo_baseline
+fall_baseline Anemia_baseline Hypercalcemia_baseline Osteoporosis_baseline RA_baseline Gait_baseline
+Syncope_baseline AD_baseline PD_baseline stroke_baseline copd_baseline HF_baseline depression_baseline
+diabetes_baseline Nephropathy_baseline CCI_cat baseline_SRE_new score
+old_drug_cat PI_cat;
+      strata enum;
+	  	hazardratio  case / diff=pairwise;
+   run;
+
+      proc phreg data=Multi_event_analytical_tdc2;
+      	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") BP_sum_cat (ref="1");
+      model (TStart, TStop) * SRE(0) = BP_sum_cat age_cat s_sex RAC_RECB_cat baseline_SRE_new;
+      strata enum;
+   run;
+
+      proc phreg data=Multi_event_analytical_tdc2;
+      	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") cum_pdc_cat (ref="1");
+      model (TStart, TStop) * SRE(0) = cum_pdc_cat age_cat s_sex RAC_RECB_cat baseline_SRE_new;
+      strata enum;
+   run;
+
+      proc phreg data=Multi_event_analytical_tdc2;
+      	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") freq_cat (ref="0");
+      model (TStart, TStop) * SRE(0) = freq_cat age_cat s_sex RAC_RECB_cat baseline_SRE_new;
+      strata enum;
+   run;
+
+*PWP Gap time model;
+DATA Multi_event_analytical_tdc3;
+   	SET Multi_event_analytical_tdc2;
+	gaptime= TStop - TStart;
+RUN;
+
+   proc phreg data=Multi_event_analytical_tdc3;
+      	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") case (ref="0");
+      model gaptime * SRE(0) = case age_cat s_sex RAC_RECB_cat baseline_SRE_new;
+      strata enum;
+   run;
+
+      title2 'PWP Gap Time Model with Common Effects';
+   proc phreg data=Multi_event_analytical_tdc5;
+      	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") case (ref="0");
+      model gaptime * SRE(0) = case;
+      strata enum;
+	  	hazardratio  case / diff=pairwise;
+   run;
+
+      proc phreg data=Multi_event_analytical_tdc5;
+      	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") case (ref="0");
+      model gaptime * SRE(0) = case age_cat s_sex RAC_RECB_cat;
+      strata enum;
+	  	hazardratio  case / diff=pairwise;
+   run;
+
+      proc phreg data=Multi_event_analytical_tdc5;
+      	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") case (ref="0") CCI_cat;
+	model gaptime*SRE(0)=case age_cat s_sex RAC_RECB_cat
+						bone_test_baseline flu_baseline pneumo_baseline
+fall_baseline Anemia_baseline Hypercalcemia_baseline Osteoporosis_baseline RA_baseline Gait_baseline
+Syncope_baseline AD_baseline PD_baseline stroke_baseline copd_baseline HF_baseline depression_baseline
+diabetes_baseline Nephropathy_baseline CCI_cat baseline_SRE_new score;
+      strata enum;
+	  	hazardratio  case / diff=pairwise;
+   run;
+
+      proc phreg data=Multi_event_analytical_tdc5;
+      	class age_cat (ref="6") s_sex RAC_RECB_cat (ref="1") case (ref="0") CCI_cat;
+	model gaptime*SRE(0)=case age_cat s_sex RAC_RECB_cat
+						bone_test_baseline flu_baseline pneumo_baseline
+fall_baseline Anemia_baseline Hypercalcemia_baseline Osteoporosis_baseline RA_baseline Gait_baseline
+Syncope_baseline AD_baseline PD_baseline stroke_baseline copd_baseline HF_baseline depression_baseline
+diabetes_baseline Nephropathy_baseline CCI_cat baseline_SRE_new score
+old_drug_cat PI_cat;
+      strata enum;
+	  	hazardratio  case / diff=pairwise;
+   run;
+
+  *Add all baseline characteristics;
+DATA Multi_event_analytical_tdc4;
+   	SET Multi_event_analytical_tdc3;
+	new4 = put(PATIENT_ID, $10.);
+	drop PATIENT_ID;
+	rename new4=PATIENT_ID;
+RUN;
+PROC sql;
+	CREATE table myfile.Multi_event_analytical_tdc5 as
+	SELECT a.*,
+			b.*
+	FROM Multi_event_analytical_tdc4 a
+	INNER JOIN baseline_var_all b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+*Table 2 of Paper 2;
+DATA case_list;
+	SET baseline_var_all;
+	IF case=1;
+RUN;
+
+PROC sql;
+	CREATE table BP_use_file_1 as
+	SELECT a.*,
+			b.*
+	FROM BP_use_file a
+	INNER JOIN case_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA temp;
+	SET BP_use_file_1;
+	IF seq>=14 THEN seq=14;
+RUN;
+
+PROC FREQ DATA=temp;
+	TABLE BP_sum_cat*seq cum_pdc_cat*seq freq_cat*seq/nocol norow nopercent ;
+RUN;
+
+*Table 3 of paper 2 on dist of SREs;
+DATA temp;
+	SET listfile.episode_unique_27jan;
+	IF SRE_1=0 AND SRE_2=0 AND SRE_3=0 AND SRE_4=1 THEN SRE_type=4;
+	IF SRE_1=0 AND SRE_2=0 AND SRE_3=1  THEN SRE_type=3;
+	IF SRE_1=0 AND SRE_2=1  THEN SRE_type=2;
+	IF SRE_1=1 THEN SRE_type=1;
+	IF Vertebral=. THEN Vertebral=0;
+	IF Hip=. THEN Hip=0;
+	Other=0;
+	IF Vertebral=0 AND Hip=0 THEN Other=1;
+RUN;
+
+PROC sql;
+	CREATE table temp_1 as
+	SELECT a.*,
+			b.ftime,
+			b.index_date
+	FROM temp a
+	INNER JOIN case_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA temp_2;
+	SET temp_1;
+	IF SRE_date>index_date+ftime OR SRE_date<index_date+60 THEN DELETE;
+	Lag=SRE_date-index_date;
+	IF 60<=Lag<=90 THEN time_seq=1;
+	IF 90<Lag<=180 THEN time_seq=2;
+	IF 180<Lag<=270 THEN time_seq=3;
+	IF 270<Lag<=360 THEN time_seq=4;
+	IF 360<Lag<=450 THEN time_seq=5;
+	IF 450<Lag<=540 THEN time_seq=6;
+	IF 540<Lag<=630 THEN time_seq=7;
+	IF 630<Lag<=720 THEN time_seq=8;
+	IF 720<Lag THEN time_seq=9;
+RUN;
+
+PROC FREQ DATA=temp_2;
+	TABLE SRE_type*time_seq Vertebral*time_seq Hip*time_seq Other*time_seq /nocol norow nopercent ;
+RUN;
+DATA case_list;
+	SET baseline_var_all;
+	IF case=0;
+RUN;
+PROC sql;
+	CREATE table temp_1 as
+	SELECT a.*,
+			b.ftime,
+			b.index_date
+	FROM temp a
+	INNER JOIN case_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA temp_2;
+	SET temp_1;
+	IF SRE_date>index_date+ftime OR SRE_date<index_date+60 THEN DELETE;
+	Lag=SRE_date-index_date;
+	IF 60<=Lag<=90 THEN time_seq=1;
+	IF 90<Lag<=180 THEN time_seq=2;
+	IF 180<Lag<=270 THEN time_seq=3;
+	IF 270<Lag<=360 THEN time_seq=4;
+	IF 360<Lag<=450 THEN time_seq=5;
+	IF 450<Lag<=540 THEN time_seq=6;
+	IF 540<Lag<=630 THEN time_seq=7;
+	IF 630<Lag<=720 THEN time_seq=8;
+	IF 720<Lag THEN time_seq=9;
+RUN;
+
+PROC FREQ DATA=temp_2;
+	TABLE SRE_type*time_seq Vertebral*time_seq Hip*time_seq Other*time_seq /nocol norow nopercent ;
+RUN;
