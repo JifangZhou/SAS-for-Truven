@@ -1,0 +1,838 @@
+*analyses of SCD files;
+LIBNAME workingD "C:\Users\jzhou86\Documents\Greg SEER Project\Work directory";
+
+DATA baseline;
+	SET workingD.all_cancer_baseline;
+RUN;
+
+DATA analytical_file;
+	SET baseline;
+	date=catx(MED_DODM, MED_DODD,MED_DODY);
+	death_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.
+),5,4)),anydtdte.);
+	Age=YEAR(claim_date)-YR_BRTH;
+	IF Enroll_AB_6=1;
+	IF Enroll_HMO_6=1;
+	IF Enroll_AB_12=1;
+	IF Enroll_HMO_12=1;
+RUN;
+
+PROC FREQ DATA=analytical_file_RuSH;
+	TABLE RuSH;
+RUN;
+
+*Verification of SCD cases;
+PROC SQL;
+	CREATE TABLE analytical_file_RuSH as
+	SELECT a.*,
+			b.RuSH
+	FROM analytical_file a
+	LEFT JOIN Rush_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+*add end of enrollment;
+*select enrollment data;
+LIBNAME listID "C:\Users\jzhou86\Documents\Greg SEER Project\Greg SEER Data\unzipped PEDSF";
+DATA all_enrol_list;
+	SET listID.pedsf_myeloma_cancer 
+	listID.pedsf_lymphoma_cancer_1 
+	listID.pedsf_lymphoma_cancer_2 
+	listID.pedsf_leukemia_cancer;
+	KEEP PATIENT_ID MON1-MON276 GHO1-GHO276;
+RUN;
+
+proc sort data = all_enrol_list nodupkey; by PATIENT_ID MON1-MON276 GHO1-GHO276; run;
+
+*Merge enroll date to the case list;
+
+PROC sql;
+	CREATE table all_cancer_list_enroll as
+	SELECT a.*,
+			b.index_month,
+			b.case_id
+	FROM all_enrol_list a
+	INNER JOIN analytical_file_RuSH b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+data Enroll_post;
+set all_cancer_list_enroll;
+array daydummy(276) day1-day276;
+array filldates(*) MON1 - MON276;
+ do ii=1 to 276; daydummy(ii)=0;end;
+ do ii=1 to 276;
+ do i = 1 to dim(filldates) while (filldates(i) ne .);
+ if filldates(i) EQ "3" AND i>=index_month
+ then daydummy(i)=1;
+ end;
+ end;
+drop i ii;
+monthscovered_post=sum(of day1 - day276);
+run;
+
+PROC FREQ DATA=list_EOF;
+TABLE monthscovered_post;
+RUN;
+
+PROC sql;
+	CREATE table list_EOF as
+	SELECT min(case_id) as case_id,
+			min(monthscovered_post) as monthscovered_post
+	FROM Enroll_post
+	GROUP BY case_id;
+QUIT;
+
+PROC sql;
+	CREATE table analytical_file_EOF as
+	SELECT a.*,
+			b.monthscovered_post
+	FROM analytical_file_RuSH a
+	LEFT JOIN list_EOF b
+	ON a.case_id=b.case_id;
+QUIT;
+
+DATA analytical_file_EOF;
+	SET analytical_file_EOF;
+	IF 2001<=YEAR(claim_date)<=2011;
+	EOF_date=claim_date+30*monthscovered_post;
+RUN;
+
+
+PROC FREQ DATA=analytical_file_EOF;
+TABLE RAC_RECB*RuSH/nocol norow nopercent chisq;
+RUN;
+
+*Add types of cancers;
+DATA analytical_file_EOF;
+	SET analytical_file_EOF;
+	IF HIST in (9590) THEN type="Lymphoma_Other";
+	IF HIST in (9835) THEN type="ALL";
+	IF HIST in (9823,9833,9836,9940) THEN type="ALL_B";
+	IF HIST in (9827,9831) THEN type="ALL_T";
+	IF HIST in (9840,9860,9861,9866,9867,9872,
+				9873,9874,9891,9895,9896,9910,9931,9983) THEN type="AML";
+	IF HIST in (9863,9875) THEN type="CML";
+	IF HIST in (9945) THEN type="CMML";
+	IF HIST in (9650,9651,9652,9659,9663) THEN type="HD";
+	IF HIST in (9801) THEN type="Leukemia_Other";
+	IF HIST in (9731,9732) THEN type="MM";
+	IF HIST in (9591) THEN type="NHL_Other";
+	IF HIST in (9670,9671,9687,9689,9699,9738) THEN type="NHL_B";
+	IF HIST in (9673) THEN type="NHL_B_mantle";
+	IF HIST in (9680,9684) THEN type="NHL_DLBCL";
+	IF HIST in (9690,9691,9695,9698) THEN type="NHL_FL";
+	IF HIST in (9700,9702,9705,9709,9714,9716,9719,9729) THEN type="NHL_T";
+	IF HIST in (8010,8012,8041,8046,8070,8072,8120,8130,8140,8170,8210,
+				8240,8246,8249,8250,8260,8263,8310,8312,8335,8430,8481,8500,8522,8560,
+				8720,8721,8743,9140,9370,9522) THEN type="Other";
+	IF type in ("ALL","ALL_B","ALL_T","Leukemia_Other","AML") THEN type_cat="Acute_Leukemia";
+	IF type in ("CML","CMML") THEN type_cat="CML_CMML";
+	IF type in ("HD") THEN type_cat="HD";
+	IF type in ("MM") THEN type_cat="MM";
+	IF type in ("Lymphoma_Other") THEN type_cat="Lymphoma_Other";
+	IF type in ("Other") THEN type_cat="Other";
+	IF type in ("NHL_B","NHL_B_mantle","NHL_DLBCL","NHL_FL","NHL_Other","NHL_T") THEN type_cat="NHL";
+	IF SCD=. THEN SCD=0;
+	IF RuSH=. THEN RuSH=0;
+	SCD_final=0;
+	IF SCD=1 AND RuSH=1 THEN SCD_final=1;
+RUN;
+
+PROC FREQ DATA=analytical_file_EOF;
+TABLE type_cat*SCD_final/nocol norow nopercent chisq;
+RUN;
+
+DATA workingD.surv_analytical_17Feb;
+	SET analytical_file_EOF;
+	fstat=0;
+	ftime=min(EOF_date,death_date)-claim_date;
+	IF ftime=death_date-claim_date THEN fstat=1;
+	IF ftime=0 THEN ftime=1e-10;
+	RAC_RECB_cat=3;
+	IF RAC_RECB=01 THEN RAC_RECB_cat=1;
+	IF RAC_RECB=02 THEN RAC_RECB_cat=2;
+	IF RAC_RECB=11 THEN RAC_RECB_cat=4;
+	IF age<=45 THEN age_cat=1;
+	IF 45<age<=55 THEN age_cat=2;
+	IF 55<age<=65 THEN age_cat=3;
+	IF 65<age<=75 THEN age_cat=4;
+	IF 75<age<=85 THEN age_cat=5;
+	IF 85<age THEN age_cat=6;
+RUN;
+
+*assessment of chemotherapy dates;
+LIBNAME workingD "C:\Users\jzhou86\Documents\Greg SEER Project\Work directory";
+LIBNAME medpar "C:\Users\jzhou86\Documents\Greg SEER Project\Greg SEER Data\unzipped MEDPAR";
+LIBNAME NCH "C:\Users\jzhou86\Documents\Greg SEER Project\Greg SEER Data\unzipped NCH";
+LIBNAME OUTSAF "C:\Users\jzhou86\Documents\Greg SEER Project\Greg SEER Data\unzipped OUTSAF";
+LIBNAME listID "C:\Users\jzhou86\Documents\Greg SEER Project\Greg SEER Data\unzipped PEDSF";
+LIBNAME DME "C:\Users\jzhou86\Documents\Greg SEER Project\Greg SEER Data\unzipped DME";
+
+DATA all_medpar;
+	SET medpar.medpar00 medpar.medpar01 medpar.medpar02
+		medpar.medpar03 medpar.medpar04 medpar.medpar05
+		medpar.medpar06 medpar.medpar07 medpar.medpar08
+		medpar.medpar09 medpar.medpar10 medpar.medpar11
+		medpar.medpar12 medpar.medpar13;
+				array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ( 'V581', 'V662', 'V672') then case=1;
+		end;
+	IF HCPCS in ("Q0083","Q0084","Q0085","J7150", "J9", "96400", "96408", "96410", "96412", "96414", "96545") THEN case=1;
+	IF case=1;
+	date=catx(DIS_M, DIS_D,DIS_Y);
+	chemo_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+RUN;
+
+DATA NCH_0_3;
+	SET NCH.nch00_file001 NCH.nch00_file002 NCH.nch00_file003 NCH.nch00_file004 NCH.nch00_file005 
+		NCH.nch01_file001 NCH.nch01_file002 NCH.nch01_file003 NCH.nch01_file004 NCH.nch01_file005 
+		NCH.nch01_file006 NCH.nch01_file007 
+		NCH.nch02_file001 NCH.nch02_file002 NCH.nch02_file003 NCH.nch02_file004 NCH.nch02_file005 
+		NCH.nch02_file006 NCH.nch02_file007 NCH.nch02_file008 NCH.nch02_file009 NCH.nch02_file010 
+		NCH.nch03_file001 NCH.nch03_file002 NCH.nch03_file003 NCH.nch03_file004 NCH.nch03_file005 
+		NCH.nch03_file006 NCH.nch03_file007 NCH.nch03_file008 NCH.nch03_file009 NCH.nch03_file010 
+		NCH.nch03_file011;
+				array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ( 'V581', 'V662', 'V672') then case=1;
+		end;
+	IF HCPCS in ("Q0083","Q0084","Q0085","J7150", "J9", "96400", "96408", "96410", "96412", "96414", "96545") THEN case=1;
+	IF case=1;
+	date=catx(FREXPENM, FREXPEND,FREXPENY);
+	chemo_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.
+),5,4)),anydtdte.);
+RUN;
+
+DATA NCH_4_9;
+	SET  
+ NCH.nch04_file001 NCH.nch04_file002 NCH.nch04_file003 NCH.nch04_file004 NCH.nch04_file005
+ NCH.nch04_file006 NCH.nch04_file007 NCH.nch04_file008 NCH.nch04_file009 NCH.nch04_file010
+ NCH.nch04_file011 NCH.nch04_file012 NCH.nch04_file013
+ NCH.nch05_file001 NCH.nch05_file002 NCH.nch05_file003 NCH.nch05_file004 NCH.nch05_file005
+ NCH.nch05_file006 NCH.nch05_file007 NCH.nch05_file008 NCH.nch05_file009 NCH.nch05_file010
+ NCH.nch05_file011 NCH.nch05_file012 NCH.nch05_file013 NCH.nch05_file014 NCH.nch05_file015
+
+ NCH.nch06_file001 NCH.nch06_file002 NCH.nch06_file003 NCH.nch06_file004 NCH.nch06_file005
+ NCH.nch06_file006 NCH.nch06_file007 NCH.nch06_file008 NCH.nch06_file009 NCH.nch06_file010
+ NCH.nch06_file011 NCH.nch06_file012 NCH.nch06_file013 NCH.nch06_file014 NCH.nch06_file015
+
+ NCH.nch07_file001 NCH.nch07_file002 NCH.nch07_file003 NCH.nch07_file004 NCH.nch07_file005
+ NCH.nch07_file006 NCH.nch07_file007 NCH.nch07_file008 NCH.nch07_file009 NCH.nch07_file010
+ NCH.nch07_file011 NCH.nch07_file012 NCH.nch07_file013 NCH.nch07_file014 NCH.nch07_file015
+
+ NCH.nch08_file001 NCH.nch08_file002 NCH.nch08_file003 NCH.nch08_file004 NCH.nch08_file005
+ NCH.nch08_file006 NCH.nch08_file007 NCH.nch08_file008 NCH.nch08_file009 NCH.nch08_file010
+ NCH.nch08_file011 NCH.nch08_file012 NCH.nch08_file013 NCH.nch08_file014 NCH.nch08_file015
+
+ NCH.nch09_file001 NCH.nch09_file002 NCH.nch09_file003 NCH.nch09_file004 NCH.nch09_file005
+ NCH.nch09_file006 NCH.nch09_file007 NCH.nch09_file008 NCH.nch09_file009 NCH.nch09_file010
+ NCH.nch09_file011 NCH.nch09_file012 NCH.nch09_file013 NCH.nch09_file014 NCH.nch09_file015;
+ 		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ( 'V581', 'V662', 'V672') then case=1;
+		end;
+	IF HCPCS in ("Q0083","Q0084","Q0085","J7150", "J9", "96400", "96408", "96410", "96412", "96414", "96545") THEN case=1;
+	IF case=1;
+	date=catx(FREXPENM, FREXPEND,FREXPENY);
+	chemo_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.
+),5,4)),anydtdte.);
+RUN;
+
+DATA NCH_10_13;
+	SET  
+ NCH.nch10_file001 NCH.nch10_file002 NCH.nch10_file003 NCH.nch10_file004 NCH.nch10_file005
+ NCH.nch10_file006 NCH.nch10_file007 NCH.nch10_file008 NCH.nch10_file009 NCH.nch10_file010
+ NCH.nch10_file011 NCH.nch10_file012 NCH.nch10_file013 NCH.nch10_file014 NCH.nch10_file015
+
+ NCH.nch11_file001 NCH.nch11_file002 NCH.nch11_file003 NCH.nch11_file004 NCH.nch11_file005
+ NCH.nch11_file006 NCH.nch11_file007 NCH.nch11_file008 NCH.nch11_file009 NCH.nch11_file010
+ NCH.nch11_file011 NCH.nch11_file012 NCH.nch11_file013 NCH.nch11_file014
+
+ NCH.nch12_file001 NCH.nch12_file002 NCH.nch12_file003 NCH.nch12_file004 NCH.nch12_file005
+ NCH.nch12_file006 NCH.nch12_file007 NCH.nch12_file008 NCH.nch12_file009 NCH.nch12_file010
+ NCH.nch12_file011 NCH.nch12_file012
+
+ NCH.nch13_file001 NCH.nch13_file002 NCH.nch13_file003 NCH.nch13_file004 NCH.nch13_file005
+ NCH.nch13_file006 NCH.nch13_file007 NCH.nch13_file008 NCH.nch13_file009 NCH.nch13_file010
+;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ( 'V581', 'V662', 'V672') then case=1;
+		end;
+	IF HCPCS in ("Q0083","Q0084","Q0085","J7150", "J9", "96400", "96408", "96410", "96412", "96414", "96545") THEN case=1;
+	IF case=1;
+	date=catx(FREXPENM, FREXPEND,FREXPENY);
+	chemo_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.
+),5,4)),anydtdte.);
+RUN;
+
+DATA OUTSAF_0_4;
+	SET 
+outsaf.outsaf00_file001 outsaf.outsaf00_file002 outsaf.outsaf00_file003
+
+outsaf.outsaf01_file001 outsaf.outsaf01_file002 outsaf.outsaf01_file003 outsaf.outsaf01_file004 outsaf.outsaf01_file005
+
+outsaf.outsaf02_file001 outsaf.outsaf02_file002 outsaf.outsaf02_file003 outsaf.outsaf02_file004 outsaf.outsaf02_file005
+outsaf.outsaf02_file006 outsaf.outsaf02_file007
+
+outsaf.outsaf03_file001 outsaf.outsaf03_file002 outsaf.outsaf03_file003 outsaf.outsaf03_file004 outsaf.outsaf03_file005
+outsaf.outsaf03_file006 outsaf.outsaf03_file007 outsaf.outsaf03_file008
+
+outsaf.outsaf04_file001 outsaf.outsaf04_file002 outsaf.outsaf04_file003 outsaf.outsaf04_file004 outsaf.outsaf04_file005
+outsaf.outsaf04_file006 outsaf.outsaf04_file007 outsaf.outsaf04_file008 outsaf.outsaf04_file009 outsaf.outsaf04_file010
+;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ( 'V581', 'V662', 'V672') then case=1;
+		end;
+	IF HCPCS in ("Q0083","Q0084","Q0085","J7150", "J9", "96400", "96408", "96410", "96412", "96414", "96545") THEN case=1;
+	IF case=1;
+	date=catx(FROM_DTM, FROM_DTD,FROM_DTY);
+	chemo_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+RUN;
+
+DATA OUTSAF_5_9;
+	SET 
+ outsaf.outsaf05_file001 outsaf.outsaf05_file002 outsaf.outsaf05_file003 outsaf.outsaf05_file004 outsaf.outsaf05_file005
+ outsaf.outsaf05_file006 outsaf.outsaf05_file007 outsaf.outsaf05_file008 outsaf.outsaf05_file009 outsaf.outsaf05_file010
+ outsaf.outsaf05_file011
+
+ outsaf.outsaf06_file001 outsaf.outsaf06_file002 outsaf.outsaf06_file003 outsaf.outsaf06_file004 outsaf.outsaf06_file005
+ outsaf.outsaf06_file006 outsaf.outsaf06_file007 outsaf.outsaf06_file008 outsaf.outsaf06_file009 outsaf.outsaf06_file010
+ outsaf.outsaf06_file011
+
+ outsaf.outsaf07_file001 outsaf.outsaf07_file002 outsaf.outsaf07_file003 outsaf.outsaf07_file004 outsaf.outsaf07_file005
+ outsaf.outsaf07_file006 outsaf.outsaf07_file007 outsaf.outsaf07_file008 outsaf.outsaf07_file009 outsaf.outsaf07_file010
+ outsaf.outsaf07_file011 outsaf.outsaf07_file012
+
+ outsaf.outsaf08_file001 outsaf.outsaf08_file002 outsaf.outsaf08_file003 outsaf.outsaf08_file004 outsaf.outsaf08_file005 
+ outsaf.outsaf08_file006 outsaf.outsaf08_file007 outsaf.outsaf08_file008 outsaf.outsaf08_file009 outsaf.outsaf08_file010
+ outsaf.outsaf08_file011 outsaf.outsaf08_file012 outsaf.outsaf08_file013
+
+ outsaf.outsaf09_file001 outsaf.outsaf09_file002 outsaf.outsaf09_file003 outsaf.outsaf09_file004 outsaf.outsaf09_file005
+ outsaf.outsaf09_file006 outsaf.outsaf09_file007 outsaf.outsaf09_file008 outsaf.outsaf09_file009 outsaf.outsaf09_file010
+ outsaf.outsaf09_file011 outsaf.outsaf09_file012 outsaf.outsaf09_file013
+;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ( 'V581', 'V662', 'V672') then case=1;
+		end;
+	IF HCPCS in ("Q0083","Q0084","Q0085","J7150", "J9", "96400", "96408", "96410", "96412", "96414", "96545") THEN case=1;
+	IF case=1;
+	date=catx(FROM_DTM, FROM_DTD,FROM_DTY);
+	chemo_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+RUN;
+
+DATA OUTSAF_10_13;
+	SET 
+outsaf.outsaf10_file001 outsaf.outsaf10_file002 outsaf.outsaf10_file003 outsaf.outsaf10_file004 outsaf.outsaf10_file005
+ outsaf.outsaf10_file006 outsaf.outsaf10_file007 outsaf.outsaf10_file008 outsaf.outsaf10_file009 outsaf.outsaf10_file010
+ outsaf.outsaf10_file011 outsaf.outsaf10_file012 outsaf.outsaf10_file013 outsaf.outsaf10_file014
+
+ outsaf.outsaf11_file001 outsaf.outsaf11_file002 outsaf.outsaf11_file003 outsaf.outsaf11_file004 outsaf.outsaf11_file005
+ outsaf.outsaf11_file006 outsaf.outsaf11_file007 outsaf.outsaf11_file008 outsaf.outsaf11_file009 outsaf.outsaf11_file010
+ outsaf.outsaf11_file011 outsaf.outsaf11_file012 outsaf.outsaf11_file013 outsaf.outsaf11_file014
+
+ outsaf.outsaf12_file001 outsaf.outsaf12_file002 outsaf.outsaf12_file003 outsaf.outsaf12_file004 outsaf.outsaf12_file005
+ outsaf.outsaf12_file006 outsaf.outsaf12_file007 outsaf.outsaf12_file008 outsaf.outsaf12_file009 outsaf.outsaf12_file010
+ outsaf.outsaf12_file011 outsaf.outsaf12_file012
+
+ outsaf.outsaf13_file001 outsaf.outsaf13_file002 outsaf.outsaf13_file003 outsaf.outsaf13_file004 outsaf.outsaf13_file005
+ outsaf.outsaf13_file006 outsaf.outsaf13_file007 outsaf.outsaf13_file008 outsaf.outsaf13_file009 outsaf.outsaf13_file010
+ outsaf.outsaf13_file011;
+ 		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ( 'V581', 'V662', 'V672') then case=1;
+		end;
+	IF HCPCS in ("Q0083","Q0084","Q0085","J7150", "J9", "96400", "96408", "96410", "96412", "96414", "96545") THEN case=1;
+	IF case=1;
+	date=catx(FROM_DTM, FROM_DTD,FROM_DTY);
+	chemo_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+RUN;
+
+DATA all_dme;
+	SET dme.dme00 dme.dme01 dme.dme02
+		dme.dme03 dme.dme04 dme.dme05
+		dme.dme06 dme.dme07 dme.dme08
+		dme.dme09 dme.dme10 dme.dme11
+		dme.dme12 dme.dme13;
+				array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ( 'V581', 'V662', 'V672') then case=1;
+		end;
+	IF HCPCS in ("Q0083","Q0084","Q0085","J7150", "J9", "96400", "96408", "96410", "96412", "96414", "96545") THEN case=1;
+	IF case=1;
+	date=catx(FREXPENM, FREXPEND,FREXPENY);
+	chemo_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.
+),5,4)),anydtdte.);
+RUN;
+
+DATA all_chemo_records;
+	SET all_medpar 
+		NCH_0_3 NCH_4_9 NCH_10_13 
+		OUTSAF_0_4  OUTSAF_5_9 OUTSAF_10_13 
+		all_dme;
+	KEEP PATIENT_ID chemo_date;
+RUN;
+
+proc sort data = all_chemo_records nodupkey; by PATIENT_ID chemo_date; run;
+
+PROC sql;
+	CREATE table analytical_file_chemo as
+	SELECT a.case_id,
+			a.PATIENT_ID,
+			b.chemo_date
+	FROM analytical_file_EOF a
+	LEFT JOIN all_chemo_records b
+	ON a.PATIENT_ID=b.PATIENT_ID AND a.claim_date<=chemo_date;
+QUIT;
+
+PROC sql;
+	CREATE table list_chemo as
+	SELECT min(case_id) as case_id,
+			min(chemo_date) as chemo_date
+	FROM analytical_file_chemo
+	GROUP BY case_id;
+QUIT;
+
+PROC sql;
+	CREATE table analytical_file_chemo as
+	SELECT a.*,
+			b.chemo_date
+	FROM analytical_file_EOF a
+	LEFT JOIN list_chemo b
+	ON a.case_id=b.case_id;
+QUIT;
+
+proc phreg data=surv_analytical;
+class SCD_final(ref="0") age_cat S_sex RAC_RECB_cat (ref="1");
+model ftime*fstat(0) = SCD_final age_cat RAC_RECB_cat S_sex;
+run;
+
+%CIF(DATA=id_list_5,TIME=ftime_chemo,STATUS=fstat_chemo,EVENT=1,CENSORED=0,GROUP=SCD);
+
+DATA workingD.analytical_file_chemo_17Feb;
+	SET analytical_file_chemo;
+	fstat_chemo=0;
+	ftime_chemo=min(chemo_date, EOF_date, death_date)-claim_date;
+	IF ftime_chemo=chemo_date-claim_date THEN fstat_chemo=1;
+	IF ftime_chemo=death_date-claim_date AND chemo_date=. THEN fstat_chemo=2;
+	IF ftime_chemo=0 THEN ftime_chemo=1e-10;
+	fstat=0;
+	ftime=min(EOF_date,death_date)-claim_date;
+	IF ftime=death_date-claim_date THEN fstat=1;
+	IF ftime=0 THEN ftime=1e-10;
+	RAC_RECB_cat=3;
+	IF RAC_RECB=01 THEN RAC_RECB_cat=1;
+	IF RAC_RECB=02 THEN RAC_RECB_cat=2;
+	IF RAC_RECB=11 THEN RAC_RECB_cat=4;
+	IF age<=45 THEN age_cat=1;
+	IF 45<age<=55 THEN age_cat=2;
+	IF 55<age<=65 THEN age_cat=3;
+	IF 65<age<=75 THEN age_cat=4;
+	IF 75<age<=85 THEN age_cat=5;
+	IF 85<age THEN age_cat=6;
+RUN;
+proc phreg data=workingD.analytical_file_chemo_17Feb;
+class SCD_final (ref="0") age_cat RAC_RECB_cat (ref="1") S_sex/ param=glm order=internal ref=first;
+model ftime_chemo*fstat_chemo(0) = SCD_final age_cat RAC_RECB_cat S_sex/ eventcode=1;
+hazardratio 'Subdistribution Hazards' SCD_final/ diff=pairwise;
+run;
+
+%CIF(DATA=workingD.analytical_file_chemo_17Feb,TIME=ftime_chemo,STATUS=fstat_chemo,EVENT=1,CENSORED=0,GROUP=SCD_final);
+
+PROC LIFETEST DATA=workingD.analytical_file_chemo_17Feb method=km notable plots=(survival(atrisk) logsurv lls) outsurv=out1;
+TIME ftime*fstat(0); 
+STRATA SCD_final;RUN;
+
+proc phreg data=workingD.analytical_file_chemo_17Feb;
+class SCD_final (ref="0") age_cat RAC_RECB_cat (ref="1") S_sex;
+model ftime*fstat(0) = SCD_final age_cat RAC_RECB_cat S_sex;
+hazardratio SCD_final / diff=pairwise;
+run;
+
+DATA matching_file;
+	SET workingD.analytical_file_chemo_17Feb;
+	KEEP PATIENT_ID SCD_final age_cat RAC_RECB_cat S_sex HIST type type_cat type_new ANNARBOR;
+	IF type in ("ALL","ALL_B","ALL_T","AML","CML","CMML","HD","Leukemia_Other","Lymphoma_Other","MM",
+"NHL_B","NHL_B_mantle","NHL_DLBCL","NHL_FL","NHL_Other","NHL_T","Other");
+	IF type_cat in ("Acute_Leukemia","CML_CMML") THEN type_new="Leu";
+	IF type_cat in ("HD","Lymphoma_Other","NHL") THEN type_new="Lym";
+	IF type_cat in ("MM") THEN type_new="MM";
+	IF type_cat in ("Other") THEN DELETE;
+RUN;
+
+PROC FREQ DATA=matching_file;
+	TABLE type_new*SCD_final/nocol norow nopercent chisq;
+RUN;
+
+PROC sql;
+	CREATE table analytical_file_match as
+	SELECT a.*
+	FROM workingD.analytical_file_chemo_17Feb a
+	INNER JOIN MATCHed_id b
+	ON a.PATIENT_ID=b.PATIENT_ID AND a.HIST=b.HIST;
+QUIT;
+
+PROC LIFETEST DATA=analytical_file_match method=km notable plots=(survival(atrisk) logsurv lls) outsurv=out1;
+TIME ftime*fstat(0); 
+STRATA SCD_final;RUN;
+
+DATA analytical_file_match;
+	SET analytical_file_match;
+	IF type in ("ALL","ALL_B","ALL_T","AML","CML","CMML","HD","Leukemia_Other","Lymphoma_Other","MM",
+"NHL_B","NHL_B_mantle","NHL_DLBCL","NHL_FL","NHL_Other","NHL_T","Other");
+	IF type_cat in ("Acute_Leukemia","CML_CMML") THEN type_new="Leu";
+	IF type_cat in ("HD","Lymphoma_Other","NHL") THEN type_new="Lym";
+	IF type_cat in ("MM") THEN type_new="MM";
+	IF type_cat in ("Other") THEN DELETE;
+RUN;
+
+PROC FREQ DATA=workingD.analytical_file_chemo_17Feb;
+	TABLE type*SCD_final/nocol norow nopercent chisq;
+RUN;
+
+DATA analytical_file_match;
+	SET analytical_file_match;
+	IF ftime_chemo>365 THEN ftime_chemo=0;
+	IF ftime_chemo>365 THEN ftime_chemo=365;
+	IF ftime>1825 THEN ftime=0;
+	IF ftime>1825 THEN ftime=1825;
+RUN;
+
+%CIF(DATA=analytical_file_match,TIME=ftime_chemo,STATUS=fstat_chemo,EVENT=1,CENSORED=0,GROUP=SCD_final);
+
+PROC LIFETEST DATA=analytical_file_match method=km notable plots=(survival(atrisk) logsurv lls) outsurv=out1;
+TIME ftime*fstat(0); 
+STRATA SCD_final;RUN;
+
+proc phreg data=analytical_file_match;
+class SCD_final (ref="0")  RAC_RECB_cat (ref="1") S_sex FRSTPRM ;
+model ftime*fstat(0) = SCD_final Age RAC_RECB_cat S_sex FRSTPRM;
+hazardratio SCD_final / diff=pairwise;
+run;
+
+DATA SCD_file;
+	SET workingD.analytical_file_chemo_17Feb;
+	IF type in ("ALL","ALL_B","ALL_T","AML","CML","CMML","HD","Leukemia_Other","Lymphoma_Other","MM",
+"NHL_B","NHL_B_mantle","NHL_DLBCL","NHL_FL","NHL_Other","NHL_T","Other");
+	IF type_cat in ("Acute_Leukemia","CML_CMML") THEN type_new="Leu";
+	IF type_cat in ("HD","Lymphoma_Other","NHL") THEN type_new="Lym";
+	IF type_cat in ("MM") THEN type_new="MM";
+	IF type_cat in ("Other") THEN DELETE;
+	IF SCD_final=1;
+	IF ftime_chemo>365 THEN ftime_chemo=0;
+	IF ftime_chemo>365 THEN ftime_chemo=365;
+	IF ftime>1825 THEN ftime=0;
+	IF ftime>1825 THEN ftime=1825;
+RUN;
+
+PROC LIFETEST DATA=SCD_file method=km notable plots=(survival(atrisk) logsurv lls) outsurv=out1;
+TIME ftime*fstat(0); 
+STRATA type_new;RUN;
+
+%CIF(DATA=SCD_file,TIME=ftime_chemo,STATUS=fstat_chemo,EVENT=1,CENSORED=0,GROUP=type_new);
+
+*Recode hist types by NCDB criteria;
+DATA type_file;
+	SET workingD.analytical_file_chemo_17Feb;
+	DROP type type_cat type_new;
+RUN;
+
+DATA type_file;
+	SET type_file;
+
+	IF 	HIST in: 	("9733","9742","9800","9831","9870","9948","9963","9964") THEN type="Aleukemic_subleukemic_NOS";
+	IF 	SITE in 	("420","421","424") AND
+		HIST in: 	("9827") THEN type="Aleukemic_subleukemic_NOS";
+
+	IF 	SITE not in ("024","098","099","111","142","379","422","770","771","772","773","774","775","776","777","778","779") AND
+		HIST in: 	("965","9660","9661","9662","9663","9664","9665","9666","9667") THEN type="HD_Extranodal";
+	IF 	SITE in 	("024","098","099","111","142","379","422","770","771","772","773","774","775","776","777","778","779") AND
+		HIST in: 	("965","9660","9661","9662","9663","9664","9665","9666","9667") THEN type="HD_Nodal";
+
+	IF 	SITE in 	("024","098","099","111","142","379","422","770","771","772","773","774","775","776","777","778","779") AND
+		HIST in: 	("9590","9591","9592","9593","9594","9595","9596","9597","9670","9671","9673","9675","9678","9679","9680","9684",
+					"9687","9688","9689","9690","9691","9695","9698","9699","9700","9701","9702","9705","9708","9709","9712","9714",
+					"9715","9716","9717","9718","9719","9724","9725","9726","9727","9728","9729","9735","9737","9738","9811","9812",
+					"9813","9814","9815","9816","9817","9818","9823","9827","9837") THEN type="NHL_Nodal";
+
+	IF 	SITE not in ("024","098","099","111","142","379","422","770","771","772","773","774","775","776","777","778","779") AND
+		HIST in: 	("9590","9591","9592","9593","9594","9595","9596","9597","9670","9671","9673","9675","9678","9679","9680","9684",
+					"9687","9688","9689","9690","9691","9695","9698","9699","9700","9701","9702","9705","9708","9709","9712","9714",
+					"9715","9716","9717","9718","9719","9724","9725","9726","9727","9728","9729","9735","9737","9738","9811","9812",
+					"9813","9814","9815","9816","9817","9818","9823","9827","9837") THEN type="NHL_Extranodal";
+	IF 	SITE not in ("024","098","099","111","142","379","420","421","422","424","770","771","772","773","774","775","776","777","778","779") AND
+		HIST in: 	("9811","9812","9813","9814","9815","9816","9817","9818","9823","9827","9837") THEN type="NHL_Extranodal";
+
+	IF 	HIST in: 	("9731","9732","9734") THEN type="Myeloma";
+
+	IF 	HIST in: 	("9826","9835","9836") THEN type="ALL";
+	IF 	SITE in 	("420","421","424") AND
+		HIST in: 	("9811","9812","9813","9814","9815","9816","9817","9818","9837") THEN type="ALL";
+
+	IF 	SITE in 	("420","421","424") AND
+		HIST in: 	("9823") THEN type="CLL";
+
+	IF 	HIST in: 	("9820","9832","9833","9834","9940") THEN type="Other_Lymphocytic_Leukemia";
+
+	IF 	HIST in: 	("9840","9861","9865","9866","9867","9869","9871","9872","9873","9874","9895","9896","9897","9898","9910","9911","9920") THEN type="AML";
+
+	IF 	HIST in: 	("9863","9875","9876","9945","9946") THEN type="CML";
+
+	IF 	HIST in: 	("9860","9930") THEN type="Other_Myeloid/Monocytic_Leukemia";
+
+	IF 	HIST in: 	("9891") THEN type="Acute_Monocytic_Leukemia";
+
+	IF 	HIST in: 	("9801","9805","9806","9807","9808","9809","9931") THEN type="Other_Acute_Leukemia";
+
+		type_cat="Others";
+	IF 	type in ("ALL","AML","Acute_Monocyt","Aleukemic_sub","CLL","CML","Other_Acute_L","Other_Lymphoc","Other_Myeloid") THEN type_cat="Leu";
+	IF 	type in ("HD_Extranodal","HD_Nodal","NHL_Extranoda","NHL_Nodal") THEN type_cat="Lym";
+	IF 	type in ("Myeloma") THEN type_cat="MM";
+RUN;
+	
+PROC FREQ DATA=type_file;
+	TABLE type_cat*SCD_final type*SCd_final/nocol norow nopercent chisq;
+RUN;
+DATA workingD.analytical_19Feb;
+	SET type_file;RUN;
+DATA SCD_file;
+	SET type_file;
+	IF SCD_final=1;
+	IF type_cat="Others" THEN DELETE;
+	IF ftime_chemo>365 THEN ftime_chemo=0;
+	IF ftime_chemo>365 THEN ftime_chemo=365;
+	IF ftime>1825 THEN ftime=0;
+	IF ftime>1825 THEN ftime=1825;
+RUN;
+
+PROC FREQ DATA=SCD_file;
+	TABLE age_cat S_sex RAC_RECB YRDX type_cat*annarbor/nocol norow nopercent chisq;
+RUN;
+
+PROC sql;
+	CREATE table list_temp as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			count(PATIENT_ID) as number
+	FROM SCD_file
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC FREQ DATA=list_temp ;
+	TABLE number/nocol norow nopercent chisq;
+RUN;
+
+PROC MEANS DATA=SCD_file MEAN STD MEDIAN P25 P75;
+VAR age;
+RUN;
+
+PROC sql;
+	CREATE table workingD.analytical_match_19_Feb as
+	SELECT a.*
+	FROM type_file a
+	INNER JOIN MATCHed_id b
+	ON a.PATIENT_ID=b.PATIENT_ID AND a.HIST=b.HIST;
+QUIT;
+
+PROC FREQ DATA=analytical_file_match;
+	TABLE age_cat*SCD_final S_sex*SCD_final RAC_RECB*SCD_final YRDX*SCD_final type_cat*SCD_final ANNARBOR*SCD_final/nocol norow nopercent chisq;
+RUN;
+
+PROC FREQ DATA=analytical_file_match;
+	TABLE type_cat*ANNARBOR*SCD_final/nocol norow nopercent chisq;
+RUN;
+
+*Extract all matched subjects records;
+DATA all_medpar;
+	SET medpar.medpar00 medpar.medpar01 medpar.medpar02
+		medpar.medpar03 medpar.medpar04 medpar.medpar05
+		medpar.medpar06 medpar.medpar07 medpar.medpar08
+		medpar.medpar09 medpar.medpar10 medpar.medpar11
+		medpar.medpar12 medpar.medpar13;
+RUN;
+
+DATA NCH_0_3;
+	SET NCH.nch00_file001 NCH.nch00_file002 NCH.nch00_file003 NCH.nch00_file004 NCH.nch00_file005 
+		NCH.nch01_file001 NCH.nch01_file002 NCH.nch01_file003 NCH.nch01_file004 NCH.nch01_file005 
+		NCH.nch01_file006 NCH.nch01_file007 
+		NCH.nch02_file001 NCH.nch02_file002 NCH.nch02_file003 NCH.nch02_file004 NCH.nch02_file005 
+		NCH.nch02_file006 NCH.nch02_file007 NCH.nch02_file008 NCH.nch02_file009 NCH.nch02_file010 
+		NCH.nch03_file001 NCH.nch03_file002 NCH.nch03_file003 NCH.nch03_file004 NCH.nch03_file005 
+		NCH.nch03_file006 NCH.nch03_file007 NCH.nch03_file008 NCH.nch03_file009 NCH.nch03_file010 
+		NCH.nch03_file011;
+RUN;
+
+DATA NCH_4_9;
+	SET  
+ NCH.nch04_file001 NCH.nch04_file002 NCH.nch04_file003 NCH.nch04_file004 NCH.nch04_file005
+ NCH.nch04_file006 NCH.nch04_file007 NCH.nch04_file008 NCH.nch04_file009 NCH.nch04_file010
+ NCH.nch04_file011 NCH.nch04_file012 NCH.nch04_file013
+ NCH.nch05_file001 NCH.nch05_file002 NCH.nch05_file003 NCH.nch05_file004 NCH.nch05_file005
+ NCH.nch05_file006 NCH.nch05_file007 NCH.nch05_file008 NCH.nch05_file009 NCH.nch05_file010
+ NCH.nch05_file011 NCH.nch05_file012 NCH.nch05_file013 NCH.nch05_file014 NCH.nch05_file015
+
+ NCH.nch06_file001 NCH.nch06_file002 NCH.nch06_file003 NCH.nch06_file004 NCH.nch06_file005
+ NCH.nch06_file006 NCH.nch06_file007 NCH.nch06_file008 NCH.nch06_file009 NCH.nch06_file010
+ NCH.nch06_file011 NCH.nch06_file012 NCH.nch06_file013 NCH.nch06_file014 NCH.nch06_file015
+
+ NCH.nch07_file001 NCH.nch07_file002 NCH.nch07_file003 NCH.nch07_file004 NCH.nch07_file005
+ NCH.nch07_file006 NCH.nch07_file007 NCH.nch07_file008 NCH.nch07_file009 NCH.nch07_file010
+ NCH.nch07_file011 NCH.nch07_file012 NCH.nch07_file013 NCH.nch07_file014 NCH.nch07_file015
+
+ NCH.nch08_file001 NCH.nch08_file002 NCH.nch08_file003 NCH.nch08_file004 NCH.nch08_file005
+ NCH.nch08_file006 NCH.nch08_file007 NCH.nch08_file008 NCH.nch08_file009 NCH.nch08_file010
+ NCH.nch08_file011 NCH.nch08_file012 NCH.nch08_file013 NCH.nch08_file014 NCH.nch08_file015
+
+ NCH.nch09_file001 NCH.nch09_file002 NCH.nch09_file003 NCH.nch09_file004 NCH.nch09_file005
+ NCH.nch09_file006 NCH.nch09_file007 NCH.nch09_file008 NCH.nch09_file009 NCH.nch09_file010
+ NCH.nch09_file011 NCH.nch09_file012 NCH.nch09_file013 NCH.nch09_file014 NCH.nch09_file015;
+RUN;
+
+DATA NCH_10_13;
+	SET  
+ NCH.nch10_file001 NCH.nch10_file002 NCH.nch10_file003 NCH.nch10_file004 NCH.nch10_file005
+ NCH.nch10_file006 NCH.nch10_file007 NCH.nch10_file008 NCH.nch10_file009 NCH.nch10_file010
+ NCH.nch10_file011 NCH.nch10_file012 NCH.nch10_file013 NCH.nch10_file014 NCH.nch10_file015
+
+ NCH.nch11_file001 NCH.nch11_file002 NCH.nch11_file003 NCH.nch11_file004 NCH.nch11_file005
+ NCH.nch11_file006 NCH.nch11_file007 NCH.nch11_file008 NCH.nch11_file009 NCH.nch11_file010
+ NCH.nch11_file011 NCH.nch11_file012 NCH.nch11_file013 NCH.nch11_file014
+
+ NCH.nch12_file001 NCH.nch12_file002 NCH.nch12_file003 NCH.nch12_file004 NCH.nch12_file005
+ NCH.nch12_file006 NCH.nch12_file007 NCH.nch12_file008 NCH.nch12_file009 NCH.nch12_file010
+ NCH.nch12_file011 NCH.nch12_file012
+
+ NCH.nch13_file001 NCH.nch13_file002 NCH.nch13_file003 NCH.nch13_file004 NCH.nch13_file005
+ NCH.nch13_file006 NCH.nch13_file007 NCH.nch13_file008 NCH.nch13_file009 NCH.nch13_file010
+;
+RUN;
+
+DATA OUTSAF_0_4;
+	SET 
+outsaf.outsaf00_file001 outsaf.outsaf00_file002 outsaf.outsaf00_file003
+
+outsaf.outsaf01_file001 outsaf.outsaf01_file002 outsaf.outsaf01_file003 outsaf.outsaf01_file004 outsaf.outsaf01_file005
+
+outsaf.outsaf02_file001 outsaf.outsaf02_file002 outsaf.outsaf02_file003 outsaf.outsaf02_file004 outsaf.outsaf02_file005
+outsaf.outsaf02_file006 outsaf.outsaf02_file007
+
+outsaf.outsaf03_file001 outsaf.outsaf03_file002 outsaf.outsaf03_file003 outsaf.outsaf03_file004 outsaf.outsaf03_file005
+outsaf.outsaf03_file006 outsaf.outsaf03_file007 outsaf.outsaf03_file008
+
+outsaf.outsaf04_file001 outsaf.outsaf04_file002 outsaf.outsaf04_file003 outsaf.outsaf04_file004 outsaf.outsaf04_file005
+outsaf.outsaf04_file006 outsaf.outsaf04_file007 outsaf.outsaf04_file008 outsaf.outsaf04_file009 outsaf.outsaf04_file010
+;
+RUN;
+
+DATA OUTSAF_5_9;
+	SET 
+ outsaf.outsaf05_file001 outsaf.outsaf05_file002 outsaf.outsaf05_file003 outsaf.outsaf05_file004 outsaf.outsaf05_file005
+ outsaf.outsaf05_file006 outsaf.outsaf05_file007 outsaf.outsaf05_file008 outsaf.outsaf05_file009 outsaf.outsaf05_file010
+ outsaf.outsaf05_file011
+
+ outsaf.outsaf06_file001 outsaf.outsaf06_file002 outsaf.outsaf06_file003 outsaf.outsaf06_file004 outsaf.outsaf06_file005
+ outsaf.outsaf06_file006 outsaf.outsaf06_file007 outsaf.outsaf06_file008 outsaf.outsaf06_file009 outsaf.outsaf06_file010
+ outsaf.outsaf06_file011
+
+ outsaf.outsaf07_file001 outsaf.outsaf07_file002 outsaf.outsaf07_file003 outsaf.outsaf07_file004 outsaf.outsaf07_file005
+ outsaf.outsaf07_file006 outsaf.outsaf07_file007 outsaf.outsaf07_file008 outsaf.outsaf07_file009 outsaf.outsaf07_file010
+ outsaf.outsaf07_file011 outsaf.outsaf07_file012
+
+ outsaf.outsaf08_file001 outsaf.outsaf08_file002 outsaf.outsaf08_file003 outsaf.outsaf08_file004 outsaf.outsaf08_file005 
+ outsaf.outsaf08_file006 outsaf.outsaf08_file007 outsaf.outsaf08_file008 outsaf.outsaf08_file009 outsaf.outsaf08_file010
+ outsaf.outsaf08_file011 outsaf.outsaf08_file012 outsaf.outsaf08_file013
+
+ outsaf.outsaf09_file001 outsaf.outsaf09_file002 outsaf.outsaf09_file003 outsaf.outsaf09_file004 outsaf.outsaf09_file005
+ outsaf.outsaf09_file006 outsaf.outsaf09_file007 outsaf.outsaf09_file008 outsaf.outsaf09_file009 outsaf.outsaf09_file010
+ outsaf.outsaf09_file011 outsaf.outsaf09_file012 outsaf.outsaf09_file013
+;
+RUN;
+
+DATA OUTSAF_10_13;
+	SET 
+outsaf.outsaf10_file001 outsaf.outsaf10_file002 outsaf.outsaf10_file003 outsaf.outsaf10_file004 outsaf.outsaf10_file005
+ outsaf.outsaf10_file006 outsaf.outsaf10_file007 outsaf.outsaf10_file008 outsaf.outsaf10_file009 outsaf.outsaf10_file010
+ outsaf.outsaf10_file011 outsaf.outsaf10_file012 outsaf.outsaf10_file013 outsaf.outsaf10_file014
+
+ outsaf.outsaf11_file001 outsaf.outsaf11_file002 outsaf.outsaf11_file003 outsaf.outsaf11_file004 outsaf.outsaf11_file005
+ outsaf.outsaf11_file006 outsaf.outsaf11_file007 outsaf.outsaf11_file008 outsaf.outsaf11_file009 outsaf.outsaf11_file010
+ outsaf.outsaf11_file011 outsaf.outsaf11_file012 outsaf.outsaf11_file013 outsaf.outsaf11_file014
+
+ outsaf.outsaf12_file001 outsaf.outsaf12_file002 outsaf.outsaf12_file003 outsaf.outsaf12_file004 outsaf.outsaf12_file005
+ outsaf.outsaf12_file006 outsaf.outsaf12_file007 outsaf.outsaf12_file008 outsaf.outsaf12_file009 outsaf.outsaf12_file010
+ outsaf.outsaf12_file011 outsaf.outsaf12_file012
+
+ outsaf.outsaf13_file001 outsaf.outsaf13_file002 outsaf.outsaf13_file003 outsaf.outsaf13_file004 outsaf.outsaf13_file005
+ outsaf.outsaf13_file006 outsaf.outsaf13_file007 outsaf.outsaf13_file008 outsaf.outsaf13_file009 outsaf.outsaf13_file010
+ outsaf.outsaf13_file011;
+RUN;
+
+DATA all_dme;
+	SET dme.dme00 dme.dme01 dme.dme02
+		dme.dme03 dme.dme04 dme.dme05
+		dme.dme06 dme.dme07 dme.dme08
+		dme.dme09 dme.dme10 dme.dme11
+		dme.dme12 dme.dme13;
+RUN;
+
+PROC sql;
+	CREATE table workingD.matched_medpar as
+	SELECT a.*
+	FROM all_medpar a
+	INNER JOIN MATCHed_id b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table workingD.matched_dme as
+	SELECT a.*
+	FROM all_dme a
+	INNER JOIN MATCHed_id b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+PROC sql;
+	CREATE table workingD.matched_OUTSAF_0_4 as
+	SELECT a.*
+	FROM OUTSAF_0_4 a
+	INNER JOIN MATCHed_id b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+PROC sql;
+	CREATE table workingD.matched_OUTSAF_5_9 as
+	SELECT a.*
+	FROM OUTSAF_5_9 a
+	INNER JOIN MATCHed_id b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+PROC sql;
+	CREATE table workingD.matched_OUTSAF_10_13 as
+	SELECT a.*
+	FROM OUTSAF_10_13 a
+	INNER JOIN MATCHed_id b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+PROC sql;
+	CREATE table workingD.matched_NCH_0_3 as
+	SELECT a.*
+	FROM NCH_0_3 a
+	INNER JOIN MATCHed_id b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+PROC sql;
+	CREATE table workingD.matched_NCH_4_9 as
+	SELECT a.*
+	FROM NCH_4_9 a
+	INNER JOIN MATCHed_id b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+PROC sql;
+	CREATE table workingD.matched_NCH_10_13 as
+	SELECT a.*
+	FROM NCH_10_13 a
+	INNER JOIN MATCHed_id b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
