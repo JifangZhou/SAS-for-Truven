@@ -1,0 +1,194 @@
+*SCD matched analysis baseline and chemotherapy initiation;
+LIBNAME workingD "C:\Users\jzhou86\Documents\Greg SEER Project\Cancer in elderly SCD patients\Data";
+LIBNAME medpar "C:\Users\jzhou86\Documents\Greg SEER Project\Greg SEER Data\unzipped MEDPAR";
+LIBNAME NCH "C:\Users\jzhou86\Documents\Greg SEER Project\Greg SEER Data\unzipped NCH";
+LIBNAME OUTSAF "C:\Users\jzhou86\Documents\Greg SEER Project\Greg SEER Data\unzipped OUTSAF";
+LIBNAME listID "C:\Users\jzhou86\Documents\Greg SEER Project\Greg SEER Data\unzipped PEDSF";
+LIBNAME DME "C:\Users\jzhou86\Documents\Greg SEER Project\Greg SEER Data\unzipped DME";
+DATA id_list;
+	SET workingD.analytical_matched_list;
+	IF 14976<=claim_date<=18628;
+RUN;
+
+LIBNAME workingD "C:\Users\jzhou86\Documents\Greg SEER Project\Cancer in elderly SCD patients\Data";
+
+DATA all_record;
+	SET workingD.SCD_dme_9Feb workingD.SCD_nch1_9Feb workingD.SCD_nch2_9Feb workingD.SCD_nch3_9Feb 
+		workingD.SCD_medpar_9Feb workingD.SCD_Outsaf1_9Feb workingD.SCD_Outsaf2_9Feb workingD.SCD_Outsaf3_9Feb;
+	date=catx(DIS_M, DIS_D,DIS_Y);
+		dis_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+		date=catx(FREXPENM, FREXPEND,FREXPENY);
+		svc_date_1=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.
+),5,4)),anydtdte.);
+		date=catx(FROM_DTM, FROM_DTD,FROM_DTY);
+		svc_date_2=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+RUN;
+
+*add the index date;
+	PROC sql;
+	CREATE table all_record as
+	SELECT a.*,
+			b.claim_date
+	FROM all_record a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA pre_record;
+	SET all_record;
+	IF claim_date-180<=dis_date<claim_date OR
+		claim_date-180<=svc_date_1<claim_date OR
+		claim_date-180<=svc_date_2<claim_date;
+DATA post_record;
+	SET all_record;
+	IF dis_date>=claim_date OR
+		svc_date_1>=claim_date OR
+		svc_date_2>=claim_date;
+RUN;
+
+*Baseline VOC and ACS;
+DATA case_record;
+	SET pre_record;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ( '28242','28262','28264','28269','5173') then case=1;
+		end;
+	date=catx(FROM_DTM, FROM_DTD,FROM_DTY);
+		thalassemia_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+	IF case=1;
+RUN;
+
+PROC sql;
+	CREATE table case_list as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as case
+	FROM case_record
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_1 as
+	SELECT a.*,
+			b.case as voc
+	FROM id_list a
+	LEFT JOIN case_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+*ACS or pneumonia;
+DATA case_record;
+	SET pre_record;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('5173','480','481','482','483','484','485','486','487','488') then case=1;
+		end;
+	date=catx(FROM_DTM, FROM_DTD,FROM_DTY);
+		thalassemia_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+	IF case=1;
+RUN;
+
+PROC sql;
+	CREATE table case_list as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as case
+	FROM case_record
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_2 as
+	SELECT a.*,
+			b.case as acs_pneumonia
+	FROM id_list_1 a
+	LEFT JOIN case_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+*Diabetes;
+DATA case_record;
+	SET pre_record;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('250') then case=1;
+		end;
+	date=catx(FROM_DTM, FROM_DTD,FROM_DTY);
+		thalassemia_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+	IF case=1;
+RUN;
+
+PROC sql;
+	CREATE table case_list as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as case
+	FROM case_record
+	GROUP BY PATIENT_ID;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_3 as
+	SELECT a.*,
+			b.case as diabetes
+	FROM id_list_2 a
+	LEFT JOIN case_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+
+PROC FREQ DATA=id_list_3;
+	TABLE SCD*diabetes/missing chisq;
+RUN;
+
+*chemotherapy initiation;
+
+
+DATA case_record;
+	SET post_record;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ( 'V581', 'V662', 'V672') then case=1;
+		end;
+	IF HCPCS in ("Q0083","Q0084","Q0085","J7150", "J9", "96400", "96408", "96410", "96412", "96414", "96545") THEN case=1;
+	IF case=1;
+RUN;
+
+PROC sql;
+	CREATE table case_list as
+	SELECT min(PATIENT_ID) as PATIENT_ID,
+			1 as case,
+			min(dis_date) as dis_date,
+			min(svc_date_1) as svc_date_1,
+			min(svc_date_2) as svc_date_2
+	FROM case_record
+	GROUP BY PATIENT_ID;
+QUIT;
+
+DATA case_list;
+	SET case_list;
+	chemo_date=min(dis_date,svc_date_1,svc_date_2);
+RUN;
+		
+
+PROC sql;
+	CREATE table id_list_4 as
+	SELECT a.*,
+			b.chemo_date as chemo_date
+	FROM id_list_3 a
+	LEFT JOIN case_list b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+*Assessment of chemotherapy initiation by competing risk model;
+DATA workingD.id_list_9Feb;
+	SET id_list_4;
+	fstat_chemo=0;
+	ftime_chemo=min(chemo_date, end_enroll, death_date)-claim_date;
+	IF ftime_chemo=chemo_date-claim_date THEN fstat_chemo=1;
+	IF ftime_chemo=death_date-claim_date AND chemo_date=. THEN fstat_chemo=2;
+RUN;
+proc phreg data=id_list_5;
+class SCD_final age_cat RAC_RECB (ref="1")/ param=glm order=internal ref=first;
+model ftime_chemo*fstat_chemo(0) = SCD_final age_cat RAC_RECB S_sex/ eventcode=1;
+hazardratio 'Subdistribution Hazards' SCD_final/ diff=pairwise;
+run;
+
+%CIF(DATA=id_list_5,TIME=ftime_chemo,STATUS=fstat_chemo,EVENT=1,CENSORED=0,GROUP=SCD_final);
