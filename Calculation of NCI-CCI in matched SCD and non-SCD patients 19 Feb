@@ -1,0 +1,296 @@
+*Calculation of NCI-CCI in matched SCD and non-SCD patients;
+
+LIBNAME workingD "C:\Users\jzhou86\Documents\Greg SEER Project\Work directory";
+DATA medpar_mm;
+	SET workingD.matched_medpar;
+	date=catx(DIS_M, DIS_D,DIS_Y);
+	claim_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+	date=catx(ADM_M, ADM_D,ADM_Y);
+	adm_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+RUN;
+
+DATA nch_mm;
+	SET workingD.matched_NCH_0_3 workingD.matched_NCH_4_9 workingD.matched_NCH_10_13;
+	date=catx(FREXPENM, FREXPEND,FREXPENY);
+	claim_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+DATA outsaf_mm;
+	SET workingD.matched_OUTSAF_0_4 workingD.matched_OUTSAF_5_9 workingD.matched_OUTSAF_10_13;
+	date=catx(FROM_DTM, FROM_DTD,FROM_DTY);
+	claim_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+DATA dme_mm;
+	SET workingD.matched_dme;
+	date=catx(FREXPENM, FREXPEND,FREXPENY);
+	claim_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.
+),5,4)),anydtdte.);
+RUN;
+
+* extract 6 months pre-diagnosis outpatient and inpatient records;
+DATA id_list;
+	SET workingD.analytical_match_19_Feb;
+RUN;
+DATA all_record;
+	SET medpar_mm nch_mm outsaf_mm dme_mm;
+RUN;
+
+PROC sql;
+	CREATE table all_record_baseline as
+	SELECT a.*,
+			b.claim_date as dx_date,
+			b.age as age,
+			b.case_id
+	FROM  all_record a
+	INNER JOIN id_list b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.claim_date-365<=a.claim_date<b.claim_date;
+QUIT;
+
+
+*Add NCI-adjusted CCI scores;
+
+*********************Application of CCL using ICD-9 in SCD patients***********;
+
+DATA id_list;
+	SET id_list;
+DATA all_svc_list;
+	SET all_record_baseline;
+RUN;
+* list all inpatient summary and outpatient service records;
+
+* start searching for items listed in Charlson Comorbidity Index;
+/********** MYOCARDIAL INFARCTION WEIGHT = 1 ****************/
+DATA all_svc_list;
+	SET all_svc_list;
+	MYOCARDIAL_INFARCTION=0;
+	array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('410','412') then MYOCARDIAL_INFARCTION=1;
+		end;
+RUN;
+ /********** CHF ***** WEIGHT = 1 ****************************/
+DATA all_svc_list;
+	SET all_svc_list;
+	CHF=0;
+	array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('39891','4254','4255','4257','4258','4259','428') then CHF=1;
+		end;
+RUN;
+ /*********** PERIPHERAL VASCULAR DISEASE ******* WEIGHT = 1**/
+DATA all_svc_list;
+	SET all_svc_list;
+	PERIPHERAL_VASCULAR_DISEASE=0;
+	array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in:('0930','440','441','7854','V434',
+					'4420','4421','4422','4423','4424','4425','4426','4427','4428',
+					'4431','4432','4433','4434','4435','4436','4437','4438','4439',
+					'44770','44771','44772','44773')  then PERIPHERAL_VASCULAR_DISEASE=1;
+		end;
+	IF HCPCS in: ('0060','3813','3814','3815','3816','3818','3833','3834','3836','3838',
+                      '3843','3844','3846','3848','3868','3925','3929') then PERIPHERAL_VASCULAR_DISEASE=1;
+RUN;
+     /********* CEREBROVASCULAR DISEASE ******* WEIGHT = 1 *******/
+DATA all_svc_list;
+	SET all_svc_list;
+	CEREBROVASCULAR_DISEASE=0;
+	array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('430','431','432','433','434','435','436','437','438') then CEREBROVASCULAR_DISEASE=1;
+		end;
+	IF HCPCS in: ('0061','0062','0063','0065','3812','3832','3842','3922','3928','3974') then CEREBROVASCULAR_DISEASE=1;
+RUN;
+     /*********** COPD *********************** WEIGHT = 1 ********/
+DATA all_svc_list;
+	SET all_svc_list;
+	COPD=0;
+	array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('490','491','492','493','494','495','496',
+						'500','501','502','503','504','505',
+						'4168','4169','5064','5191') then COPD=1;
+		end;
+RUN;
+     /********  DEMENTIA ****** WEIGHT = 1 ***********************/
+DATA all_svc_list;
+	SET all_svc_list;
+	DEMENTIA=0;
+	array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('290','2910','2911','2912','29282','2941','3310','3311','3312','33182') then DEMENTIA=1;
+		end;
+RUN;
+     /********* HEMIPLEGIA_PARALYSIS **************** WEIGHT = 2 ************/
+DATA all_svc_list;
+	SET all_svc_list;
+	HEMIPLEGIA_PARALYSIS=0;
+	array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('342','3449',
+			'3440',	'3441','3442','3443','3444','3445','3446') then HEMIPLEGIA_PARALYSIS=2;
+		end;
+RUN;
+     /******** DIABETES ************* WEIGHT = 1 *****************/
+DATA all_svc_list;
+	SET all_svc_list;
+	DIABETES=0;
+	array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('2500','2501','2502','2503') then DIABETES=1;
+		end;
+RUN;
+     /********* DIABETES WITH SEQUELAE ****** WEIGHT = 2 *********/
+DATA all_svc_list;
+	SET all_svc_list;
+	DIABETES_WITH_SEQUELAE=0;
+	array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('3620','2504','2505','2506','2507','2508','2509') then DIABETES_WITH_SEQUELAE=2;
+		end;
+RUN;
+     /********* CHRONIC RENAL FAILURE ******* WEIGHT = 2 *********/
+DATA all_svc_list;
+	SET all_svc_list;
+	CHRONIC_RENAL_FAILURE=0;
+	array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('40301','40311','40391','40402','40403','40412','40413','40492','40493',
+                       '582','583','585','586','588','V420','V451','V56') then CHRONIC_RENAL_FAILURE=2;
+		end;
+	IF HCPCS in: ('3927','3942','3995','5498','5569') then CHRONIC_RENAL_FAILURE=2;
+RUN;
+     /************** MILD_LIVER_DISEASE ******** WEIGHT = 1 *****/
+DATA all_svc_list;
+	SET all_svc_list;
+	MILD_LIVER_DISEASE=0;
+	array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('07032','07033','07054','5712','5714','5715','5716') then MILD_LIVER_DISEASE=1;
+		end;
+RUN;
+     /************** MODERATE-SEVERE LIVER DISEASE *** WEIGHT = 3*/
+DATA all_svc_list;
+	SET all_svc_list;
+	MODERATE_SEVERE_LIVER_DISEASE=0;
+	array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('07022','07023','07044','V427',
+			'4560', '4561', '4562',
+			'5722','5723','5724','5725','5726','5727','5728') then MODERATE_SEVERE_LIVER_DISEASE=3;
+		end;
+	IF HCPCS in: ('391 ','4291','505') then MODERATE_SEVERE_LIVER_DISEASE=3;
+RUN;
+     /*************** ULCERS ********** WEIGHT = 1 ***************/
+DATA all_svc_list;
+	SET all_svc_list;
+	ULCERS=0;
+	array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('531','532','533','534') then ULCERS=1;
+		end;
+RUN;
+     /*************** RHEUM  ********** WEIGHT = 1 ***************/
+DATA all_svc_list;
+	SET all_svc_list;
+	RHEUM=0;
+	array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('7100','7101','7104','7140','7141','7142','71481','725') then RHEUM=1;
+		end;
+RUN;
+     /*************** AIDS   ********** WEIGHT = 6 ***************/
+DATA all_svc_list;
+	SET all_svc_list;
+	AIDS=0;
+	array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('042','043','044','79571','V08') then AIDS=6;
+		end;
+RUN;
+     /*************** MALIGNANCY_LYMPHOMA_LEUKEMIA ********** WEIGHT = WEIGHT = 0 removed for NCI adjustment ***************/
+/*DATA all_svc_list;
+	SET all_svc_list;
+	MALIGNANCY_LYMPHOMA_LEUKEMIA=0;
+	array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('14','15','16','170','171','172','174','175','176','177','178','179','18','190',
+						'191','192','193','194','1950','1951','1952','1953','1954','1955','1956','1957','1958',
+						'200','201','202','203','204','205','206','207','208') then MALIGNANCY_LYMPHOMA_LEUKEMIA=2;
+		end;
+RUN;
+     /*************** METASTATIC_SOLID_TUMOR ********** WEIGHT = 6 ***************/
+/*DATA all_svc_list;
+	SET all_svc_list;
+	METASTATIC_SOLID_TUMOR=0;
+	array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('196','197','198','1990','1991') then METASTATIC_SOLID_TUMOR=6;
+		end;
+RUN;*/
+     /*************** AGE_FACTOR Each decade >40 years of age, a score of 1  ***************/
+DATA all_svc_list;
+	SET all_svc_list;
+	AGE_FACTOR=0;
+	IF 40<age<=50 THEN AGE_FACTOR=1;
+	ELSE IF 50<age<=60 THEN AGE_FACTOR=2;
+	ELSE IF 60<age<=70 THEN AGE_FACTOR=3;
+	ELSE IF 70<age<=80 THEN AGE_FACTOR=4;
+	ELSE IF 80<age<=90 THEN AGE_FACTOR=5;
+	ELSE IF 90<age<=100 THEN AGE_FACTOR=6;
+RUN;
+
+PROC SQL;
+CREATE TABLE CCI_list as
+SELECT min(case_id) as case_id,
+		max(MYOCARDIAL_INFARCTION)+
+		max(CHF)+
+		max(PERIPHERAL_VASCULAR_DISEASE)+
+		max(CEREBROVASCULAR_DISEASE)+
+		max(COPD+DEMENTIA)+
+		max(DEMENTIA)+
+		max(HEMIPLEGIA_PARALYSIS)+
+		max(DIABETES)+
+		max(DIABETES_WITH_SEQUELAE)+
+		max(CHRONIC_RENAL_FAILURE)+
+		max(MILD_LIVER_DISEASE)+
+		max(MODERATE_SEVERE_LIVER_DISEASE)+
+		max(ULCERS)+
+		max(RHEUM)+
+		max(AIDS)+
+		max(AGE_FACTOR) as CCI
+	FROM all_svc_list
+	GROUP BY case_id;
+QUIT;
+
+PROC FREQ DATA=CCI_list;
+TABLE CCI;
+RUN;
+
+PROC sql;
+	CREATE table id_list_CCI as
+	SELECT a.*,
+	b.CCI
+	FROM id_list a
+	LEFT JOIN CCI_list b
+	ON a.case_id=b.case_id;
+QUIT;
+
+DATA id_list_CCI;
+	SET id_list_CCI;
+	IF CCI=. THEN CCI=0;
+	IF CCI>=3 THEN CCI_cat=2;
+	IF CCI=2 OR CCI=1 THEN CCI_cat=1;
+	IF CCI=0 THEN CCI_cat=0;
+RUN;
+
+PROC MEANS DATA=id_list_CCI MEAN STD MEDIAN P25 P75;
+class SCD_final;
+VAR CCI;
+RUN;
+
+PROC TTEST DATA=id_list_CCI;
+class SCD_final;
+VAR CCI;
+RUN;
+
+PROC FREQ DATA=id_list_CCI;
+	TABLE CCI_cat*SCD_final/nocol norow nopercent chisq;
+RUN;
