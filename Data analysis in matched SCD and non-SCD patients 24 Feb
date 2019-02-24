@@ -1,0 +1,335 @@
+*Assessment SCD elderly patients with blood cancer;
+*Assess the # of admission, transfusion and VTE over the baseline period;
+
+LIBNAME workingD "C:\Users\jzhou86\Documents\Greg SEER Project\Cancer in elderly SCD patients\Data";
+DATA analytical_cohort;
+	SET workingD.baseline_analytical_19feb;
+		IF MYOCARDIAL_INFARCTION=. THEN MYOCARDIAL_INFARCTION=0;
+		IF CHF=. THEN CHF=0;
+		IF PERIPHERAL_VASCULAR_DISEASE=. THEN PERIPHERAL_VASCULAR_DISEASE=0;
+		IF CEREBROVASCULAR_DISEASE=. THEN CEREBROVASCULAR_DISEASE=0;
+		IF COPD=. THEN COPD=0;
+		IF DIABETES=. THEN DIABETES=0;
+		IF CHRONIC_RENAL_FAILURE=. THEN CHRONIC_RENAL_FAILURE=0;
+		IF ULCERS=. THEN ULCERS=0;
+		IF voc=. THEN voc=0;
+		IF acs_pneumonia=. THEN acs_pneumonia=0;
+		IF Pulmonary_hypertension=. THEN Pulmonary_hypertension=0;
+		IF Avascular_necrosis=. THEN Avascular_necrosis=0;
+		IF Iron_overload=. THEN Iron_overload=0;
+	IF ftime_chemo>365 THEN ftime_chemo=0;
+	IF ftime_chemo>365 THEN ftime_chemo=365;
+	IF ftime>1825 THEN ftime=0;
+	IF ftime>1825 THEN ftime=1825;
+RUN;
+
+DATA SCD_file;
+	SET workingD.analytical_19Feb;
+	IF SCD_final=1;
+	IF type_cat="Others" THEN DELETE;
+	IF ftime_chemo>365 THEN ftime_chemo=0;
+	IF ftime_chemo>365 THEN ftime_chemo=365;
+	IF ftime>1825 THEN ftime=0;
+	IF ftime>1825 THEN ftime=1825;
+RUN;
+
+DATA ipt_file;
+	SET workingD.matched_medpar;
+	date=catx(ADM_M, ADM_D,ADM_Y);
+	ADM_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+RUN;
+
+*Select all admission records at baseline;
+PROC sql;
+	CREATE table ipt_file_baseline as
+	SELECT a.*,
+			b.case_id
+	FROM ipt_file a
+	INNER JOIN analytical_cohort b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.claim_date-365<=a.ADM_date<b.claim_date;
+QUIT;
+
+PROC sql;
+	CREATE table case_list as
+	SELECT min(case_id) as case_id,
+			count(ADM_date) as baseline_adm_num
+	FROM ipt_file_baseline
+	GROUP BY case_id;
+QUIT;
+
+PROC FREQ DATA=case_list;
+	TABLE baseline_adm_num;
+RUN;
+
+PROC sql;
+	CREATE table analytical_cohort_ipt as
+	SELECT a.*,
+			b.baseline_adm_num
+	FROM analytical_cohort a
+	LEFT JOIN case_list b
+	ON a.case_id=b.case_id;
+QUIT;
+
+*Number of transfusions over baseline period;
+
+DATA all_procedures;
+	SET workingD.matched_outsaf_0_4 workingD.matched_outsaf_5_9 workingD.matched_outsaf_10_13 
+		workingD.matched_nch_0_3 workingD.matched_nch_4_9 workingD.matched_nch_10_13 
+		workingD.matched_dme;
+		date=catx(FREXPENM, FREXPEND,FREXPENY);
+		svc_date_1=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+		date=catx(FROM_DTM, FROM_DTD,FROM_DTY);
+		svc_date_2=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+		SVCDATE=min(svc_date_1, svc_date_2);
+		IF SVCDATE=. THEN DELETE;
+RUN;
+
+DATA transfusion_records;
+	SET all_procedures;
+	array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('990') then case=1;
+		end;
+	IF HCPCS in ('36430','P9011','P9016','P9021','P9022','P9038','P9039','P9040','P9051','P9054','P9057','P9058') THEN case=1;
+	IF case=1;
+run; 
+
+PROC sql;
+	CREATE table transfusion_baseline as
+	SELECT a.*,
+			b.case_id
+	FROM transfusion_records a
+	INNER JOIN analytical_cohort b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.claim_date-365<=a.SVCDATE<b.claim_date;
+QUIT;
+
+PROC sql;
+	CREATE table case_list as
+	SELECT min(case_id) as case_id,
+			count(SVCDATE) as baseline_transfusion_num
+	FROM transfusion_baseline
+	GROUP BY case_id;
+QUIT;
+
+PROC FREQ DATA=case_list;
+	TABLE baseline_transfusion_num;
+RUN;
+
+PROC sql;
+	CREATE table analytical_ipt_trans as
+	SELECT a.*,
+			b.baseline_transfusion_num
+	FROM analytical_cohort_ipt a
+	LEFT JOIN case_list b
+	ON a.case_id=b.case_id;
+QUIT;
+
+DATA analytical_ipt_trans;
+	SET analytical_ipt_trans;
+	IF baseline_transfusion_num=. THEN baseline_transfusion_num=0;
+	transfusion_cat=0;
+	IF baseline_transfusion_num>0 THEN transfusion_cat=1;
+	IF baseline_adm_num=. THEN baseline_adm_num=0;
+	baseline_adm_cat=0;
+	IF baseline_adm_num>=3 THEN baseline_adm_cat=1;
+RUN;
+
+*VTE events at baseline;
+DATA all_record;
+	SET workingD.matched_medpar
+		workingD.matched_outsaf_0_4 workingD.matched_outsaf_5_9 workingD.matched_outsaf_10_13 
+		workingD.matched_nch_0_3 workingD.matched_nch_4_9 workingD.matched_nch_10_13 
+		workingD.matched_dme;
+		date=catx(DIS_M, DIS_D,DIS_Y);
+		dis_date=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+		date=catx(FREXPENM, FREXPEND,FREXPENY);
+		svc_date_1=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.
+),5,4)),anydtdte.);
+		date=catx(FROM_DTM, FROM_DTD,FROM_DTY);
+		svc_date_2=input(cats(substr(put(date,8.),3,2),substr(put(date,8.),1,2),substr(put(date,8.),5,4)),anydtdte.);
+		SVCDATE=min(dis_date,svc_date_1, svc_date_2);
+		IF SVCDATE=. THEN DELETE;
+RUN;
+
+PROC sql;
+	CREATE table all_record_baseline as
+	SELECT a.*,
+			b.case_id
+	FROM all_record a
+	INNER JOIN analytical_cohort b
+	ON a.PATIENT_ID=b.PATIENT_ID AND b.claim_date-365<=a.SVCDATE<b.claim_date;
+QUIT;
+
+DATA all_PE_list;
+	SET all_record_baseline;
+	PE=0;
+		array icd {*} DGN_CD1-DGN_CD25;
+
+		do i = 1 to dim(icd);
+		if icd{i} in: ('4151','T800XXA','T81718A','T8172XA','T82817A','T82818A',
+						'I2690','I2699','I2690','I2692','I2699') then PE=1;
+		end;
+	IF PE=1;
+RUN;
+
+DATA all_DVT_list;
+	SET all_record_baseline;
+	DVT=0;
+	array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('4511','4512','45340','45341','45342','4538','4539',
+						'I8010','I80209','I803','I82409','I82419','I82429',
+						'I82439','I824Y9','I82449','I82499','I824Z9','I82609',
+						'I82619','I82629','I82A19','I82B19','I82C19','I82290','I82890','I8291') then DVT=1;
+		end;
+	IF DVT=1;
+RUN;
+
+
+
+PROC sql;
+	CREATE table PE_case_list as
+	SELECT min(case_id) as case_id,
+			1 as baseline_PE
+	FROM all_PE_list
+	GROUP BY case_id;
+QUIT;
+
+PROC sql;
+	CREATE table DVT_case_list as
+	SELECT min(case_id) as case_id,
+			1 as baseline_DVT
+	FROM all_DVT_list
+	GROUP BY case_id;
+QUIT;
+
+PROC sql;
+	CREATE table analytical_1 as
+	SELECT a.*,
+			b.baseline_PE
+	FROM analytical_ipt_trans a
+	LEFT JOIN PE_case_list b
+	ON a.case_id=b.case_id;
+QUIT;
+PROC sql;
+	CREATE table analytical_2 as
+	SELECT a.*,
+			b.baseline_DVT
+	FROM  analytical_1 a
+	LEFT JOIN DVT_case_list b
+	ON a.case_id=b.case_id;
+QUIT;
+
+DATA workingD.analytical_cohort_24feb;
+	SET analytical_2;
+	IF baseline_PE=. THEN baseline_PE=0;
+	IF baseline_DVT=. THEN baseline_DVT=0;
+RUN;
+
+
+
+DATA all_PAH_list;
+	SET all_record_baseline;
+	case=0;
+	array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('4150', '4160', '4168') THEN case=1;
+		end;
+	IF case=1;
+RUN;
+
+PROC sql;
+	CREATE table PAH_case_list as
+	SELECT min(case_id) as case_id,
+			1 as baseline_PAH
+	FROM all_PAH_list
+	GROUP BY case_id;
+QUIT;
+
+PROC FREQ DATA=workingD.analytical_cohort_24feb;
+	TABLE 	baseline_PE*SCD_final
+			baseline_DVT*SCD_final
+			transfusion_cat*SCD_final
+			baseline_adm_cat*SCD_final/nocol norow nopercent chisq;
+RUN;
+
+PROC MEANS DATA=workingD.analytical_cohort_24feb MEAN STD MEDIAN P25 P75;
+	CLASS SCD_final;
+	VAR baseline_adm_num;
+RUN;
+
+PROC TTEST DATA=workingD.analytical_cohort_24feb;
+	CLASS SCD_final;
+	VAR baseline_adm_num age;
+RUN;
+
+*analytical cohort on survival;
+DATA analytical_cohort;
+	SET workingD.analytical_cohort_24feb;
+	SCD_type="non_SCD";
+	IF SCD_final=1 AND baseline_adm_cat=1 THEN SCD_type="SCD_severe";
+	IF SCD_final=1 AND baseline_adm_cat=0 THEN SCD_type="SCD_mild";
+RUN;
+PROC LIFETEST DATA=analytical_cohort method=km notable plots=(survival(atrisk) logsurv lls) outsurv=out1;
+TIME ftime*fstat(0); 
+STRATA SCD_type;RUN;
+
+proc phreg data=analytical_cohort;
+class SCD_final (ref="0")  RAC_RECB_cat (ref="1") S_sex (ref="2") FRSTPRM CCI_cat (ref="0") CFI;
+model ftime*fstat(0) = SCD_final Age RAC_RECB_cat S_sex FRSTPRM voc MYOCARDIAL_INFARCTION DIABETES CCI_cat CFI transfusion_cat baseline_adm_cat;
+hazardratio SCD_final / diff=pairwise;
+run;
+
+proc phreg data=analytical_cohort;
+class SCD_final (ref="0")  RAC_RECB_cat (ref="1") S_sex (ref="2") FRSTPRM CCI_cat (ref="0") CFI (ref="robust")/ param=glm order=internal ref=first;
+model ftime_chemo*fstat_chemo(0) = SCD_final Age RAC_RECB_cat S_sex FRSTPRM voc MYOCARDIAL_INFARCTION DIABETES CCI_cat CFI transfusion_cat baseline_adm_cat/ eventcode=1;
+hazardratio 'Subdistribution Hazards' SCD_final/ diff=pairwise;
+run;
+
+DATA analytical_cohort_SCD;
+	SET analytical_cohort;
+	IF 	SCD_type="non_SCD" THEN DELETE;
+RUN;
+PROC FREQ DATA=analytical_cohort_SCD;
+	TABLE 	Age_cat*SCD_type
+RAC_RECB_cat*SCD_type 
+S_sex*SCD_type 
+FRSTPRM*SCD_type 
+voc*SCD_type 
+MYOCARDIAL_INFARCTION*SCD_type 
+DIABETES*SCD_type 
+CCI_cat*SCD_type 
+CFI*SCD_type
+			baseline_PE*SCD_type
+			baseline_DVT*SCD_type
+			transfusion_cat*SCD_type
+			baseline_adm_cat*SCD_type/nocol norow nopercent chisq;
+RUN;
+
+PROC TTEST DATA=analytical_cohort_SCD;
+	CLASS SCD_type;
+	VAR age CCI baseline_adm_num;
+RUN;
+
+PROC FREQ DATA=analytical_cohort_SCD;
+	TABLE 	type_cat*SCD_type
+annarbor*SCD_type 
+MYOCARDIAL_INFARCTION*SCD_type 
+CHF*SCD_type 
+PERIPHERAL_VASCULAR_DISEASE*SCD_type 
+CEREBROVASCULAR_DISEASE*SCD_type 
+COPD*SCD_type 
+DIABETES*SCD_type 
+CHRONIC_RENAL_FAILURE*SCD_type 
+ULCERS*SCD_type 
+voc*SCD_type 
+acs_pneumonia*SCD_type 
+Pulmonary_hypertension*SCD_type 
+Avascular_necrosis*SCD_type 
+Iron_overload*SCD_type/nocol norow nopercent chisq;
+RUN;
+
+PROC FREQ DATA=analytical_cohort_SCD;
+	TABLE 	type_cat*annarbor*SCD_type 
+/nocol norow nopercent chisq;
+RUN;
