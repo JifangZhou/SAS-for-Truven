@@ -1,0 +1,334 @@
+*Assessment of baseline characteristics;
+
+DATA temp_list;
+	SET all_svc_list;
+	IF MYOCARDIAL_INFARCTION ^=0;
+RUN;
+
+PROC SQL;
+CREATE TABLE temp_id_list as
+SELECT min(case_id) as case_id,
+		1 as MYOCARDIAL_INFARCTION
+	FROM temp_list
+	GROUP BY case_id;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_1 as
+	SELECT a.*,
+			b.*
+	FROM workingD.id_list_CCI_frailty_19feb a
+	LEFT JOIN temp_id_list b
+	ON a.case_id=b.case_id;
+QUIT;
+
+DATA temp_list;
+	SET all_svc_list;
+	IF CHF ^=0;
+RUN;
+
+PROC SQL;
+CREATE TABLE temp_id_list as
+SELECT min(case_id) as case_id,
+		1 as CHF
+	FROM temp_list
+	GROUP BY case_id;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_1 as
+	SELECT a.*,
+			b.*
+	FROM id_list_1 a
+	LEFT JOIN temp_id_list b
+	ON a.case_id=b.case_id;
+QUIT;
+
+DATA temp_list;
+	SET all_svc_list;
+	IF PERIPHERAL_VASCULAR_DISEASE ^=0;
+RUN;
+
+PROC SQL;
+CREATE TABLE temp_id_list as
+SELECT min(case_id) as case_id,
+		1 as PERIPHERAL_VASCULAR_DISEASE
+	FROM temp_list
+	GROUP BY case_id;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_1 as
+	SELECT a.*,
+			b.*
+	FROM id_list_1 a
+	LEFT JOIN temp_id_list b
+	ON a.case_id=b.case_id;
+QUIT;
+
+DATA temp_list;
+	SET all_svc_list;
+	IF CEREBROVASCULAR_DISEASE ^=0;
+RUN;
+
+PROC SQL;
+CREATE TABLE temp_id_list as
+SELECT min(case_id) as case_id,
+		1 as CEREBROVASCULAR_DISEASE
+	FROM temp_list
+	GROUP BY case_id;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_1 as
+	SELECT a.*,
+			b.*
+	FROM id_list_1 a
+	LEFT JOIN temp_id_list b
+	ON a.case_id=b.case_id;
+QUIT;
+
+DATA temp_list;
+	SET all_svc_list;
+	IF COPD ^=0;
+RUN;
+
+PROC SQL;
+CREATE TABLE temp_id_list as
+SELECT min(case_id) as case_id,
+		1 as COPD
+	FROM temp_list
+	GROUP BY case_id;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_1 as
+	SELECT a.*,
+			b.*
+	FROM id_list_1 a
+	LEFT JOIN temp_id_list b
+	ON a.case_id=b.case_id;
+QUIT;
+
+DATA temp_list;
+	SET all_svc_list;
+	IF DIABETES ^=0 OR DIABETES_WITH_SEQUELAE ^=0;
+RUN;
+
+PROC SQL;
+CREATE TABLE temp_id_list as
+SELECT min(case_id) as case_id,
+		1 as DIABETES
+	FROM temp_list
+	GROUP BY case_id;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_1 as
+	SELECT a.*,
+			b.*
+	FROM id_list_1 a
+	LEFT JOIN temp_id_list b
+	ON a.case_id=b.case_id;
+QUIT;
+
+DATA temp_list;
+	SET all_svc_list;
+	IF CHRONIC_RENAL_FAILURE ^=0;
+RUN;
+
+PROC SQL;
+CREATE TABLE temp_id_list as
+SELECT min(case_id) as case_id,
+		1 as CHRONIC_RENAL_FAILURE
+	FROM temp_list
+	GROUP BY case_id;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_1 as
+	SELECT a.*,
+			b.*
+	FROM id_list_1 a
+	LEFT JOIN temp_id_list b
+	ON a.case_id=b.case_id;
+QUIT;
+
+DATA temp_list;
+	SET all_svc_list;
+	IF ULCERS ^=0;
+RUN;
+
+PROC SQL;
+CREATE TABLE temp_id_list as
+SELECT min(case_id) as case_id,
+		1 as ULCERS
+	FROM temp_list
+	GROUP BY case_id;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_1 as
+	SELECT a.*,
+			b.*
+	FROM id_list_1 a
+	LEFT JOIN temp_id_list b
+	ON a.case_id=b.case_id;
+QUIT;
+
+*SCD related conditions;
+
+DATA case_record;
+	SET all_svc_list;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ( '28242','28262','28264','28269','5173') then case=1;
+		end;
+	IF case=1;
+RUN;
+
+PROC sql;
+	CREATE table case_list as
+	SELECT min(case_id) as case_id,
+			1 as case
+	FROM case_record
+	GROUP BY case_id;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_1 as
+	SELECT a.*,
+			b.case as voc
+	FROM id_list_1 a
+	LEFT JOIN case_list b
+	ON a.case_id=b.case_id;
+QUIT;
+
+*ACS or pneumonia;
+DATA case_record;
+	SET all_svc_list;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('5173','480','481','482','483','484','485','486','487','488') then case=1;
+		end;
+	IF case=1;
+RUN;
+
+PROC sql;
+	CREATE table case_list as
+	SELECT min(case_id) as case_id,
+			1 as case
+	FROM case_record
+	GROUP BY case_id;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_1 as
+	SELECT a.*,
+			b.case as acs_pneumonia
+	FROM id_list_1 a
+	LEFT JOIN case_list b
+	ON a.case_id=b.case_id;
+QUIT;
+
+*Pulmonary_hypertension;
+DATA case_record;
+	SET all_svc_list;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('4150', '4160', '4168') then case=1;
+		end;
+	IF case=1;
+RUN;
+
+PROC sql;
+	CREATE table case_list as
+	SELECT min(case_id) as case_id,
+			1 as case
+	FROM case_record
+	GROUP BY case_id;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_1 as
+	SELECT a.*,
+			b.case as Pulmonary_hypertension
+	FROM id_list_1 a
+	LEFT JOIN case_list b
+	ON a.case_id=b.case_id;
+QUIT;
+
+*Avascular_necrosis;
+DATA case_record;
+	SET all_svc_list;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('73340','73341','73342','73343','73344', '73349') then case=1;
+		end;
+	IF case=1;
+RUN;
+
+PROC sql;
+	CREATE table case_list as
+	SELECT min(case_id) as case_id,
+			1 as case
+	FROM case_record
+	GROUP BY case_id;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_1 as
+	SELECT a.*,
+			b.case as Avascular_necrosis
+	FROM id_list_1 a
+	LEFT JOIN case_list b
+	ON a.case_id=b.case_id;
+QUIT;
+
+*Iron_overload;
+DATA case_record;
+	SET all_svc_list;
+		array icd {*} DGN_CD1-DGN_CD25;
+		do i = 1 to dim(icd);
+		if icd{i} in: ('2750') then case=1;
+		end;
+	IF case=1;
+RUN;
+
+PROC sql;
+	CREATE table case_list as
+	SELECT min(case_id) as case_id,
+			1 as case
+	FROM case_record
+	GROUP BY case_id;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_1 as
+	SELECT a.*,
+			b.case as Iron_overload
+	FROM id_list_1 a
+	LEFT JOIN case_list b
+	ON a.case_id=b.case_id;
+QUIT;
+
+DATA workingD.baseline_analytical_19feb;
+	SET id_list_1;
+RUN;
+
+
+PROC FREQ DATA= workingD.baseline_analytical_19feb;
+	TABLE MYOCARDIAL_INFARCTION*SCD_final
+		CHF*SCD_final
+		PERIPHERAL_VASCULAR_DISEASE*SCD_final
+		CEREBROVASCULAR_DISEASE*SCD_final
+		COPD*SCD_final
+		DIABETES*SCD_final
+		CHRONIC_RENAL_FAILURE*SCD_final
+		ULCERS*SCD_final
+		voc*SCD_final
+		acs_pneumonia*SCD_final
+		Pulmonary_hypertension*SCD_final
+		Avascular_necrosis*SCD_final
+		Iron_overload*SCD_final/missing nocol norow nopercent chisq;
+RUN;
