@@ -1,0 +1,343 @@
+DATA all_record;
+	SET all_record_baseline;
+	KEEP PATIENT_ID DGN_CD1-DGN_CD25 HCPCS;
+RUN;
+PROC SORT data=all_record_baseline;
+   by PATIENT_ID;
+run;
+
+DATA dx_1;
+	SET all_record;
+	RENAME PATIENT_ID=patid;
+	RENAME DGN_CD1=dx;
+	KEEP DGN_CD1 PATIENT_ID;
+DATA dx_2;
+	SET all_record;
+	RENAME PATIENT_ID=patid;
+	RENAME DGN_CD2=dx;
+	KEEP DGN_CD2 PATIENT_ID;
+DATA dx_3;
+	SET all_record;
+	RENAME PATIENT_ID=patid;
+	RENAME DGN_CD3=dx;
+	KEEP DGN_CD3 PATIENT_ID;
+DATA dx_4;
+	SET all_record;
+	RENAME PATIENT_ID=patid;
+	RENAME DGN_CD4=dx;
+	KEEP DGN_CD4 PATIENT_ID;
+DATA dx_5;
+	SET all_record;
+	RENAME PATIENT_ID=patid;
+	RENAME DGN_CD5=dx;
+	KEEP DGN_CD5 PATIENT_ID;
+DATA dx_6;
+	SET all_record;
+	RENAME PATIENT_ID=patid;
+	RENAME DGN_CD6=dx;
+	KEEP DGN_CD6 PATIENT_ID;
+DATA dx_7;
+	SET all_record;
+	RENAME PATIENT_ID=patid;
+	RENAME DGN_CD7=dx;
+	KEEP DGN_CD7 PATIENT_ID;
+DATA dx_8;
+	SET all_record;
+	RENAME PATIENT_ID=patid;
+	RENAME DGN_CD8=dx;
+	KEEP DGN_CD8 PATIENT_ID;
+DATA dx_9;
+	SET all_record;
+	RENAME PATIENT_ID=patid;
+	RENAME DGN_CD9=dx;
+	KEEP DGN_CD9 PATIENT_ID;
+DATA dx_10;
+	SET all_record;
+	RENAME PATIENT_ID=patid;
+	RENAME DGN_CD10=dx;
+	KEEP DGN_CD10 PATIENT_ID;
+DATA dx_11;
+	SET all_record;
+	RENAME PATIENT_ID=patid;
+	RENAME DGN_CD11=dx;
+	KEEP DGN_CD11 PATIENT_ID;
+DATA Dxfile;
+	SET dx_1 dx_2 dx_3 dx_4 dx_5 dx_6 dx_7 dx_8 dx_9 dx_10 dx_11;
+	IF dx=. THEN delete;
+RUN;
+
+DATA Pxfile;
+	SET all_record_baseline;
+	RENAME PATIENT_ID=patid;
+	RENAME HCPCS=px;
+	KEEP HCPCS PATIENT_ID;
+	IF HCPCS=. THEN delete;
+RUN;
+
+DATA Ids;
+	SET id_list;
+	RENAME PATIENT_ID=patid;
+	KEEP PATIENT_ID;
+RUN;
+
+*******************************************************************************************************************;
+*   Program:		frailty_score.sas					          												   					              ;
+*																											        				         											     ;
+*   Purpose:		To compute the Frailty Score based on ICD-9 Diagnosis and Procedure codes	             ;
+*																											        				              										             ;
+* 																											        				              										             ;
+*													 														        				              										             ;
+*	Definitions:	
+
+*	1.	Codes = This text file contains ICD-9 diagnosis codes, CPT codes, and HCPCS codes that are used to define each variable in the
+		model that estimates CFI.																												  ; 	
+
+*	2.	Weight = This text file contains model coefficients for each variable in the model that estimates CFI.			 ; 
+
+*	3.	Ids = Please create input dataset with unique patient IDs (1 per row) for whom CFI needs to be estimated.  
+		Variable name for the patient identifier should be “patid”.  This dataset may potentially contain patients who may not have been 
+		included in Dxfile or Pxfile, this patient’s CFI will be set to the intercept of the CFI model.				 ; 
+
+*	4.	Dxfile = This input dataset contains unique patient IDs (“patid”) and ICD-9 diagnosis codes (“dx”) in the long format 
+		(one code in each row, multiple rows per patient) that are used to estimate CFI.  
+		It is recommended that one year of claims data prior to the index date is used for CFI estimation.  Both patient IDs and ICD-9 diagnosis
+		codes should be in the character format.																								  ; 
+
+*	5.	Pxfile = This input dataset contains unique patient IDs (“patid”) and CPT/HCPCS codes (“px”) in the long format (one code in each row,
+		multiple rows per patient) that are used to estimate CFI.  It is recommended that one year of claims data prior to the index date is 
+		used for CFI estimation.  Both patient IDs and CPT/HCPCS codes should be in the character format.			; 
+
+options ps = 53 pageno =1;
+
+****************************************;
+* read txt files to create sas datasets ;
+****************************************;
+
+data Codes;
+  infile 'C:\Users\jzhou86\Documents\Greg SEER Project\Bisphosphonate in MM folder\Frailty assessment\Codes.txt' delimiter='09'x  missover ; /*  <- change the file path*/
+       format set_type $2. ;
+       format code_type $2. ;
+       format description $99. ;
+       format range_min $10. ;
+       format range_max $10. ;
+       format Disease_number 8. ;
+       input set_type $ @;
+       input code_type $ @;
+       input description $ @;
+       input range_min $ @;
+       input range_max $ @;
+       input Disease_number ;
+ run;
+
+ data Weight;
+  infile 'C:\Users\jzhou86\Documents\Greg SEER Project\Bisphosphonate in MM folder\Frailty assessment\Weight.txt' delimiter='09'x DSD missover lrecl=32767;/*  <- change the file path*/
+       format Weight best12. ;
+       format Disease_number 8. ;
+       input Weight @;
+       input Disease_number ;
+ run;
+
+    data Ids;
+    infile 'C:\Users\jzhou86\Documents\Greg SEER Project\Bisphosphonate in MM folder\Frailty assessment\Ids_scd.txt' delimiter='09'x DSD missover lrecl=32767;/*  <- change the file path*/
+       format patid $12. ;
+       format exposure best12. ;
+       input patid $ @;
+       input exposure ;
+    run;
+
+    data Dxfile;
+    infile 'C:\Users\jzhou86\Documents\Greg SEER Project\Bisphosphonate in MM folder\Frailty assessment\Dxfile_scd.txt' delimiter='09'x DSD missover lrecl=32767;/*  <- change the file path*/
+       format PatID $12. ;
+       format DX $7. ;
+       input PatID $ @;
+       input DX $ ;
+       ;
+    run;
+
+
+    data Pxfile;
+    infile 'C:\Users\jzhou86\Documents\Greg SEER Project\Bisphosphonate in MM folder\Frailty assessment\Pxfile_scd.txt' delimiter='09'x DSD missover lrecl=32767;/*  <- change the file path*/
+       format PatID $12. ;
+       format PX $7. ;
+       input PatID $ @;
+       input PX $ ;
+    run;
+
+
+ data px_score
+      dx_score;
+    set Codes;
+ if set_type = 'dx' then output dx_score;
+ if set_type = 'px' then output px_score;
+ keep range_min range_max disease_number;
+ run;
+
+*********************************;
+* dx format for frailty disease  ;
+*********************************;
+
+ data master;
+   set dx_score;
+ label = left(disease_number);
+ drop disease_number;
+ run;
+
+
+  data other;
+     start = 'other';
+     end   = 'other';
+     label = 'other';
+  run;
+
+  data study_dx;
+      set master(rename=(range_min = start range_max = end))
+          other;
+  fmtname = '$study_dx';
+  run;
+
+ proc format cntlin = study_dx;
+  run;
+
+ data score_dx;
+     set Dxfile(keep = patid dx);
+ class    = put(dx, $study_dx.);
+ if class ^= 'other';
+ run;
+
+
+*********************************;
+* px format for frailty disease  ;
+*********************************;
+
+ data master;
+   set px_score;
+ label = left(disease_number);
+ drop disease_number;
+ run;
+
+
+  data other;
+     start = 'other';
+     end   = 'other';
+     label = 'other';
+  run;
+
+  data study_px;
+      set master(rename=(range_min = start range_max = end))
+          other;
+  fmtname = '$study_px';
+  run;
+
+ proc format cntlin = study_px;
+  run;
+
+ data score_px;
+     set Pxfile(keep = patid px);
+ class    = put(px, $study_px.);
+ if class ^= 'other';
+ run;
+
+ ********************************;
+ * Calculating frailty index     ;
+ ********************************;
+
+ data Weight;
+   set Weight;
+class = left(disease_number);
+keep class Weight;
+run;
+
+proc sort data = Weight;
+   by class;
+run;
+
+data score;
+ set  score_px
+      score_dx;
+keep patid class;
+run;
+
+proc sort nodupkey data = score;
+    by patid class;
+run;
+
+proc sort data = score;
+    by class;
+run;
+
+data scores;
+   merge score(in = in1)
+         Weight(in = in2);
+  by class;
+  if in1 and in2;
+run;
+
+proc sort data = scores;
+   by patid class;
+run;
+
+
+data count;
+   set scores;
+   by patid;
+   if first.patid then score = 0.10288;
+       score + Weight;
+   if last.patid then output;
+keep patid score;
+run;
+proc sort data=Ids;BY patid;RUN;
+
+
+data data_frailty_score;
+   merge Ids(in = in1 keep = patid)
+         count(in = in2);
+   by patid;
+   if not in2 then score = 0.10288;
+keep patid score;
+run;
+
+ *******************************************************************************************************
+ * Dataset created at the above step ("data_frailty_score") will have the frailty index for all the patients.
+   Below step prints the frailty index for 100 patients     
+ *******************************************************************************************************;
+proc print data=data_frailty_score (obs=100) ;run;
+
+DATA data_frailty_score;
+	SET data_frailty_score;
+	IF score <0.15 THEN CFI="robust";
+	ELSE IF 0.15<=score <0.25 THEN CFI="pre-frail";
+	ELSE IF 0.25<=score <0.35 THEN CFI="mildly frail";
+	ELSE IF 0.35<=score THEN CFI="moderate-to-severely frail";
+RUN;
+PROC FREQ DATA=data_frailty_score;
+	TABLE CFI;
+RUN;	
+
+PROC sql;
+	CREATE table list_frailty as
+	SELECT min(patid) as PATIENT_ID,
+			max(score) as frailty_score
+	FROM data_frailty_score
+	GROUP BY patid;
+QUIT;
+
+PROC sql;
+	CREATE table id_list_CCI_frailty as
+	SELECT a.*,
+			b.frailty_score as frailty_score
+	FROM id_list_CCI a
+	LEFT JOIN list_frailty b
+	ON a.PATIENT_ID=b.PATIENT_ID;
+QUIT;
+
+DATA workingD.id_list_CCI_frailty_19feb;
+	SET id_list_CCI_frailty;
+	IF frailty_score <0.15 THEN CFI="robust";
+	ELSE IF 0.15<=frailty_score <0.25 THEN CFI="pre-frail";
+	ELSE IF 0.25<=frailty_score <0.35 THEN CFI="mildly frail";
+	ELSE IF 0.35<=frailty_score THEN CFI="moderate-to-severely frail";
+RUN;
+
+PROC FREQ DATA=workingD.id_list_CCI_frailty_19feb;
+	TABLE CFI*SCD_final/nocol norow nopercent chisq;
+RUN;
