@@ -1,0 +1,65 @@
+*Analysis of unmatched and matched cohort in TTE analysis;
+LIBNAME workingD "C:\Users\jzhou86\Documents\Greg SEER Project\Work directory";
+DATA analytical_cohort;
+	SET workingD.baseline_analytical_19feb;
+		IF MYOCARDIAL_INFARCTION=. THEN MYOCARDIAL_INFARCTION=0;
+		IF CHF=. THEN CHF=0;
+		IF PERIPHERAL_VASCULAR_DISEASE=. THEN PERIPHERAL_VASCULAR_DISEASE=0;
+		IF CEREBROVASCULAR_DISEASE=. THEN CEREBROVASCULAR_DISEASE=0;
+		IF COPD=. THEN COPD=0;
+		IF DIABETES=. THEN DIABETES=0;
+		IF CHRONIC_RENAL_FAILURE=. THEN CHRONIC_RENAL_FAILURE=0;
+		IF ULCERS=. THEN ULCERS=0;
+		IF voc=. THEN voc=0;
+		IF acs_pneumonia=. THEN acs_pneumonia=0;
+		IF Pulmonary_hypertension=. THEN Pulmonary_hypertension=0;
+		IF Avascular_necrosis=. THEN Avascular_necrosis=0;
+		IF Iron_overload=. THEN Iron_overload=0;
+	IF ftime_chemo>365 THEN ftime_chemo=0;
+	IF ftime_chemo>365 THEN ftime_chemo=365;
+	IF ftime>1825 THEN ftime=0;
+	IF ftime>1825 THEN ftime=1825;
+RUN;
+
+DATA SCD_file;
+	SET workingD.analytical_19Feb;
+	IF SCD_final=1;
+	IF type_cat="Others" THEN DELETE;
+	IF ftime_chemo>365 THEN ftime_chemo=0;
+	IF ftime_chemo>365 THEN ftime_chemo=365;
+	IF ftime>1825 THEN ftime=0;
+	IF ftime>1825 THEN ftime=1825;
+RUN;
+
+PROC FREQ DATA= SCD_file;
+	TABLE FRSTPRM/missing nocol norow nopercent chisq;
+RUN;
+
+PROC FREQ DATA= workingD.baseline_analytical_19feb;
+	TABLE FRSTPRM*SCD_final/missing nocol norow nopercent chisq;
+RUN;
+
+%CIF(DATA=analytical_cohort,TIME=ftime_chemo,STATUS=fstat_chemo,EVENT=1,CENSORED=0,GROUP=SCD_final);
+
+
+PROC LIFETEST DATA=SCD_file method=km notable plots=(survival(atrisk) logsurv lls) outsurv=out1;
+TIME ftime*fstat(0); 
+STRATA type_cat;RUN;
+
+
+
+PROC LIFETEST DATA=analytical_cohort method=km notable plots=(survival(atrisk) logsurv lls) outsurv=out1;
+TIME ftime*fstat(0); 
+STRATA SCD_final;RUN;
+
+proc phreg data=analytical_cohort;
+class SCD_final (ref="0")  RAC_RECB_cat (ref="1") S_sex (ref="2") FRSTPRM CCI_cat (ref="0") CFI;
+model ftime*fstat(0) = SCD_final Age RAC_RECB_cat S_sex FRSTPRM voc MYOCARDIAL_INFARCTION DIABETES CCI_cat CFI;
+hazardratio SCD_final / diff=pairwise;
+run;
+
+proc phreg data=analytical_cohort;
+class SCD_final (ref="0")  RAC_RECB_cat (ref="1") S_sex (ref="2") FRSTPRM CCI_cat (ref="0") CFI (ref="robust")/ param=glm order=internal ref=first;
+model ftime_chemo*fstat_chemo(0) = SCD_final Age RAC_RECB_cat S_sex FRSTPRM voc MYOCARDIAL_INFARCTION DIABETES CCI_cat CFI/ eventcode=1;
+hazardratio 'Subdistribution Hazards' SCD_final/ diff=pairwise;
+run;
