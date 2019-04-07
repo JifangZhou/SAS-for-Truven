@@ -1,0 +1,325 @@
+LIBNAME myfile "F:\User Folders\ksuda\Suda R01_from Jifang\RawData";
+LIBNAME codlist "F:\User Folders\ksuda\Suda R01_from Jifang\RawData";
+
+DATA id_list;
+	SET codlist.abx_analytical_4feb;
+RUN;
+
+*ED visits;
+DATA er_records;
+	SET myfile.all_abx_opt;
+	ER=0;
+	IF PROCGRP in ('110','111','114') THEN ER=1;
+	ELSE IF REVCODE in ('0450','0451','0452','0456','0459','0637','0981') THEN ER=1;
+	ELSE IF STDPROV in ('220','428') THEN ER=1;
+	ELSE IF STDPLAC in ('23') THEN ER=1;
+	ELSE IF SVCSCAT in ('10120','10220','10320','10420','10520',
+						'12220','20120','20220','21120','21220','22120','22320',
+						'30120','30220','30320','30420','30520','30620',
+						'31120','31220','31320','31420','31520','31620') THEN ER=1;
+	IF ER=1;
+RUN;
+PROC sql;
+	CREATE table er_list as
+	SELECT 	min(enrolid) as enrolid,
+			MIN(SVCDATE) as SVCDATE
+	FROM er_records
+	GROUP BY enrolid,SVCDATE;
+QUIT;
+
+PROC sql;
+	CREATE table visit_list_er as
+	SELECT a.*,
+		b.*
+	FROM id_list a
+	INNER JOIN er_list b
+	ON a.enrolid = b.enrolid AND a.visit_dt<b.SVCDATE<=a.visit_dt+14;
+QUIT;
+
+PROC sql;
+	CREATE table er_date_list as
+	SELECT 	min(visit_id) as visit_id,
+			MIN(SVCDATE) as ER_DATE
+	FROM visit_list_er
+	GROUP BY visit_id;
+QUIT;
+
+*N=2243 ER visits;
+
+*CDI;
+DATA case_list_ipt;
+	SET myfile.all_abx_ipt;
+	case=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in ("00845","A047") then case=1;
+		end;
+	IF case=1;
+	event_date=DISDATE;
+RUN;
+
+DATA case_list_opt;
+	SET myfile.all_abx_opt;
+	case=0;
+	array icd {*} dx1;
+		do i = 1 to dim(icd);
+		if icd{i} in ("00845","A047") then case=1;
+		end;
+	IF case=1;
+	event_date=SVCDATE;
+RUN;
+DATA cdi_list;
+	SET case_list_ipt case_list_opt;
+	KEEP enrolid event_date;
+RUN;
+
+PROC sql;
+	CREATE table visit_list_CDI as
+	SELECT a.*,
+		b.*
+	FROM id_list a
+	INNER JOIN cdi_list b
+	ON a.enrolid = b.enrolid AND a.visit_dt<b.event_date<=a.visit_dt+14;
+QUIT;
+
+PROC sql;
+	CREATE table CDI_date_list as
+	SELECT 	min(visit_id) as visit_id,
+			MIN(event_date) as CDI_DATE
+	FROM visit_list_CDI
+	GROUP BY visit_id;
+QUIT;
+*N=15  of CDI;
+
+*Assessment of allergy;
+*select allergy data by ICD;
+DATA case_list_ipt;
+	SET myfile.all_abx_ipt;
+	case=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in: ("460","J00","461","J0100","4611","J0110","4612",
+"J0120","4613","J0130","4618","J0190","4619",
+"J0190","462","J029","463","J0390","46400","J040",
+"46401","J050","4641","J0510","4650","J060",
+"4658","J069","4659","J069","4710","J330",
+"4720","J310","4730","J320","4731","J321",
+"4732","J322","4733","J323","4738","J329",
+"4739","J329","4770","J301","4771","J305",
+"4778","J3089","4779","J309","37200","H1030",
+"37211","H10429","37213","H1044","37214","H1045",
+"37220","H10509","H10503","H10502","H10501",
+"2870","D690","5368","K30","5583","K522","5589",
+"K529","5790","K900","5798","K909","6918","L209",
+"6929","L259","6931","7080","L500","78900","R109",
+"38010","H60399","38101","H6500","38104","H65119",
+"38110","H6520","3813","H6590","38181","H6980",
+"3829","H6690","38630","H8309","H60391","H60392",
+"H60393","H6501","H6502","H6503","H6521","H6522",
+"H6523","H6591","H6592","H6593","H6981","H6982",
+"H6983","H6691","H6692","H6693","H8301","H8302",
+"H8303","49300","J45909","49301","J45902","49310",
+"J45909","49311","J45902","49320","J449","49321",
+"J441","49390","J45909","49391","J45902","9950",
+"T782","9953","T7840","99560","T7800","49300",
+"J45909","49301","J45902","49310","J45909","49311",
+"J45902","49320","J449","49321","J441","49390",
+"J45909","49391","J45902","4660","J209","4800",
+"J120","490","J40","4910","J410","4911","J411",
+"49120","J449","496","J449","4829","J159","4870",
+"J1100","4871","J111","4878","J1189","5111","J90") then case=1;
+		end;
+	IF case=1;
+	event_date=DISDATE;
+RUN;
+
+DATA case_list_opt;
+	SET myfile.all_abx_opt;
+	case=0;
+	array icd {*} dx1;
+		do i = 1 to dim(icd);
+		if icd{i} in ("460","J00","461","J0100","4611","J0110","4612",
+"J0120","4613","J0130","4618","J0190","4619",
+"J0190","462","J029","463","J0390","46400","J040",
+"46401","J050","4641","J0510","4650","J060",
+"4658","J069","4659","J069","4710","J330",
+"4720","J310","4730","J320","4731","J321",
+"4732","J322","4733","J323","4738","J329",
+"4739","J329","4770","J301","4771","J305",
+"4778","J3089","4779","J309","37200","H1030",
+"37211","H10429","37213","H1044","37214","H1045",
+"37220","H10509","H10503","H10502","H10501",
+"2870","D690","5368","K30","5583","K522","5589",
+"K529","5790","K900","5798","K909","6918","L209",
+"6929","L259","6931","7080","L500","78900","R109",
+"38010","H60399","38101","H6500","38104","H65119",
+"38110","H6520","3813","H6590","38181","H6980",
+"3829","H6690","38630","H8309","H60391","H60392",
+"H60393","H6501","H6502","H6503","H6521","H6522",
+"H6523","H6591","H6592","H6593","H6981","H6982",
+"H6983","H6691","H6692","H6693","H8301","H8302",
+"H8303","49300","J45909","49301","J45902","49310",
+"J45909","49311","J45902","49320","J449","49321",
+"J441","49390","J45909","49391","J45902","9950",
+"T782","9953","T7840","99560","T7800","49300",
+"J45909","49301","J45902","49310","J45909","49311",
+"J45902","49320","J449","49321","J441","49390",
+"J45909","49391","J45902","4660","J209","4800",
+"J120","490","J40","4910","J410","4911","J411",
+"49120","J449","496","J449","4829","J159","4870",
+"J1100","4871","J111","4878","J1189","5111","J90") then case=1;
+		end;
+	IF case=1;
+	event_date=SVCDATE;
+RUN;
+DATA allergy_list;
+	SET case_list_ipt case_list_opt;
+	KEEP enrolid event_date;
+RUN;
+
+PROC sql;
+	CREATE table visit_list_allergy as
+	SELECT a.*,
+		b.*
+	FROM id_list a
+	INNER JOIN allergy_list b
+	ON a.enrolid = b.enrolid AND a.visit_dt<b.event_date<=a.visit_dt+14;
+QUIT;
+
+PROC sql;
+	CREATE table allergy_date_list as
+	SELECT 	min(visit_id) as visit_id,
+			MIN(event_date) as allergy_DATE
+	FROM visit_list_allergy
+	GROUP BY visit_id;
+QUIT;
+
+*N= 5572;
+
+*select Anaphylaxis data by ICD;
+DATA case_list_ipt;
+	SET myfile.all_abx_ipt;
+	case=0;
+	array icd {*} dx1-dx15;
+		do i = 1 to dim(icd);
+		if icd{i} in ("T780"," T781"," T782"," T783","T784","99560") then case=1;
+		end;
+	IF case=1;
+	event_date=DISDATE;
+RUN;
+
+DATA case_list_opt;
+	SET myfile.all_abx_opt;
+	case=0;
+	array icd {*} dx1;
+		do i = 1 to dim(icd);
+		if icd{i} in ("T780"," T781"," T782"," T783","T784","99560") then case=1;
+		end;
+	IF case=1;
+	event_date=SVCDATE;
+RUN;
+DATA Anaphylaxis_list;
+	SET case_list_ipt case_list_opt;
+	KEEP enrolid event_date;
+RUN;
+
+PROC sql;
+	CREATE table visit_list_Anaphylaxis as
+	SELECT a.*,
+		b.*
+	FROM id_list a
+	INNER JOIN Anaphylaxis_list b
+	ON a.enrolid = b.enrolid AND a.visit_dt<b.event_date<=a.visit_dt+14;
+QUIT;
+
+PROC sql;
+	CREATE table Anaphylaxis_date_list as
+	SELECT 	min(visit_id) as visit_id,
+			MIN(event_date) as Anaphylaxis_DATE
+	FROM visit_list_Anaphylaxis
+	GROUP BY visit_id;
+QUIT;
+
+*N=1;
+
+*Merge time to the id_list;
+
+PROC sql;
+	CREATE table id_list_1 as
+	SELECT a.*,
+		b.*
+	FROM id_list a
+	LEFT JOIN Anaphylaxis_date_list b
+	ON a.visit_id = b.visit_id;
+QUIT;
+	
+PROC sql;
+	CREATE table id_list_2 as
+	SELECT a.*,
+		b.*
+	FROM id_list_1 a
+	LEFT JOIN allergy_date_list b
+	ON a.visit_id = b.visit_id;
+QUIT;
+	
+PROC sql;
+	CREATE table id_list_3 as
+	SELECT a.*,
+		b.*
+	FROM id_list_2 a
+	LEFT JOIN er_date_list b
+	ON a.visit_id = b.visit_id;
+QUIT;
+	
+PROC sql;
+	CREATE table id_list_4 as
+	SELECT a.*,
+		b.*
+	FROM id_list_3 a
+	LEFT JOIN CDI_date_list b
+	ON a.visit_id = b.visit_id;
+QUIT;
+
+DATA id_list_5;
+	SET id_list_4;
+	prim_event_stat=0;
+	prim_event_ftime=min(Anaphylaxis_DATE,allergy_DATE,ER_DATE,CDI_DATE,14+visit_dt)-visit_dt;
+	IF prim_event_ftime ^=14 THEN prim_event_stat=1;
+	
+	allergy_stat=0;
+	allergy_ftime=min(allergy_DATE,14+visit_dt)-visit_dt;
+	IF allergy_ftime ^=14 THEN allergy_stat=1;
+
+	Anaphylaxis_stat=0;
+	Anaphylaxis_ftime=min(Anaphylaxis_DATE,14+visit_dt)-visit_dt;
+	IF Anaphylaxis_ftime ^=14 THEN Anaphylaxis_stat=1;
+
+	CDI_stat=0;
+	CDI_ftime=min(CDI_DATE,14+visit_dt)-visit_dt;
+	IF CDI_ftime ^=14 THEN CDI_stat=1;
+
+	ER_stat=0;
+	ER_ftime=min(ER_DATE,14+visit_dt)-visit_dt;
+	IF ER_ftime ^=14 THEN ER_stat=1;
+
+RUN;
+
+PROC sql;
+	CREATE table temp as
+	SELECT sum(prim_event_stat) as prim_event_stat,
+			sum(prim_event_ftime) as prim_event_ftime,
+
+			sum(allergy_stat) as allergy_stat,
+			sum(allergy_ftime) as allergy_ftime,
+			sum(Anaphylaxis_stat) as Anaphylaxis_stat,
+			sum(Anaphylaxis_ftime) as Anaphylaxis_ftime,
+			sum(CDI_stat) as CDI_stat,
+			sum(CDI_ftime) as CDI_ftime,
+			sum(ER_stat) as ER_stat,
+			sum(ER_ftime) as ER_ftime
+	FROM id_list_5
+		GROUP BY abx_cat;
+QUIT;
+
+PROC PRINT data=temp;
+RUN;
